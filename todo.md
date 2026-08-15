@@ -1,0 +1,37 @@
+# Project TODO
+
+- [ ] Establish a deployment-aware analysis architecture and document the processing boundary for website crawling and AI interpretation.
+- [ ] Define the relational schema for user-owned analysis jobs, evidence records, reports, share links, timestamps, and job state transitions.
+- [ ] Implement Manus OAuth-protected analysis submission with URL validation and an authorization acknowledgment checkbox.
+- [ ] Implement secure, bounded URL evidence collection for HTTP response metadata, HTML markers, scripts, stylesheets, links, cookies, and TLS-related observations.
+- [ ] Implement evidence-backed technology, security, SEO, performance, and content-summary analysis with observed, inferred, AI interpretation, and unknown classifications.
+- [ ] Implement job processing lifecycle and real-time status polling using exactly queued, running, completed, and failed.
+- [ ] Build an authenticated dashboard with URL/date/status filtering, pagination, timestamps, and report links.
+- [ ] Build an interactive report with collapsible sections labeled Overview, Technology Stack, Security, SEO, Performance, Evidence, and AI Narrative.
+- [ ] Build an evidence viewer for raw headers, scripts, stylesheets, third-party services, and a screenshot placeholder.
+- [ ] Implement public shareable completed-report links without a login requirement.
+- [ ] Apply a refined, responsive visual design with accessible interactions and clear status hierarchy.
+- [ ] Add focused Vitest coverage for URL validation, job access control, report sharing, and report-data transformations.
+- [ ] Verify the application with type checks, tests, and responsive visual review.
+- [x] Produce the Phase 0 requirements specification with in-scope, out-of-scope, functional, non-functional, and edge-case coverage.
+- [x] Produce the Phase 0 architecture specification, including data flow, component responsibilities, deployment topology, and justified revisions to the proposed stack.
+- [x] Produce the Phase 0 threat, security, scalability, and evidence-governance models, explicitly preventing SSRF, private-network access, unsupported claims, and active scanning.
+- [x] Produce the Phase 0 data model, ER diagram, API contract, service/agent boundary matrix, and scan lifecycle state machine.
+- [x] Produce a referenced Phase 0 architecture baseline document that a delivery team can use to begin the implementation phase.
+- [x] Diagnose and correct the preview loading issue reported after the Phase 0 checkpoint.
+- [x] Publish the loading-fallback change and verify the public site does not present an empty-looking screen while the application initializes.
+- [x] Verify the fallback is replaced by the React application on the public URL and record the root cause of the initial loading perception.
+- [x] Confirm the published HTML contains the `#root:empty` fallback and verify the hydrated public page replaces it with the React application.
+- [x] Deliver the complete Phase 0 architecture baseline as standalone Markdown and PDF files without further publication changes.
+- [x] Create the documented `/frontend` Next.js and `/backend` FastAPI monorepo layout without scan or analysis logic.
+- [x] Configure Docker Compose for the frontend, backend, PostgreSQL, and Redis, with individual service Dockerfiles and environment templates.
+- [x] Set up FastAPI settings, structured logging, CORS, a health endpoint with database connectivity, and a minimal authentication dependency foundation.
+- [x] Set up SQLAlchemy, Alembic, and a proven baseline migration without domain business tables.
+- [x] Build a dark engineering-tool frontend shell with a typed backend health client and an end-to-end health display.
+- [x] Add root documentation and a basic clean-clone CI workflow for frontend and backend checks.
+- [x] Validate the Docker Compose startup workflow with running container services; the current sandbox does not include Docker.
+- [x] Provide root, frontend, and backend environment-template equivalents that meet the Phase 1 configuration specification within the managed workspace constraints.
+- [x] Run the Alembic baseline migration against PostgreSQL and record successful upgrade/current results.
+- [ ] Prepare a clean Phase 0 and Phase 1 source commit for the specified GitHub repository.
+- [ ] Push the prepared commit to Hassan-khan-5535/web-autopsy-network using the user’s collaborator access and verify the remote result.
+- [ ] Push the completed Phase 0 and Phase 1 source commit to atifkhani397/web-autopsy-network and verify the remote result.
