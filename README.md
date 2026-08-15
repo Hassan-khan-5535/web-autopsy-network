@@ -1,17 +1,19 @@
 # Web Autopsy Network
 
-Web Autopsy Network is an evidence-backed web intelligence platform for **authorized public websites**. This repository contains **Phase 1: Project Foundation** only. It deliberately excludes crawling, scanning, technology detection, browser automation, AI analysis, and reporting logic.
+Web Autopsy Network is an evidence-backed web intelligence platform for **authorized public websites**. 
 
-## Foundation architecture
+This repository currently includes **Phase 1 (Project Foundation)** and **Phase 2 (URL Admission & HTTP Collector)**. It is capable of safely admitting target URLs (with strict SSRF protections), fetching passive HTTP-level evidence, extracting structural HTML facts, and presenting the raw evidence in a React frontend.
 
-| Directory | Purpose |
+## Architecture & Features
+
+| Component | Purpose |
 |---|---|
-| `frontend/` | Next.js, TypeScript, and Tailwind CSS application shell. |
-| `backend/` | FastAPI control-plane foundation with settings, structured logs, health checks, migration setup, and auth dependency scaffolding. |
-| `docs/` | Phase 0 architecture baseline and project design records. |
-| `.github/workflows/` | Clean-clone CI checks for frontend and backend. |
+| **Frontend** | Next.js, TypeScript, and Tailwind CSS. Includes the health dashboard, scan submission form, and raw evidence viewer table. |
+| **Backend API** | FastAPI control-plane exposing `/v1/scans` routes, structured logs, and CORS configurations. |
+| **Services** | `AdmissionService` (DNS resolution & SSRF IP blocking) and `HTTPCollectorService` (synchronous fetch, redirect loop handling, DOM parsing). |
+| **Database** | PostgreSQL mapping the `Scan`, `Website`, `Page`, `HTTPResponse`, `Header`, `Resource`, and `Observation` tables using SQLAlchemy and Alembic. |
 
-The frontend calls `GET /health` through `NEXT_PUBLIC_API_BASE_URL`. The backend checks PostgreSQL connectivity during that request. Redis is provisioned for future task-queue phases but is not used by Phase 1.
+*(Note: Redis is provisioned for future task-queue phases but is not yet actively used for asynchronous execution. Crawling, AI analysis, and advanced reporting are slated for future phases.)*
 
 ## Local startup
 
@@ -19,18 +21,15 @@ The frontend calls `GET /health` through `NEXT_PUBLIC_API_BASE_URL`. The backend
 2. Start the complete local stack: `docker compose up --build`.
 3. Open `http://localhost:3000` for the frontend and `http://localhost:8000/docs` for FastAPI documentation.
 
-The frontend should show the backend health state. The backend health endpoint is available at `http://localhost:8000/health`.
+The frontend should show the backend health state. You can click **Start a New Scan** to submit a URL for evidence collection.
 
 ## Database migrations
 
-The backend includes an Alembic baseline migration with no domain tables. With the Docker services running, use:
+The backend includes Alembic migrations for the schema. With the Docker services running, use:
 
 ```bash
 docker compose exec backend alembic upgrade head
-docker compose exec backend alembic current
 ```
-
-Future phases will add domain tables through new migrations; no website, scan, evidence, or report tables are introduced at this phase.
 
 ## Environment configuration
 
@@ -48,4 +47,4 @@ Future phases will add domain tables through new migrations; no website, scan, e
 
 ## Project conventions
 
-The primary development boundary is `frontend/` and `backend/`. The existing managed-preview application folders are not the future product architecture and should not be used for Phase 2 onward. The Phase 0 baseline in `docs/phase-0-architecture-baseline.md` governs the evidence model, security boundaries, and later worker architecture.
+The primary development boundary is `frontend/` and `backend/`. The Phase 0 baseline in `docs/phase-0-architecture-baseline.md` governs the evidence model, security boundaries, and later worker architecture.
