@@ -1,8 +1,10 @@
-import pytest
 from unittest.mock import MagicMock, patch
+
 from sqlalchemy.orm import Session
-from app.models.scan import Website, Scan, Page, HTTPResponse, Resource
+
+from app.models.scan import HTTPResponse, Page, Resource, Scan, Website
 from app.services.browser_client import BrowserWorkerClient
+
 
 def test_browser_client_updates_page_response(db: Session):
     website = Website(canonical_origin="example.com")
@@ -17,7 +19,12 @@ def test_browser_client_updates_page_response(db: Session):
     db.add(page)
     db.commit()
 
-    resp = HTTPResponse(page_id=page.id, status_code=200, final_url="https://example.com/", raw_body="<html>Static</html>")
+    resp = HTTPResponse(
+        page_id=page.id,
+        status_code=200,
+        final_url="https://example.com/",
+        raw_body="<html>Static</html>",
+    )
     db.add(resp)
     db.commit()
 
@@ -27,7 +34,13 @@ def test_browser_client_updates_page_response(db: Session):
         "status_code": 200,
         "rendered_html": "<html><body><h1>Rendered JS</h1></body></html>",
         "network_requests": [
-            {"url": "https://example.com/api/dynamic", "method": "GET", "resource_type": "fetch", "status_code": 200, "capture_source": "browser_runtime"}
+            {
+                "url": "https://example.com/api/dynamic",
+                "method": "GET",
+                "resource_type": "fetch",
+                "status_code": 200,
+                "capture_source": "browser_runtime",
+            }
         ],
         "timing_data": {"navigation": {"domComplete": 350}},
         "console_logs": [{"type": "warning", "text": "Console log test"}]

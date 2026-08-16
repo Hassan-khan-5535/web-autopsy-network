@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import re
 from typing import Any
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urljoin
 from uuid import UUID
 
 from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 
-from app.models.scan import ApiEndpoint, HTTPResponse, Observation, Page, Resource, Scan
+from app.models.scan import ApiEndpoint, HTTPResponse, Observation, Page, Resource
 
 
 class ApiIntelligenceAgent:
@@ -17,7 +17,10 @@ class ApiIntelligenceAgent:
     CLASSIFICATION = "inferred"
 
     API_PATH_PATTERNS = [
-        re.compile(r"/(?:api|v1|v2|v3|v4|graphql|rest|endpoints|services|json|rpc)/", re.IGNORECASE),
+        re.compile(
+            r"/(?:api|v1|v2|v3|v4|graphql|rest|endpoints|services|json|rpc)/",
+            re.IGNORECASE,
+        ),
         re.compile(r"\.(?:json|xml|graphql)$", re.IGNORECASE),
         re.compile(r"/(?:api|v1|v2|v3|v4|graphql|rest|endpoints|services)$", re.IGNORECASE),
     ]
@@ -68,7 +71,11 @@ class ApiIntelligenceAgent:
             base_url = resp.final_url or page_urls.get(resp.page_id, "")
             if not resp.raw_body:
                 continue
-            if resp.content_type and "html" not in resp.content_type.lower() and "<form" not in resp.raw_body.lower():
+            if (
+                resp.content_type
+                and "html" not in resp.content_type.lower()
+                and "<form" not in resp.raw_body.lower()
+            ):
                 continue
             soup = BeautifulSoup(resp.raw_body, "html.parser")
 
@@ -161,7 +168,9 @@ class ApiIntelligenceAgent:
                         }
 
         # Clear existing ApiEndpoint and Observation records for this scan
-        self.db.query(ApiEndpoint).filter(ApiEndpoint.scan_id == self.scan_id).delete(synchronize_session=False)
+        self.db.query(ApiEndpoint).filter(ApiEndpoint.scan_id == self.scan_id).delete(
+            synchronize_session=False
+        )
         self.db.query(Observation).filter(
             Observation.scan_id == self.scan_id,
             Observation.category == "API_INTELLIGENCE",
@@ -169,7 +178,9 @@ class ApiIntelligenceAgent:
         self.db.flush()
 
         results: list[ApiEndpoint] = []
-        for candidate in sorted(candidates.values(), key=lambda c: (c["url_or_path"], c["http_method"])):
+        for candidate in sorted(
+            candidates.values(), key=lambda c: (c["url_or_path"], c["http_method"])
+        ):
             endpoint = ApiEndpoint(
                 scan_id=self.scan_id,
                 url_or_path=candidate["url_or_path"],
@@ -187,7 +198,10 @@ class ApiIntelligenceAgent:
                     scan_id=self.scan_id,
                     category="API_INTELLIGENCE",
                     subject=candidate["url_or_path"],
-                    observation=f"Discovered candidate API endpoint '{candidate['url_or_path']}' [{candidate['http_method']}] via {candidate['source']}.",
+                    observation=(
+                        f"Discovered candidate API endpoint '{candidate['url_or_path']}' "
+                        f"[{candidate['http_method']}] via {candidate['source']}."
+                    ),
                     classification="INFERRED",
                 )
             )
@@ -196,7 +210,11 @@ class ApiIntelligenceAgent:
         return results
 
     def _is_api_candidate(self, url_or_path: str) -> bool:
-        if not url_or_path or url_or_path.startswith("data:") or url_or_path.startswith("javascript:"):
+        if (
+            not url_or_path
+            or url_or_path.startswith("data:")
+            or url_or_path.startswith("javascript:")
+        ):
             return False
         return any(pattern.search(url_or_path) for pattern in self.API_PATH_PATTERNS)
 

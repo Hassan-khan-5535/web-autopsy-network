@@ -5,7 +5,7 @@ root_dir = str(Path(__file__).resolve().parents[2])
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
-from browser_worker.app import is_private_ip, is_url_allowed
+from browser_worker.app import is_private_ip, is_url_allowed  # noqa: E402
 
 
 def test_ssrf_ip_checks():

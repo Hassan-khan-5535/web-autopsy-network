@@ -12,7 +12,7 @@ from app.models.scan import HTTPResponse, Observation, Page, PageLink, Scan
 
 
 class StructureAgent:
-    """Agent that analyzes page hierarchy, link structures, form inventory, and infers page types."""
+    """Analyze page hierarchy, link structures, forms, and inferred page types."""
 
     def __init__(self, db: Session, scan_id: UUID) -> None:
         self.db = db
@@ -44,7 +44,6 @@ class StructureAgent:
         }
 
         # 2. Build Site Tree Hierarchy
-        pages_by_id = {page.id: page for page in pages}
         children_by_parent_id: dict[UUID | None, list[Page]] = {}
         for page in pages:
             children_by_parent_id.setdefault(page.discovered_from_page_id, []).append(page)
@@ -60,7 +59,9 @@ class StructureAgent:
                 "children": [build_tree_node(child) for child in children],
             }
 
-        root_pages = [page for page in pages if page.depth == 0 or page.discovered_from_page_id is None]
+        root_pages = [
+            page for page in pages if page.depth == 0 or page.discovered_from_page_id is None
+        ]
         site_tree = [build_tree_node(root) for root in root_pages]
 
         # 3. Process HTTP Responses for Form Inventory and Page Type Signals
@@ -85,7 +86,11 @@ class StructureAgent:
             if soup:
                 for form in soup.find_all("form"):
                     raw_action = form.get("action", "")
-                    action_url = urljoin(page.canonical_url, str(raw_action)) if raw_action else page.canonical_url
+                    action_url = (
+                        urljoin(page.canonical_url, str(raw_action))
+                        if raw_action
+                        else page.canonical_url
+                    )
                     method = str(form.get("method", "GET")).upper()
 
                     fields: list[dict[str, Any]] = []
@@ -94,7 +99,10 @@ class StructureAgent:
                             {
                                 "tag": input_tag.name,
                                 "name": input_tag.get("name"),
-                                "type": input_tag.get("type", "text" if input_tag.name == "input" else input_tag.name),
+                                "type": input_tag.get(
+                                    "type",
+                                    "text" if input_tag.name == "input" else input_tag.name,
+                                ),
                                 "required": input_tag.has_attr("required"),
                                 "placeholder": input_tag.get("placeholder"),
                             }
@@ -129,7 +137,10 @@ class StructureAgent:
             self._observe(
                 category="STRUCTURE",
                 subject=page.canonical_url,
-                observation=f"Inferred page type '{inferred_type}' with confidence {confidence}: {reason}",
+                observation=(
+                    f"Inferred page type '{inferred_type}' with confidence "
+                    f"{confidence}: {reason}"
+                ),
                 classification="INFERRED",
             )
 
@@ -137,7 +148,11 @@ class StructureAgent:
         self._observe(
             category="STRUCTURE",
             subject=self.scan_id_subject(),
-            observation=f"Site link summary: {link_summary['total_internal_links']} internal links, {link_summary['total_external_links']} external links across {len(pages)} crawled pages.",
+            observation=(
+                f"Site link summary: {link_summary['total_internal_links']} internal links, "
+                f"{link_summary['total_external_links']} external links across "
+                f"{len(pages)} crawled pages."
+            ),
             classification="OBSERVED",
         )
 
@@ -156,23 +171,52 @@ class StructureAgent:
         if page.depth == 0 or path in ("", "/", "/index.html", "/index.php"):
             return "homepage", 0.95, "Root domain URL or depth 0 entry point."
 
-        if re.search(r"/(contact|support|help|feedback|inquire|reach-us|login|signin|register|signup)", path):
-            return "contact_or_form", 0.90, f"URL path '{path}' matches contact or authentication keyword pattern."
+        if re.search(
+            r"/(contact|support|help|feedback|inquire|reach-us|login|signin|register|signup)",
+            path,
+        ):
+            return (
+                "contact_or_form",
+                0.90,
+                f"URL path '{path}' matches contact or authentication keyword pattern.",
+            )
 
         if any(
-            any(f.get("type") in ("password", "email") or f.get("name") in ("email", "username", "message") for f in form.get("fields", []))
+            any(
+                f.get("type") in ("password", "email")
+                or f.get("name") in ("email", "username", "message")
+                for f in form.get("fields", [])
+            )
             for form in page_forms
         ):
-            return "contact_or_form", 0.90, "Observed input fields matching contact/login form attributes."
+            return (
+                "contact_or_form",
+                0.90,
+                "Observed input fields matching contact/login form attributes.",
+            )
 
-        if re.search(r"/(blog|article|news|posts|story|p/|entry|read)/", path) or re.search(r"/\d{4}/\d{2}/", path):
-            return "article_or_content", 0.85, f"URL path '{path}' matches article or blog pattern."
+        if re.search(r"/(blog|article|news|posts|story|p/|entry|read)/", path) or re.search(
+            r"/\d{4}/\d{2}/", path
+        ):
+            return (
+                "article_or_content",
+                0.85,
+                f"URL path '{path}' matches article or blog pattern.",
+            )
 
         if re.search(r"/(products|shop|catalog|category|store|items|collection)/", path):
-            return "catalog_or_listing", 0.85, f"URL path '{path}' matches product/catalog listing pattern."
+            return (
+                "catalog_or_listing",
+                0.85,
+                f"URL path '{path}' matches product/catalog listing pattern.",
+            )
 
         if re.search(r"/(docs|api|developer|sdk|reference|swagger|openapi)/", path):
-            return "documentation_or_api", 0.90, f"URL path '{path}' matches documentation or API endpoint pattern."
+            return (
+                "documentation_or_api",
+                0.90,
+                f"URL path '{path}' matches documentation or API endpoint pattern.",
+            )
 
         return "generic_page", 0.50, "No specialized page type pattern matched."
 
@@ -180,7 +224,13 @@ class StructureAgent:
         scan = self.db.query(Scan).filter(Scan.id == self.scan_id).first()
         return scan.requested_url if scan else str(self.scan_id)
 
-    def _observe(self, category: str, subject: str, observation: str, classification: str = "OBSERVED") -> None:
+    def _observe(
+        self,
+        category: str,
+        subject: str,
+        observation: str,
+        classification: str = "OBSERVED",
+    ) -> None:
         self.db.add(
             Observation(
                 scan_id=self.scan_id,

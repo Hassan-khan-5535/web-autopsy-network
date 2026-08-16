@@ -39,7 +39,14 @@ def test_api_intelligence_agent_detection(db: Session):
       </body>
     </html>
     """
-    db.add(HTTPResponse(page_id=page.id, status_code=200, final_url="https://example.com/app", raw_body=html_body))
+    db.add(
+        HTTPResponse(
+            page_id=page.id,
+            status_code=200,
+            final_url="https://example.com/app",
+            raw_body=html_body,
+        )
+    )
     db.commit()
 
     agent = ApiIntelligenceAgent(db, scan.id)

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from uuid import uuid4
-from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 
 from app.models.scan import HTTPResponse, Page, PageLink, Scan, Website
@@ -32,8 +30,20 @@ def test_structure_agent_hierarchy_and_forms(db: Session):
     db.commit()
 
     # Add page links
-    db.add(PageLink(source_page_id=root_page.id, target_url="https://example.com/contact", is_external=False))
-    db.add(PageLink(source_page_id=root_page.id, target_url="https://twitter.com/example", is_external=True))
+    db.add(
+        PageLink(
+            source_page_id=root_page.id,
+            target_url="https://example.com/contact",
+            is_external=False,
+        )
+    )
+    db.add(
+        PageLink(
+            source_page_id=root_page.id,
+            target_url="https://twitter.com/example",
+            is_external=True,
+        )
+    )
     db.commit()
 
     # Add HTML response with a form on contact page
@@ -51,7 +61,14 @@ def test_structure_agent_hierarchy_and_forms(db: Session):
       </body>
     </html>
     """
-    db.add(HTTPResponse(page_id=contact_page.id, status_code=200, final_url="https://example.com/contact", raw_body=html_body))
+    db.add(
+        HTTPResponse(
+            page_id=contact_page.id,
+            status_code=200,
+            final_url="https://example.com/contact",
+            raw_body=html_body,
+        )
+    )
     db.commit()
 
     agent = StructureAgent(db, scan.id)

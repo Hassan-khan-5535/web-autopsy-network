@@ -1,16 +1,24 @@
 from __future__ import annotations
 
-from typing import Any
 from urllib.parse import urlsplit
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.models.scan import Dependency, Observation, Page, PageLink, Resource, Scan, Technology, Website
+from app.models.scan import (
+    Dependency,
+    Observation,
+    Page,
+    PageLink,
+    Resource,
+    Scan,
+    Technology,
+    Website,
+)
 
 
 class NetworkIntelligenceAgent:
-    """Agent that builds external domain relationship graph and maps categories using Phase 4 tech detections."""
+    """Build the external domain graph and map categories using Phase 4 detections."""
 
     CLASSIFICATION = "inferred"
 
@@ -55,11 +63,7 @@ class NetworkIntelligenceAgent:
             seed_hostname = (urlsplit(scan.requested_url).hostname or "").lower()
 
         # Fetch Phase 4 detected technologies
-        technologies = (
-            self.db.query(Technology)
-            .filter(Technology.scan_id == self.scan_id)
-            .all()
-        )
+        technologies = self.db.query(Technology).filter(Technology.scan_id == self.scan_id).all()
         tech_categories = {tech.canonical_name.lower(): tech.category for tech in technologies}
 
         # Gather external resource URLs
@@ -75,7 +79,7 @@ class NetworkIntelligenceAgent:
             self.db.query(PageLink)
             .join(Page, PageLink.source_page_id == Page.id)
             .filter(Page.scan_id == self.scan_id)
-            .filter(PageLink.is_external == True)
+            .filter(PageLink.is_external)
             .all()
         )
 
@@ -99,7 +103,9 @@ class NetworkIntelligenceAgent:
             record_external_url(link.target_url)
 
         # Delete old Dependency & Observation records for this scan
-        self.db.query(Dependency).filter(Dependency.scan_id == self.scan_id).delete(synchronize_session=False)
+        self.db.query(Dependency).filter(Dependency.scan_id == self.scan_id).delete(
+            synchronize_session=False
+        )
         self.db.query(Observation).filter(
             Observation.scan_id == self.scan_id,
             Observation.category == "NETWORK_INTELLIGENCE",
@@ -128,7 +134,10 @@ class NetworkIntelligenceAgent:
                     scan_id=self.scan_id,
                     category="NETWORK_INTELLIGENCE",
                     subject=domain,
-                    observation=f"External domain '{domain}' observed ({count} references, category: {category}, confidence: {confidence}).",
+                    observation=(
+                        f"External domain '{domain}' observed ({count} references, "
+                        f"category: {category}, confidence: {confidence})."
+                    ),
                     classification="INFERRED",
                 )
             )
@@ -136,9 +145,7 @@ class NetworkIntelligenceAgent:
         self.db.commit()
         return results
 
-    def _categorize_domain(
-        self, domain: str, tech_categories: dict[str, str]
-    ) -> tuple[str, float]:
+    def _categorize_domain(self, domain: str, tech_categories: dict[str, str]) -> tuple[str, float]:
         # 1. Match against Phase 4 Technology detections
         for tech_name, category in tech_categories.items():
             if tech_name in domain or domain.replace("www.", "") in tech_name:

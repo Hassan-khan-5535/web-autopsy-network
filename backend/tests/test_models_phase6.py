@@ -1,6 +1,7 @@
-import pytest
 from sqlalchemy.orm import Session
-from app.models.scan import Website, Scan, Page, HTTPResponse, Resource
+
+from app.models.scan import HTTPResponse, Page, Resource, Scan, Website
+
 
 def test_phase6_model_fields(db: Session):
     website = Website(canonical_origin="example.com")

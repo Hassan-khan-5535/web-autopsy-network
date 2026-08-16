@@ -33,12 +33,36 @@ def test_network_intelligence_agent_categorization(db: Session):
     db.commit()
 
     # Add external resources
-    db.add(Resource(page_id=page.id, url="https://www.google-analytics.com/analytics.js", type="script"))
-    db.add(Resource(page_id=page.id, url="https://fonts.googleapis.com/css?family=Inter", type="link"))
-    db.add(Resource(page_id=page.id, url="https://unknown-cdn.net/library.js", type="script"))
+    db.add(
+        Resource(
+            page_id=page.id,
+            url="https://www.google-analytics.com/analytics.js",
+            type="script",
+        )
+    )
+    db.add(
+        Resource(
+            page_id=page.id,
+            url="https://fonts.googleapis.com/css?family=Inter",
+            type="link",
+        )
+    )
+    db.add(
+        Resource(
+            page_id=page.id,
+            url="https://unknown-cdn.net/library.js",
+            type="script",
+        )
+    )
 
     # Add external link
-    db.add(PageLink(source_page_id=page.id, target_url="https://external-partner.org/about", is_external=True))
+    db.add(
+        PageLink(
+            source_page_id=page.id,
+            target_url="https://external-partner.org/about",
+            is_external=True,
+        )
+    )
     db.commit()
 
     agent = NetworkIntelligenceAgent(db, scan.id)

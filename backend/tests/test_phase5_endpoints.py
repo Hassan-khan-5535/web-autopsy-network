@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.main import app
-from app.models.scan import ApiEndpoint, Dependency, Page, PageLink, Scan, Website
+from app.models.scan import Page, PageLink, Scan, Website
 from app.services.api_intelligence import ApiIntelligenceAgent
 from app.services.network_intelligence import NetworkIntelligenceAgent
 from app.services.structure import StructureAgent

@@ -1,9 +1,9 @@
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
+
 from app.api.deps import get_db
 from app.main import app
-from app.models.scan import Website, Scan, Page, HTTPResponse, Resource
+from app.models.scan import HTTPResponse, Page, Scan, Website
 
 client = TestClient(app)
 
