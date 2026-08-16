@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { HealthIndicator } from "@/components/health-indicator";
 
 export default function Home() {
@@ -21,9 +22,9 @@ export default function Home() {
           <h1 className="max-w-3xl text-5xl font-semibold tracking-[-0.05em] text-balance sm:text-7xl">Dissect any website.<br /><span className="text-emerald-300">Understand how it works.</span></h1>
           <p className="mt-7 max-w-2xl text-lg leading-8 text-emerald-50/65">The Phase 1 foundation connects the interface to a typed FastAPI control plane, with database-aware health checks, structured logs, migration tooling, and future-ready boundaries.</p>
           <div className="mt-10">
-            <a href="/scans" className="inline-flex h-12 items-center justify-center rounded-lg bg-emerald-500 px-8 text-sm font-medium text-emerald-950 transition-colors hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-[#08110f]">
+            <Link href="/scans" className="inline-flex h-12 items-center justify-center rounded-lg bg-emerald-500 px-8 text-sm font-medium text-emerald-950 transition-colors hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-[#08110f]">
               Start a New Scan
-            </a>
+            </Link>
           </div>
         </div>
 

@@ -25,6 +25,13 @@ export type ScanResponse = {
   state: string;
   requested_url: string;
   error_reason: string | null;
+  max_depth: number;
+  max_pages: number;
+};
+
+export type ScanOptions = {
+  max_depth?: number;
+  max_pages?: number;
 };
 
 export type ObservationResponse = {
@@ -34,13 +41,29 @@ export type ObservationResponse = {
   observation: string;
   classification: string;
   created_at: string;
+  page_id: string | null;
 };
 
-export async function createScan(url: string, authorization_acknowledged: boolean): Promise<ScanResponse> {
+export type CrawledPage = {
+  id: string;
+  url: string;
+  canonical_url: string;
+  depth: number;
+  status_code: number | null;
+  title: string | null;
+  discovered_from: string | null;
+  discovered_from_page_id: string | null;
+};
+
+export async function createScan(
+  url: string,
+  authorization_acknowledged: boolean,
+  options: ScanOptions = {},
+): Promise<ScanResponse> {
   const response = await fetch(`${apiBaseUrl}/v1/scans`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ url, authorization_acknowledged }),
+    body: JSON.stringify({ url, authorization_acknowledged, ...options }),
     cache: "no-store",
   });
 
@@ -76,4 +99,17 @@ export async function getScanEvidence(id: string): Promise<ObservationResponse[]
   }
 
   return response.json() as Promise<ObservationResponse[]>;
+}
+
+export async function getScanPages(id: string): Promise<CrawledPage[]> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/pages`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch pages for scan ${id}`);
+  }
+
+  return response.json() as Promise<CrawledPage[]>;
 }

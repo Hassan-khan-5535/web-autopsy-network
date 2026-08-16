@@ -12,6 +12,16 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     jwt_secret: str = "replace-with-a-long-local-only-secret"
 
+    crawl_default_max_depth: int = 2
+    crawl_max_depth_cap: int = 5
+    crawl_default_max_pages: int = 30
+    crawl_max_pages_cap: int = 100
+    crawl_default_concurrency: int = 2
+    crawl_max_concurrency_cap: int = 4
+    crawl_default_delay_ms: int = 1000
+    crawl_min_delay_ms: int = 100
+    crawl_same_domain_mode: str = "hostname"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

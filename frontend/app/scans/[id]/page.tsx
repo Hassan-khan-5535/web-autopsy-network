@@ -1,14 +1,23 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { getScan, getScanEvidence, type ScanResponse, type ObservationResponse } from "@/lib/api";
+import {
+  getScan,
+  getScanEvidence,
+  getScanPages,
+  type CrawledPage,
+  type ObservationResponse,
+  type ScanResponse,
+} from "@/lib/api";
 
 export default function ScanResultPage() {
   const params = useParams();
   const id = params.id as string;
 
   const [scan, setScan] = useState<ScanResponse | null>(null);
+  const [pages, setPages] = useState<CrawledPage[]>([]);
   const [evidence, setEvidence] = useState<ObservationResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,12 +31,18 @@ export default function ScanResultPage() {
         if (!mounted) return;
         setScan(scanData);
 
-        if (scanData.state === "COMPLETED") {
-          const evidenceData = await getScanEvidence(id);
-          if (mounted) setEvidence(evidenceData);
+        if (scanData.state === "COMPLETED" || scanData.state === "FAILED") {
+          const [pagesData, evidenceData] = await Promise.all([
+            getScanPages(id),
+            getScanEvidence(id),
+          ]);
+          if (mounted) {
+            setPages(pagesData);
+            setEvidence(evidenceData);
+          }
         }
-      } catch (err: any) {
-        if (mounted) setError(err.message || "Failed to load scan data");
+      } catch (err: unknown) {
+        if (mounted) setError(err instanceof Error ? err.message : "Failed to load scan data");
       } finally {
         if (mounted) setLoading(false);
       }
@@ -54,9 +69,9 @@ export default function ScanResultPage() {
         <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-2xl max-w-lg text-center">
           <h2 className="text-red-400 font-semibold mb-2">Error Loading Scan</h2>
           <p className="text-red-200/80 text-sm mb-6">{error || "Scan not found"}</p>
-          <a href="/scans" className="text-emerald-500 hover:text-emerald-400 text-sm font-medium">
+          <Link href="/scans" className="text-emerald-500 hover:text-emerald-400 text-sm font-medium">
             &larr; Return to Scanner
-          </a>
+          </Link>
         </div>
       </main>
     );
@@ -67,14 +82,13 @@ export default function ScanResultPage() {
 
   return (
     <main className="min-h-screen bg-[#08110f] text-[#ecf4ee] px-6 py-12 sm:px-10">
-      <div className="max-w-4xl mx-auto space-y-8">
-        
+      <div className="max-w-5xl mx-auto space-y-8">
         <header className="flex items-start justify-between border-b border-emerald-100/10 pb-8">
           <div>
             <div className="flex items-center gap-3 mb-3">
               <span className={`px-2.5 py-1 text-xs font-mono font-medium rounded border ${
-                isCompleted ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : 
-                isFailed ? "bg-red-500/10 text-red-400 border-red-500/20" : 
+                isCompleted ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
+                isFailed ? "bg-red-500/10 text-red-400 border-red-500/20" :
                 "bg-amber-500/10 text-amber-400 border-amber-500/20"
               }`}>
                 {scan.state}
@@ -84,10 +98,11 @@ export default function ScanResultPage() {
             <h1 className="text-3xl font-semibold tracking-tight truncate max-w-2xl" title={scan.requested_url}>
               {scan.requested_url}
             </h1>
+            <p className="mt-2 text-sm text-emerald-100/50">Bounded crawl: depth {scan.max_depth}, up to {scan.max_pages} pages.</p>
           </div>
-          <a href="/scans" className="text-emerald-500 hover:text-emerald-400 text-sm font-medium">
+          <Link href="/scans" className="text-emerald-500 hover:text-emerald-400 text-sm font-medium">
             New Scan &rarr;
-          </a>
+          </Link>
         </header>
 
         {isFailed && (
@@ -97,9 +112,46 @@ export default function ScanResultPage() {
           </section>
         )}
 
+        {(isCompleted || isFailed) && (
+          <section className="space-y-4">
+            <div className="flex items-end justify-between">
+              <div>
+                <h2 className="text-xl font-semibold">Crawled Pages</h2>
+                <p className="mt-1 text-sm text-emerald-100/50">Static HTML pages fetched after same-domain, robots, and SSRF checks.</p>
+              </div>
+              <span className="text-xs font-mono bg-white/5 px-2 py-0.5 rounded text-emerald-100/50">{pages.length} PAGES</span>
+            </div>
+            <div className="overflow-hidden rounded-xl border border-white/5 bg-black/20">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-white/5 font-mono text-xs text-emerald-100/40">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">DEPTH</th>
+                    <th className="px-4 py-3 font-medium">STATUS</th>
+                    <th className="px-4 py-3 font-medium">PAGE</th>
+                    <th className="px-4 py-3 font-medium">DISCOVERED FROM</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {pages.map((page) => (
+                    <tr key={page.id} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="px-4 py-3 whitespace-nowrap text-emerald-200/70">{page.depth}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-emerald-200/70">{page.status_code ?? "—"}</td>
+                      <td className="px-4 py-3 text-emerald-50 max-w-[360px] truncate" title={page.url}>{page.title || page.url}</td>
+                      <td className="px-4 py-3 text-emerald-100/50 max-w-[300px] truncate" title={page.discovered_from || undefined}>{page.discovered_from || "Seed URL"}</td>
+                    </tr>
+                  ))}
+                  {pages.length === 0 && (
+                    <tr><td colSpan={4} className="px-4 py-8 text-center text-emerald-100/40">No pages were persisted.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
         {isCompleted && (
           <section className="space-y-4">
-            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
               <span className="text-emerald-400">Raw Evidence</span>
               <span className="text-xs font-mono bg-white/5 px-2 py-0.5 rounded text-emerald-100/50">{evidence.length} OBSERVATIONS</span>
             </h2>
@@ -122,11 +174,7 @@ export default function ScanResultPage() {
                     </tr>
                   ))}
                   {evidence.length === 0 && (
-                    <tr>
-                      <td colSpan={3} className="px-4 py-8 text-center text-emerald-100/40">
-                        No evidence recorded for this scan.
-                      </td>
-                    </tr>
+                    <tr><td colSpan={3} className="px-4 py-8 text-center text-emerald-100/40">No evidence recorded for this scan.</td></tr>
                   )}
                 </tbody>
               </table>

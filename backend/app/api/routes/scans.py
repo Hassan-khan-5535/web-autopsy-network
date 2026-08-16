@@ -1,24 +1,36 @@
+from __future__ import annotations
+
+from urllib.parse import urlsplit
 from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.models.scan import Scan, Website, Observation
-from app.services.admission import AdmissionService, AdmissionError
-from app.services.collector import HTTPCollectorService
+from app.core.config import get_settings
+from app.models.scan import Observation, Page, Scan, Website
+from app.services.admission import AdmissionError, AdmissionService
+from app.services.crawler import CrawlerService
 
 router = APIRouter()
+
 
 class ScanCreate(BaseModel):
     url: str
     authorization_acknowledged: bool
+    max_depth: int | None = Field(default=None, ge=0)
+    max_pages: int | None = Field(default=None, ge=1)
+
 
 class ScanResponse(BaseModel):
     id: UUID
     state: str
     requested_url: str
     error_reason: str | None
+    max_depth: int
+    max_pages: int
+
 
 class ObservationResponse(BaseModel):
     id: UUID
@@ -27,64 +39,81 @@ class ObservationResponse(BaseModel):
     observation: str
     classification: str
     created_at: str
+    page_id: UUID | None = None
+
+
+def _scan_response(scan: Scan) -> dict[str, object]:
+    return {
+        "id": scan.id,
+        "state": scan.state,
+        "requested_url": scan.requested_url,
+        "error_reason": scan.error_reason,
+        "max_depth": scan.max_depth,
+        "max_pages": scan.max_pages,
+    }
+
 
 @router.post("", response_model=ScanResponse, status_code=202)
 def create_scan(scan_req: ScanCreate, db: Session = Depends(get_db)):
     if not scan_req.authorization_acknowledged:
         raise HTTPException(status_code=422, detail="Authorization must be acknowledged.")
 
-    # 1. Admission Check
+    settings = get_settings()
     try:
         canonical_url, _ = AdmissionService.validate_and_resolve(scan_req.url)
-    except AdmissionError as e:
-        raise HTTPException(status_code=422, detail=f"URL Admission failed: {str(e)}")
+    except AdmissionError as exc:
+        raise HTTPException(status_code=422, detail=f"URL Admission failed: {exc}") from exc
 
-    from urllib.parse import urlparse
-    hostname = urlparse(canonical_url).hostname
+    hostname = urlsplit(canonical_url).hostname
+    if not hostname:
+        raise HTTPException(status_code=422, detail="URL must contain a hostname.")
 
-    # 2. Get or create Website
-    # Hardcoding tenant_id for Phase 2 as auth is basic scaffolding
-    tenant_id = "default"
-    website = db.query(Website).filter(Website.canonical_origin == hostname, Website.tenant_id == tenant_id).first()
+    max_depth = min(
+        scan_req.max_depth if scan_req.max_depth is not None else settings.crawl_default_max_depth,
+        settings.crawl_max_depth_cap,
+    )
+    max_pages = min(
+        scan_req.max_pages if scan_req.max_pages is not None else settings.crawl_default_max_pages,
+        settings.crawl_max_pages_cap,
+    )
+
+    website = (
+        db.query(Website)
+        .filter(Website.canonical_origin == hostname, Website.tenant_id == "default")
+        .first()
+    )
     if not website:
-        website = Website(tenant_id=tenant_id, canonical_origin=hostname)
+        website = Website(tenant_id="default", canonical_origin=hostname)
         db.add(website)
         db.commit()
         db.refresh(website)
 
-    # 3. Create Scan (QUEUED -> collecting immediately because it's sync in this phase)
     scan = Scan(
         website_id=website.id,
-        state="QUEUED",
-        requested_url=scan_req.url
+        state="CREATED",
+        requested_url=canonical_url,
+        max_depth=max_depth,
+        max_pages=max_pages,
+        max_concurrency=min(settings.crawl_default_concurrency, settings.crawl_max_concurrency_cap),
+        request_delay_ms=max(settings.crawl_default_delay_ms, settings.crawl_min_delay_ms),
+        same_domain_mode=settings.crawl_same_domain_mode,
     )
     db.add(scan)
     db.commit()
     db.refresh(scan)
 
-    # 4. Synchronous collection for Phase 2 (will be background task in later phases)
-    # The requirement says: "kicks off collection synchronously"
-    HTTPCollectorService.collect(db, scan.id, scan_req.url)
+    CrawlerService(db, scan, canonical_url).crawl()
     db.refresh(scan)
+    return _scan_response(scan)
 
-    return {
-        "id": scan.id,
-        "state": scan.state,
-        "requested_url": scan.requested_url,
-        "error_reason": scan.error_reason
-    }
 
 @router.get("/{scan_id}", response_model=ScanResponse)
 def get_scan(scan_id: UUID, db: Session = Depends(get_db)):
     scan = db.query(Scan).filter(Scan.id == scan_id).first()
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
-    return {
-        "id": scan.id,
-        "state": scan.state,
-        "requested_url": scan.requested_url,
-        "error_reason": scan.error_reason
-    }
+    return _scan_response(scan)
+
 
 @router.get("/{scan_id}/evidence")
 def get_scan_evidence(scan_id: UUID, db: Session = Depends(get_db)):
@@ -92,15 +121,53 @@ def get_scan_evidence(scan_id: UUID, db: Session = Depends(get_db)):
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
 
-    observations = db.query(Observation).filter(Observation.scan_id == scan_id).order_by(Observation.created_at).all()
-    
+    pages_by_url = {page.canonical_url: page.id for page in scan.pages}
+    observations = (
+        db.query(Observation)
+        .filter(Observation.scan_id == scan_id)
+        .order_by(Observation.created_at, Observation.id)
+        .all()
+    )
     return [
         {
-            "id": str(obs.id),
-            "category": obs.category,
-            "subject": obs.subject,
-            "observation": obs.observation,
-            "classification": obs.classification,
-            "created_at": obs.created_at.isoformat()
-        } for obs in observations
+            "id": str(observation.id),
+            "category": observation.category,
+            "subject": observation.subject,
+            "observation": observation.observation,
+            "classification": observation.classification,
+            "created_at": observation.created_at.isoformat(),
+            "page_id": str(pages_by_url[observation.subject])
+            if observation.subject in pages_by_url
+            else None,
+        }
+        for observation in observations
+    ]
+
+
+@router.get("/{scan_id}/pages")
+def get_scan_pages(scan_id: UUID, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    pages = (
+        db.query(Page)
+        .filter(Page.scan_id == scan_id)
+        .order_by(Page.depth, Page.canonical_url)
+        .all()
+    )
+    return [
+        {
+            "id": str(page.id),
+            "url": page.canonical_url,
+            "canonical_url": page.canonical_url,
+            "depth": page.depth,
+            "status_code": page.status_code,
+            "title": page.title,
+            "discovered_from": page.discovered_from.canonical_url if page.discovered_from else None,
+            "discovered_from_page_id": str(page.discovered_from_page_id)
+            if page.discovered_from_page_id
+            else None,
+        }
+        for page in pages
     ]
