@@ -9,10 +9,15 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.core.config import get_settings
-from app.models.scan import Observation, Page, Scan, Technology, Website
+from app.models.scan import ApiEndpoint, Dependency, Header, HTTPResponse, Observation, Page, Resource, Scan, Technology, Website
+
 from app.services.admission import AdmissionError, AdmissionService
+from app.services.api_intelligence import ApiIntelligenceAgent
 from app.services.crawler import CrawlerService
+from app.services.network_intelligence import NetworkIntelligenceAgent
+from app.services.structure import StructureAgent
 from app.services.technology import TechnologyDetectionService
+
 
 router = APIRouter()
 
@@ -108,11 +113,15 @@ def create_scan(scan_req: ScanCreate, db: Session = Depends(get_db)):
     if scan.state == "COMPLETED":
         try:
             TechnologyDetectionService(db, scan.id).detect()
+            StructureAgent(db, scan.id).analyze()
+            ApiIntelligenceAgent(db, scan.id).analyze()
+            NetworkIntelligenceAgent(db, scan.id).analyze()
         except Exception as exc:
             scan.state = "FAILED"
-            scan.error_reason = f"Technology detection failed: {exc}"
+            scan.error_reason = f"Analysis pipeline failed: {exc}"
             db.commit()
         db.refresh(scan)
+
     return _scan_response(scan)
 
 
@@ -219,3 +228,108 @@ def get_scan_pages(scan_id: UUID, db: Session = Depends(get_db)):
         }
         for page in pages
     ]
+
+
+@router.get("/{scan_id}/architecture")
+def get_scan_architecture(scan_id: UUID, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    return StructureAgent(db, scan_id).analyze()
+
+
+@router.get("/{scan_id}/dependencies")
+def get_scan_dependencies(scan_id: UUID, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    dependencies = (
+        db.query(Dependency)
+        .filter(Dependency.scan_id == scan_id)
+        .order_by(Dependency.category, Dependency.domain)
+        .all()
+    )
+    return [
+        {
+            "id": str(dep.id),
+            "domain": dep.domain,
+            "category": dep.category,
+            "classification": dep.classification,
+            "confidence": dep.confidence,
+            "reference_count": dep.reference_count,
+            "sample_resource_urls": dep.sample_resource_urls or [],
+            "created_at": dep.created_at.isoformat(),
+        }
+        for dep in dependencies
+    ]
+
+
+@router.get("/{scan_id}/api-endpoints")
+def get_scan_api_endpoints(scan_id: UUID, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    endpoints = (
+        db.query(ApiEndpoint)
+        .filter(ApiEndpoint.scan_id == scan_id)
+        .order_by(ApiEndpoint.url_or_path, ApiEndpoint.http_method)
+        .all()
+    )
+    return [
+        {
+            "id": str(ep.id),
+            "url_or_path": ep.url_or_path,
+            "http_method": ep.http_method,
+            "content_type": ep.content_type,
+            "classification": ep.classification,
+            "confidence": ep.confidence,
+            "discovered_from_source": ep.discovered_from_source,
+            "created_at": ep.created_at.isoformat(),
+        }
+        for ep in endpoints
+    ]
+
+
+@router.get("/{scan_id}/pages/{page_id}/rendered")
+def get_page_rendered(scan_id: UUID, page_id: UUID, db: Session = Depends(get_db)):
+    page = db.query(Page).filter(Page.id == page_id, Page.scan_id == scan_id).first()
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found for this scan.")
+
+    resp = db.query(HTTPResponse).filter(HTTPResponse.page_id == page.id).first()
+    if not resp:
+        raise HTTPException(status_code=404, detail="No HTTP response recorded for page.")
+
+    resources = db.query(Resource).filter(Resource.page_id == page.id).all()
+    observations = db.query(Observation).filter(Observation.scan_id == scan_id).all()
+
+    return {
+        "page_id": str(page.id),
+        "url": page.canonical_url,
+        "raw_body": resp.raw_body,
+        "rendered_body": resp.rendered_body,
+        "timing_data": resp.timing_data,
+        "resources": [
+            {
+                "id": str(r.id),
+                "url": r.url,
+                "type": r.type,
+                "capture_source": r.capture_source,
+            }
+            for r in resources
+        ],
+        "console_logs": [
+            {
+                "id": str(o.id),
+                "type": o.subject,
+                "text": o.observation,
+            }
+            for o in observations
+            if o.category == "BROWSER_CONSOLE"
+        ],
+    }
+
+

@@ -1,8 +1,10 @@
 alembic==1.15.2
 fastapi[standard]==0.115.12
-psycopg[binary]==3.2.6
+psycopg[binary]>=3.2.0
+
 pydantic-settings==2.8.1
-SQLAlchemy==2.0.40
+SQLAlchemy>=2.0.40
+
 structlog==25.3.0
 httpx==0.28.1
 beautifulsoup4==4.13.3

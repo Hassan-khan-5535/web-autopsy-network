@@ -10,7 +10,9 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+psycopg://web_autopsy:change-me-for-local-development@localhost:5432/web_autopsy"
     cors_origins: str = "http://localhost:3000"
+    browser_worker_url: str = "http://browser-worker:8001"
     jwt_secret: str = "replace-with-a-long-local-only-secret"
+
 
     crawl_default_max_depth: int = 2
     crawl_max_depth_cap: int = 5

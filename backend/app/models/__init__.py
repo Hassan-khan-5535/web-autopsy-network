@@ -2,6 +2,8 @@
 
 from app.models.base import Base
 from app.models.scan import (
+    ApiEndpoint,
+    Dependency,
     Header,
     HTTPResponse,
     Observation,
@@ -26,4 +28,7 @@ __all__ = [
     "Header",
     "Resource",
     "Observation",
+    "Dependency",
+    "ApiEndpoint",
 ]
+

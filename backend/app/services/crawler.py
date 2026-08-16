@@ -333,7 +333,16 @@ class CrawlerService:
             self.db.add(
                 PageLink(source_page_id=page.id, target_url=target_url, is_external=is_external)
             )
+        self.db.commit()
+
+        try:
+            from app.services.browser_client import BrowserWorkerClient
+            BrowserWorkerClient(self.db).analyze_page(self.scan.id, page.id, result.final_url)
+        except Exception as exc:
+            self._observe("BROWSER_ANALYSIS", page.canonical_url, f"Browser worker integration degraded: {exc}")
+
         return page_links
+
 
     def _extract_html(
         self, page: Page, soup: BeautifulSoup, base_url: str, domain_root: str

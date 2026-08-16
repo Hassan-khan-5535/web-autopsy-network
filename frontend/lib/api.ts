@@ -148,3 +148,151 @@ export async function getScanPages(id: string): Promise<CrawledPage[]> {
 
   return response.json() as Promise<CrawledPage[]>;
 }
+
+export type SiteTreeNode = {
+  id: string;
+  url: string;
+  title: string | null;
+  depth: number;
+  status_code: number | null;
+  children: SiteTreeNode[];
+};
+
+export type LinkSummary = {
+  total_internal_links: number;
+  total_external_links: number;
+  total_links: number;
+};
+
+export type FormField = {
+  tag: string;
+  name: string | null;
+  type: string;
+  required: boolean;
+  placeholder: string | null;
+};
+
+export type FormItem = {
+  page_id: string;
+  page_url: string;
+  action: string;
+  method: string;
+  name: string | null;
+  id: string | null;
+  fields: FormField[];
+};
+
+export type PageTypeInference = {
+  page_id: string;
+  url: string;
+  inferred_type: string;
+  classification: "inferred";
+  confidence: number;
+  reason: string;
+};
+
+export type SiteArchitecture = {
+  site_tree: SiteTreeNode[];
+  link_summary: LinkSummary;
+  form_inventory: FormItem[];
+  page_types: PageTypeInference[];
+};
+
+export type DependencyItem = {
+  id: string;
+  domain: string;
+  category: string;
+  classification: "inferred";
+  confidence: number;
+  reference_count: number;
+  sample_resource_urls: string[];
+  created_at: string;
+};
+
+export type ApiEndpointItem = {
+  id: string;
+  url_or_path: string;
+  http_method: string;
+  content_type: string | null;
+  classification: "inferred";
+  confidence: number;
+  discovered_from_source: string;
+  created_at: string;
+};
+
+export async function getScanArchitecture(id: string): Promise<SiteArchitecture> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/architecture`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch architecture for scan ${id}`);
+  }
+
+  return response.json() as Promise<SiteArchitecture>;
+}
+
+export async function getScanDependencies(id: string): Promise<DependencyItem[]> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/dependencies`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch dependencies for scan ${id}`);
+  }
+
+  return response.json() as Promise<DependencyItem[]>;
+}
+
+export async function getScanApiEndpoints(id: string): Promise<ApiEndpointItem[]> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/api-endpoints`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch API endpoints for scan ${id}`);
+  }
+
+  return response.json() as Promise<ApiEndpointItem[]>;
+}
+
+export type PageRenderedResponse = {
+  page_id: string;
+  url: string;
+  raw_body: string | null;
+  rendered_body: string | null;
+  timing_data: Record<string, unknown> | null;
+  resources: Array<{
+
+    id: string;
+    url: string;
+    type: string;
+    capture_source: string;
+  }>;
+  console_logs: Array<{
+    id: string;
+    type: string;
+    text: string;
+  }>;
+};
+
+export async function getScanPageRendered(
+  scanId: string,
+  pageId: string
+): Promise<PageRenderedResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${scanId}/pages/${pageId}/rendered`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch rendered DOM for page ${pageId}`);
+  }
+
+  return response.json() as Promise<PageRenderedResponse>;
+}
+
+

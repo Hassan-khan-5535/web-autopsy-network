@@ -5,7 +5,8 @@ WORKDIR /app
 RUN corepack enable
 
 COPY package.json ./
-RUN pnpm install --no-frozen-lockfile
+RUN pnpm config set fetch-retry-maxtimeout 120000 && pnpm config set fetch-retries 10 && pnpm install --no-frozen-lockfile
+
 
 COPY . .
 

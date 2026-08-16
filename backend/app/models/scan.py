@@ -59,6 +59,13 @@ class Scan(Base):
     technologies: Mapped[list["Technology"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan"
     )
+    dependencies: Mapped[list["Dependency"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
+    api_endpoints: Mapped[list["ApiEndpoint"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
+
 
 
 class Page(Base):
@@ -119,6 +126,8 @@ class HTTPResponse(Base):
     content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     timings_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     raw_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rendered_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    timing_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     page: Mapped["Page"] = relationship(back_populates="http_responses")
@@ -150,6 +159,8 @@ class Resource(Base):
     url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     type: Mapped[str] = mapped_column(String(50))
     attributes: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    capture_source: Mapped[str] = mapped_column(String(50), default="static_http", server_default="static_http", index=True)
+
 
     page: Mapped["Page"] = relationship(back_populates="resources")
 
@@ -214,3 +225,40 @@ class Observation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     scan: Mapped["Scan"] = relationship(back_populates="observations")
+
+
+class Dependency(Base):
+    __tablename__ = "dependencies"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scans.id", ondelete="CASCADE"), index=True
+    )
+    domain: Mapped[str] = mapped_column(String(255), index=True)
+    category: Mapped[str] = mapped_column(String(100), index=True, default="Unclassified")
+    classification: Mapped[str] = mapped_column(String(30), default="inferred")
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    reference_count: Mapped[int] = mapped_column(Integer, default=1)
+    sample_resource_urls: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    scan: Mapped["Scan"] = relationship(back_populates="dependencies")
+
+
+class ApiEndpoint(Base):
+    __tablename__ = "api_endpoints"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scans.id", ondelete="CASCADE"), index=True
+    )
+    url_or_path: Mapped[str] = mapped_column(String(2048), index=True)
+    http_method: Mapped[str] = mapped_column(String(20), default="UNKNOWN")
+    content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    classification: Mapped[str] = mapped_column(String(30), default="inferred")
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    discovered_from_source: Mapped[str] = mapped_column(String(2048))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    scan: Mapped["Scan"] = relationship(back_populates="api_endpoints")
+

@@ -29,6 +29,14 @@ services:
       retries: 12
     restart: unless-stopped
 
+  browser-worker:
+    build:
+      context: ./browser_worker
+      dockerfile: Dockerfile
+    ports:
+      - "${BROWSER_WORKER_PORT:-8001}:8001"
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
@@ -36,9 +44,11 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-web_autopsy}:${POSTGRES_PASSWORD:-change-me-for-local-development}@postgres:5432/${POSTGRES_DB:-web_autopsy}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      BROWSER_WORKER_URL: ${BROWSER_WORKER_URL:-http://browser-worker:8001}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       APP_ENV: ${APP_ENV:-development}
       JWT_SECRET: ${JWT_SECRET:-replace-with-a-long-local-only-secret}
+
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:

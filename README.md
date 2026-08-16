@@ -1,76 +1,263 @@
 # Web Autopsy Network
 
-Web Autopsy Network is an evidence-backed web intelligence platform for **authorized public websites**. 
+> **"Dissect any website. Understand how it works."**  
+> An evidence-backed web intelligence and digital-forensics platform for authorized and publicly analyzable web targets.
 
-This repository includes **Phase 1 (Project Foundation)**, **Phase 2 (URL Admission & HTTP Collector)**, **Phase 3 (Controlled Crawler)**, and **Phase 4 (Technology DNA)**. It safely admits target URLs, fetches passive evidence, builds a bounded, reproducible same-domain site map from static HTML, and runs deterministic, evidence-backed technology fingerprinting. Phase 4 introduces **INFERRED** findings with transparent confidence scoring; JavaScript rendering and AI interpretation remain deferred to later phases.
+Web Autopsy Network captures observable evidence from target web applications, executes multi-tier analysis pipelines, and produces audit-verifiable autopsy reports. It is **not** an LLM wrapper or black-box chatbot — every finding links directly to verifiable, deterministic evidence.
 
-## Architecture & Features
+---
 
-| Component | Purpose |
-|---|---|
-| **Frontend** | Next.js, TypeScript, and Tailwind CSS. Includes the health dashboard, scan submission form, and raw evidence viewer table. |
-| **Backend API** | FastAPI control-plane exposing `/v1/scans` routes, structured logs, and CORS configurations. |
-| **Services** | `AdmissionService` (DNS resolution & SSRF IP blocking), `CrawlerService` (bounded same-domain BFS, robots, rate limits, redirect validation), `TechnologyDetectionService` (JSON-driven deterministic signatures and Evidence Agent gating), and the compatibility `HTTPCollectorService`. |
-| **Database** | PostgreSQL mapping scans, websites, pages, responses, headers, resources, observations, and Phase 3 `page_links` using SQLAlchemy and Alembic. |
+## 🏛️ Platform Architecture & Implemented Phases
 
-*(Note: Redis is provisioned for future task-queue phases but is not yet actively used for asynchronous execution. Phase 3 crawling is synchronous and static-HTML only; JavaScript rendering and AI analysis are slated for later phases.)*
+Web Autopsy Network is built as a microservice monorepo across 6 completed phases:
 
-## Local startup
+```
+                                  +-----------------------+
+                                  |   Next.js 15 UI       |
+                                  |   (React 19, TS)      |
+                                  +-----------+-----------+
+                                              | REST API
+                                              v
+                                  +-----------------------+
+                                  |   FastAPI Control     |
+                                  |   Plane API Gateway   |
+                                  +---+-------+-------+---+
+                                      |       |       |
+                 +--------------------+       |       +-------------------+
+                 | PostgreSQL DB              |                           | HTTP
+                 v                            v                           v
+     +-----------------------+    +-----------------------+   +-----------------------+
+     | SQLAlchemy Models &   |    | Redis Queue &         |   | Playwright Browser    |
+     | Alembic Migrations    |    | Cache Store           |   | Microservice Container|
+     +-----------------------+    +-----------------------+   +-----------------------+
+```
 
-1. Copy the root environment template: `cp config/local.env.example .env`.
-2. Start the complete local stack: `docker compose up --build`.
-3. Open `http://localhost:3000` for the frontend and `http://localhost:8000/docs` for FastAPI documentation.
+### Completed Phases Breakdown
 
-The frontend shows the backend health state. **Start a New Scan** accepts a public URL plus optional max-depth and max-page settings. The server always applies hard safety ceilings, robots.txt rules, hostname-only crawling, per-request delay, concurrency limits, and SSRF checks on every discovered URL and redirect hop.
+- 🟢 **Phase 1 — System Architecture Foundation**: Distributed monorepo layout, Docker Compose containerization (PostgreSQL 16, Redis 7, FastAPI 0.115, Next.js 15), baseline settings management, and structured JSON logging.
+- 🟢 **Phase 2 — Admission & HTTP Collector**: Strict pre-navigation SSRF protection (IP validation blocking RFC-1918 private subnets, loopback `127.0.0.1`, cloud metadata `169.254.169.254`, and non-HTTP protocols), passive HTTP response header extraction, and raw HTML body persistence.
+- 🟢 **Phase 3 — Bounded BFS Crawler**: Same-domain, depth-limited, rate-limited, `robots.txt`-compliant Breadth-First Search (BFS) crawler with deterministic URL normalization and fragment stripping.
+- 🟢 **Phase 4 — Technology DNA Engine**: Rule-based signature engine detecting frameworks, CMSs, CDNs, fonts, and analytics with confidence scoring (0.0–1.0) and mandatory linked evidence gating.
+- 🟢 **Phase 5 — Structure + Dependency Intelligence**:
+  - `StructureAgent`: Site tree reconstruction, internal vs external link statistics, form inventory extraction, and page type classification (`🟡 INFERRED`).
+  - `ApiIntelligenceAgent`: Static discovery of candidate API routes (`/api/`, `/v1/`, `fetch()`, `axios`) with HTTP method and content-type inference.
+  - `NetworkIntelligenceAgent`: External domain dependency graphing mapped against Phase 4 technology categories.
+  - Interactive SVG/Canvas node-link dependency graph UI with zoom, search, category filters, and click-to-inspect evidence panels.
+- 🟢 **Phase 6 — Isolated Browser Analysis (Playwright Worker)**:
+  - Dedicated Python Playwright microservice (`browser-worker`) running in an isolated Docker container.
+  - **Sub-Resource SSRF Protection**: Intercepts *every single outbound request* (scripts, CSS, fetch/XHR, iframes, redirects) via `page.route("**/*")` and aborts forbidden private IP targets before network execution.
+  - Captures post-JS fully rendered DOM HTML (`rendered_body`), dynamic runtime network requests (`capture_source="browser_runtime"`), Navigation & Resource Timing API performance metrics (`timing_data`), and browser console warnings/errors (`BROWSER_CONSOLE`).
+  - Interactive frontend DOM Inspector allowing side-by-side comparison of Static Raw HTML vs. Rendered DOM HTML.
 
-## Database migrations
+---
 
-The backend includes Alembic migrations for the schema. With the Docker services running, use:
+## 🏷️ Evidence Claim Taxonomy
+
+Every finding in Web Autopsy Network is strictly classified under a four-level claim taxonomy:
+
+| Classification | Meaning | Example |
+|---|---|---|
+| 🟢 **OBSERVED** | Directly measured facts captured during HTTP collection or browser rendering. | HTTP status 200, response header `server: nginx`, DOM element `<script src="react.js">`, console error. |
+| 🟡 **INFERRED** | Technically supported conclusions derived from one or more observations. | Detected React technology (confidence 0.95), page classified as `contact_or_form`, API route `/v1/scans`. |
+| 🔵 **AI INTERPRETATION** | Higher-level architectural summaries or natural language explanations. | (Deferred to Phase 10 — AI reasons strictly over 🟢 and 🟡 data). |
+| ⚫ **UNKNOWN** | Properties that cannot be observed or confirmed from public evidence. | Server filesystem path, backend database engine, internal environment variables. |
+
+---
+
+## 🛠️ Terminal Commands & Operations Guide
+
+### 1. Stack Startup (Docker Compose)
+
+Start all services (PostgreSQL, Redis, FastAPI Backend, Browser Worker, Next.js Frontend):
 
 ```bash
+# Copy the local environment configuration template
+cp config/local.env.example .env
+
+# Build and launch all services in Docker Compose (runs on ports 8000, 8001, 3001)
+docker compose up --build
+```
+
+#### Running Service Endpoints
+- **Next.js Frontend Application**: [`http://localhost:3000`](http://localhost:3000) (or port `3001` if port 3000 is occupied)
+- **FastAPI Interactive Swagger Docs**: [`http://localhost:8000/docs`](http://localhost:8000/docs)
+- **Backend API Health Check**: [`http://localhost:8000/health`](http://localhost:8000/health)
+- **Playwright Browser Worker Health Check**: [`http://localhost:8001/health`](http://localhost:8001/health)
+
+---
+
+### 2. Database Migrations (Alembic)
+
+Apply schema migrations against the running PostgreSQL container:
+
+```bash
+# Apply all schema migrations up to latest (0001 through 0006_phase6_browser_analysis)
 docker compose exec backend alembic upgrade head
 ```
 
-## Environment configuration
-
-`config/local.env.example` supplies Compose defaults and documents every local setting. Do not commit real `.env` files or secrets. The frontend requires `NEXT_PUBLIC_API_BASE_URL`; the backend requires `DATABASE_URL`, `CORS_ORIGINS`, `LOG_LEVEL`, `APP_ENV`, and `JWT_SECRET`. Backend crawl defaults and hard caps are defined in `backend/app/core/config.py`.
-
-## Verification commands
-
-| Component | Command |
-|---|---|
-| Frontend types | `cd frontend && pnpm install && pnpm typecheck` |
-| Frontend lint | `cd frontend && pnpm lint` |
-| Backend lint | `cd backend && pip install -r requirements.txt -r requirements-dev.txt && ruff check app tests alembic` |
-| Backend tests | `cd backend && pytest -q` |
-| Full stack | `docker compose up --build` |
-
-## Project conventions
-
-The primary development boundary is `frontend/` and `backend/`. The Phase 0 baseline in `docs/phase-0-architecture-baseline.md` governs the evidence model, security boundaries, and later worker architecture.
-
-## Phase 3 API
-
-| Method | Route | Purpose |
-|---|---|---|
-| `POST` | `/v1/scans` | Admit a URL and run a bounded crawl. Optional JSON fields are `max_depth` and `max_pages`. |
-| `GET` | `/v1/scans/{id}` | Return scan state, requested URL, and effective crawl limits. |
-| `GET` | `/v1/scans/{id}/evidence` | Return observed evidence accumulated across crawled pages. |
-| `GET` | `/v1/scans/{id}/pages` | Return page URL, depth, HTTP status, title, and discovery source for the site map. |
-| `GET` | `/v1/scans/{id}/technologies` | Return inferred technologies, confidence bands, ruleset version, and non-empty supporting evidence. |
-
-Example request:
+Roll back or generate new migrations:
 
 ```bash
-curl -X POST http://localhost:8000/v1/scans \\
-  -H 'Content-Type: application/json' \\
-  -d '{"url":"https://example.com","authorization_acknowledged":true,"max_depth":2,"max_pages":30}'
+# Downgrade schema by 1 revision step
+docker compose exec backend alembic downgrade -1
+
+# Generate a new migration script automatically after updating SQLAlchemy models
+docker compose exec backend alembic revision --autogenerate -m "description of changes"
 ```
 
-The acceptance tests start an isolated local HTTP site and verify same-domain exclusion, robots disallow handling, crawl-time SSRF blocking, URL deduplication, depth and page ceilings, concurrency limits, resource persistence, and page-link persistence. Phase 4 tests use a deterministic known-stack fixture to verify Next.js, React, Bootstrap, WordPress, analytics, CDN, integration, and authentication detections; repeatable confidence; extensible JSON rules; and rejection of findings without evidence. Real public targets must be authorized or publicly analyzable under applicable terms. Apply migrations through `0004_phase4_technology` with `docker compose exec backend alembic upgrade head` before creating scans against a fresh database.
+---
 
-## Phase 4 Technology DNA
+### 3. Backend Testing Suite (Pytest)
 
-Technology signatures are stored in `backend/app/data/technology_signatures.json`. Each rule declares its ID, technology, category, signal type, regular-expression pattern, weight, and evidence field. The engine consumes only stored response bodies, headers, resources, inline scripts, meta values, comments, and cookie names; it never makes new technology-specific requests and never executes JavaScript.
+Run the full automated Pytest test suite (20 tests covering SSRF, Crawler, Tech DNA, Structure, API Intelligence, Network Intelligence, Playwright Worker, and REST APIs):
 
-Confidence is transparent: each unique matched rule contributes its declared weight, and each additional independent rule contributes a small five-point corroboration bonus. The result is capped at 100 and mapped to `low`, `medium`, or `high`. Every persisted `Technology` row has classification `inferred`, a ruleset version, and one or more `TechnologyEvidence` rows. The Evidence Agent rejects candidates with missing or incomplete evidence before persistence. Detection observations are also included in the scan evidence feed with classification `INFERRED`.
+```bash
+# Change directory into backend
+cd backend
+
+# Install dependencies (for local test execution outside Docker)
+pip install -r requirements.txt -r requirements-dev.txt
+
+# Run the complete test suite with verbose output
+pytest -v
+```
+
+#### Run Specific Subsystem Test Suites
+
+```bash
+# Test Phase 6 Browser Worker SSRF Sub-Resource Request Interception
+pytest tests/test_browser_ssrf.py -v
+
+# Test Phase 6 Browser Worker Integration & Rendered Evidence Storage
+pytest tests/test_browser_integration.py -v
+
+# Test Phase 6 REST API Endpoint (/scans/{id}/pages/{page_id}/rendered)
+pytest tests/test_phase6_endpoints.py -v
+
+# Test Phase 5 REST API Endpoints (/architecture, /dependencies, /api-endpoints)
+pytest tests/test_phase5_endpoints.py -v
+
+# Test Structure Agent (Hierarchy, Link Stats, Form Inventory, Page Types)
+pytest tests/test_structure.py -v
+
+# Test API Intelligence Agent (Static API Discovery & HTTP Method Inference)
+pytest tests/test_api_intelligence.py -v
+
+# Test Network Intelligence Agent (External Domain Graph & Tech Mapping)
+pytest tests/test_network_intelligence.py -v
+
+# Test Technology DNA Fingerprinting & Evidence Gating (Phase 4)
+pytest tests/test_technology.py -v
+
+# Test Crawler & Admission SSRF Safeguards (Phase 2 & 3)
+pytest tests/test_crawler.py -v
+```
+
+---
+
+### 4. Frontend Development & Static Code Analysis
+
+```bash
+# Change directory into frontend
+cd frontend
+
+# Install Node.js dependencies
+npm install
+
+# Start Next.js development server
+npm run dev
+
+# Run TypeScript compiler static typecheck (verifies 0 type errors)
+npm run typecheck
+
+# Run Next.js ESLint code quality linter (verifies 0 lint errors/warnings)
+npm run lint
+```
+
+---
+
+## 📡 REST API Reference & cURL Usage
+
+| Method | Route | Description |
+|---|---|---|
+| `POST` | `/v1/scans` | Create and execute passive autopsy scan for an authorized URL. |
+| `GET` | `/v1/scans/{id}` | Retrieve scan lifecycle state and crawl config. |
+| `GET` | `/v1/scans/{id}/pages` | Retrieve site map (URLs, depth, status code, title, discovery source). |
+| `GET` | `/v1/scans/{id}/technologies` | Retrieve detected technologies, confidence scores, and linked evidence items. |
+| `GET` | `/v1/scans/{id}/architecture` | Retrieve site tree hierarchy, link stats, form inventory, and inferred page types (`🟡 INFERRED`). |
+| `GET` | `/v1/scans/{id}/dependencies` | Retrieve external domain dependency graph nodes with reference counts and sample URLs. |
+| `GET` | `/v1/scans/{id}/api-endpoints` | Retrieve candidate API endpoints catalog (path, method, content-type, confidence). |
+| `GET` | `/v1/scans/{id}/pages/{page_id}/rendered` | **[Phase 6]** Retrieve raw static HTML vs post-JS rendered DOM HTML, browser performance timing, and console logs. |
+| `GET` | `/v1/scans/{id}/evidence` | Retrieve raw observation evidence feed (`🟢 OBSERVED`). |
+
+#### cURL Examples with Comments
+
+```bash
+# 1. Submit target URL for automated passive autopsy (returns scan payload with scan ID)
+curl -X POST http://localhost:8000/v1/scans \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "url": "https://example.com",
+    "authorization_acknowledged": true,
+    "max_depth": 2,
+    "max_pages": 30
+  }'
+
+# 2. Query scan status and progress
+curl -s http://localhost:8000/v1/scans/{scan_id} | jq .
+
+# 3. Retrieve site map pages
+curl -s http://localhost:8000/v1/scans/{scan_id}/pages | jq .
+
+# 4. Retrieve Phase 6 Post-JS Rendered DOM, timing metrics, and console logs for a page
+curl -s http://localhost:8000/v1/scans/{scan_id}/pages/{page_id}/rendered | jq .
+
+# 5. Retrieve site architecture, form inventory, and inferred page types
+curl -s http://localhost:8000/v1/scans/{scan_id}/architecture | jq .
+
+# 6. Retrieve external dependency graph categorized by service (Analytics, CDN, Fonts)
+curl -s http://localhost:8000/v1/scans/{scan_id}/dependencies | jq .
+
+# 7. Retrieve candidate API endpoints catalog
+curl -s http://localhost:8000/v1/scans/{scan_id}/api-endpoints | jq .
+
+# 8. Retrieve complete raw observation evidence feed for auditability
+curl -s http://localhost:8000/v1/scans/{scan_id}/evidence | jq .
+```
+
+---
+
+## 📂 Project Repository Structure
+
+```
+web-autopsy-network/
+├── backend/
+│   ├── alembic/              # Database migration scripts (0001 through 0006_phase6_browser_analysis)
+│   ├── app/
+│   │   ├── api/              # FastAPI routers, dependencies, and v1 endpoints
+│   │   ├── core/             # Settings, logging, database connections
+│   │   ├── data/             # Technology signature rules (technology_signatures.json)
+│   │   ├── models/           # SQLAlchemy ORM models (scan.py, base.py)
+│   │   └── services/         # Admission, Crawler, Tech, Structure, API, Network, Browser Client
+│   ├── tests/                # Pytest test suite (20 unit and integration tests)
+│   ├── Dockerfile
+│   └── requirements.txt
+├── browser_worker/           # [Phase 6] Isolated Playwright Browser Microservice
+│   ├── app.py                # FastAPI server with sub-resource SSRF request interception
+│   ├── Dockerfile            # Playwright Noble Python base image
+│   └── requirements.txt
+├── frontend/
+│   ├── app/                  # Next.js 15 App Router pages (/scans, /scans/[id])
+│   ├── components/           # UI components (DependencyGraph.tsx, DOM Inspector Modal)
+│   ├── lib/                  # Frontend API client and TypeScript interface definitions
+│   └── package.json
+├── config/                   # Environment templates (local.env.example)
+├── docs/                     # Technical specifications and design documents
+└── docker-compose.yml        # Orchestration for PostgreSQL, Redis, Backend, Browser Worker, Frontend
+```
+
+---
+
+## 📄 License
+
+Educational and authorized research project. All rights reserved.
