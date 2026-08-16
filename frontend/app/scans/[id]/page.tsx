@@ -7,7 +7,9 @@ import {
   getScan,
   getScanEvidence,
   getScanPages,
+  getScanTechnologies,
   type CrawledPage,
+  type TechnologyDetection,
   type ObservationResponse,
   type ScanResponse,
 } from "@/lib/api";
@@ -18,6 +20,7 @@ export default function ScanResultPage() {
 
   const [scan, setScan] = useState<ScanResponse | null>(null);
   const [pages, setPages] = useState<CrawledPage[]>([]);
+  const [technologies, setTechnologies] = useState<TechnologyDetection[]>([]);
   const [evidence, setEvidence] = useState<ObservationResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,12 +35,14 @@ export default function ScanResultPage() {
         setScan(scanData);
 
         if (scanData.state === "COMPLETED" || scanData.state === "FAILED") {
-          const [pagesData, evidenceData] = await Promise.all([
+          const [pagesData, technologiesData, evidenceData] = await Promise.all([
             getScanPages(id),
+            getScanTechnologies(id),
             getScanEvidence(id),
           ]);
           if (mounted) {
             setPages(pagesData);
+            setTechnologies(technologiesData);
             setEvidence(evidenceData);
           }
         }
@@ -109,6 +114,53 @@ export default function ScanResultPage() {
           <section className="bg-red-500/5 border border-red-500/10 rounded-2xl p-6">
             <h3 className="text-red-400 font-semibold mb-2">Collection Failed</h3>
             <p className="text-red-200/70 text-sm font-mono whitespace-pre-wrap">{scan.error_reason}</p>
+          </section>
+        )}
+
+        {(isCompleted || isFailed) && (
+          <section className="space-y-4">
+            <div className="flex items-end justify-between">
+              <div>
+                <h2 className="text-xl font-semibold">Technology DNA</h2>
+                <p className="mt-1 text-sm text-emerald-100/50">Deterministic, evidence-backed fingerprints from stored static HTML, headers, and resources.</p>
+              </div>
+              <span className="text-xs font-mono bg-white/5 px-2 py-0.5 rounded text-emerald-100/50">{technologies.length} DETECTIONS</span>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              {technologies.map((technology) => (
+                <details key={technology.id} className="rounded-xl border border-white/5 bg-black/20 p-5 group">
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-lg font-semibold text-emerald-50">{technology.name}</p>
+                        <p className="mt-1 text-xs uppercase tracking-wider text-emerald-100/45">{technology.category.replaceAll("_", " ")} · {technology.classification}</p>
+                      </div>
+                      <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-mono ${
+                        technology.confidence_band === "high" ? "bg-emerald-500/15 text-emerald-300" :
+                        technology.confidence_band === "medium" ? "bg-amber-500/15 text-amber-300" :
+                        "bg-slate-500/15 text-slate-300"
+                      }`}>{Math.round(technology.confidence)}% {technology.confidence_band}</span>
+                    </div>
+                  </summary>
+                  <div className="mt-4 space-y-3 border-t border-white/5 pt-4">
+                    <p className="text-xs text-emerald-100/45">Ruleset {technology.rule_version}. Confidence combines unique matched rule weights plus a small corroboration bonus for independent signals.</p>
+                    {technology.evidence.map((item) => (
+                      <div key={item.id} className="rounded-lg bg-white/[0.03] p-3 text-sm">
+                        <div className="flex items-center justify-between gap-3 text-xs text-emerald-100/45">
+                          <span>{item.type} · {item.match_rule}</span>
+                          <span>+{item.weight}</span>
+                        </div>
+                        <p className="mt-1 break-words text-emerald-50/85">{item.observation}</p>
+                        <p className="mt-1 break-all text-xs text-emerald-100/40">Source: {item.source}</p>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ))}
+              {technologies.length === 0 && (
+                <div className="md:col-span-2 rounded-xl border border-white/5 bg-black/20 px-5 py-8 text-center text-emerald-100/45">No technology signals were detected from the stored static evidence.</div>
+              )}
+            </div>
           </section>
         )}
 

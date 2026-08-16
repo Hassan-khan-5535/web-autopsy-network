@@ -9,9 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.core.config import get_settings
-from app.models.scan import Observation, Page, Scan, Website
+from app.models.scan import Observation, Page, Scan, Technology, Website
 from app.services.admission import AdmissionError, AdmissionService
 from app.services.crawler import CrawlerService
+from app.services.technology import TechnologyDetectionService
 
 router = APIRouter()
 
@@ -104,6 +105,14 @@ def create_scan(scan_req: ScanCreate, db: Session = Depends(get_db)):
 
     CrawlerService(db, scan, canonical_url).crawl()
     db.refresh(scan)
+    if scan.state == "COMPLETED":
+        try:
+            TechnologyDetectionService(db, scan.id).detect()
+        except Exception as exc:
+            scan.state = "FAILED"
+            scan.error_reason = f"Technology detection failed: {exc}"
+            db.commit()
+        db.refresh(scan)
     return _scan_response(scan)
 
 
@@ -141,6 +150,45 @@ def get_scan_evidence(scan_id: UUID, db: Session = Depends(get_db)):
             else None,
         }
         for observation in observations
+    ]
+
+
+@router.get("/{scan_id}/technologies")
+def get_scan_technologies(scan_id: UUID, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    technologies = (
+        db.query(Technology)
+        .filter(Technology.scan_id == scan_id)
+        .order_by(Technology.category, Technology.confidence.desc(), Technology.canonical_name)
+        .all()
+    )
+    return [
+        {
+            "id": str(technology.id),
+            "name": technology.canonical_name,
+            "category": technology.category,
+            "classification": technology.classification,
+            "confidence": technology.confidence,
+            "confidence_band": technology.confidence_band,
+            "rule_version": technology.rule_version,
+            "evidence": [
+                {
+                    "id": str(evidence.id),
+                    "type": evidence.signal_type,
+                    "source": evidence.source,
+                    "observation": evidence.observation,
+                    "match_rule": evidence.match_rule,
+                    "weight": evidence.match_weight,
+                    "page_id": str(evidence.page_id) if evidence.page_id else None,
+                    "created_at": evidence.created_at.isoformat(),
+                }
+                for evidence in technology.evidence
+            ],
+        }
+        for technology in technologies
     ]
 
 

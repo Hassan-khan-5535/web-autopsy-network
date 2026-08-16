@@ -9,6 +9,8 @@ from app.models.scan import (
     PageLink,
     Resource,
     Scan,
+    Technology,
+    TechnologyEvidence,
     Website,
 )
 
@@ -18,6 +20,8 @@ __all__ = [
     "Scan",
     "Page",
     "PageLink",
+    "Technology",
+    "TechnologyEvidence",
     "HTTPResponse",
     "Header",
     "Resource",

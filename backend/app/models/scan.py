@@ -56,6 +56,9 @@ class Scan(Base):
     observations: Mapped[list["Observation"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan"
     )
+    technologies: Mapped[list["Technology"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
 
 
 class Page(Base):
@@ -115,6 +118,7 @@ class HTTPResponse(Base):
     final_url: Mapped[str] = mapped_column(String(2048))
     content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     timings_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    raw_body: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     page: Mapped["Page"] = relationship(back_populates="http_responses")
@@ -148,6 +152,52 @@ class Resource(Base):
     attributes: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     page: Mapped["Page"] = relationship(back_populates="resources")
+
+
+class Technology(Base):
+    __tablename__ = "technologies"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scans.id", ondelete="CASCADE"), index=True
+    )
+    canonical_name: Mapped[str] = mapped_column(String(255), index=True)
+    category: Mapped[str] = mapped_column(String(100), index=True)
+    classification: Mapped[str] = mapped_column(String(30), default="inferred")
+    confidence: Mapped[float] = mapped_column(Float)
+    confidence_band: Mapped[str] = mapped_column(String(30))
+    rule_version: Mapped[str] = mapped_column(String(50))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    scan: Mapped["Scan"] = relationship(back_populates="technologies")
+    evidence: Mapped[list["TechnologyEvidence"]] = relationship(
+        back_populates="technology", cascade="all, delete-orphan"
+    )
+
+
+class TechnologyEvidence(Base):
+    __tablename__ = "technology_evidence"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    technology_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("technologies.id", ondelete="CASCADE"), index=True
+    )
+    scan_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scans.id", ondelete="CASCADE"), index=True
+    )
+    page_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("pages.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    signal_type: Mapped[str] = mapped_column(String(50))
+    match_rule: Mapped[str] = mapped_column(String(255))
+    source: Mapped[str] = mapped_column(String(2048))
+    observation: Mapped[str] = mapped_column(Text)
+    match_weight: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    technology: Mapped["Technology"] = relationship(back_populates="evidence")
+    scan: Mapped["Scan"] = relationship()
+    page: Mapped[Optional["Page"]] = relationship()
 
 
 class Observation(Base):

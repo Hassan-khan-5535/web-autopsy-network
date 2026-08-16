@@ -44,6 +44,28 @@ export type ObservationResponse = {
   page_id: string | null;
 };
 
+export type TechnologyEvidence = {
+  id: string;
+  type: string;
+  source: string;
+  observation: string;
+  match_rule: string;
+  weight: number;
+  page_id: string | null;
+  created_at: string;
+};
+
+export type TechnologyDetection = {
+  id: string;
+  name: string;
+  category: string;
+  classification: "inferred";
+  confidence: number;
+  confidence_band: "low" | "medium" | "high";
+  rule_version: string;
+  evidence: TechnologyEvidence[];
+};
+
 export type CrawledPage = {
   id: string;
   url: string;
@@ -99,6 +121,19 @@ export async function getScanEvidence(id: string): Promise<ObservationResponse[]
   }
 
   return response.json() as Promise<ObservationResponse[]>;
+}
+
+export async function getScanTechnologies(id: string): Promise<TechnologyDetection[]> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/technologies`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch technologies for scan ${id}`);
+  }
+
+  return response.json() as Promise<TechnologyDetection[]>;
 }
 
 export async function getScanPages(id: string): Promise<CrawledPage[]> {

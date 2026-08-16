@@ -310,6 +310,7 @@ class CrawlerService:
             final_url=result.final_url,
             content_type=result.content_type,
             timings_ms=result.elapsed_ms,
+            raw_body=result.body or None,
         )
         self.db.add(response)
         self.db.flush()
