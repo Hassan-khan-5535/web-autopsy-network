@@ -9,6 +9,7 @@ from app.models.scan import (
     Observation,
     Page,
     PageLink,
+    PerformanceMetric,
     Resource,
     Scan,
     SecurityFinding,
@@ -32,5 +33,6 @@ __all__ = [
     "Dependency",
     "ApiEndpoint",
     "SecurityFinding",
+    "PerformanceMetric",
 ]
 

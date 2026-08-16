@@ -68,6 +68,9 @@ class Scan(Base):
     security_findings: Mapped[list["SecurityFinding"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan"
     )
+    performance_metrics: Mapped[list["PerformanceMetric"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
 
 
 
@@ -248,6 +251,33 @@ class Dependency(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     scan: Mapped["Scan"] = relationship(back_populates="dependencies")
+
+
+class PerformanceMetric(Base):
+    __tablename__ = "performance_metrics"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scans.id", ondelete="CASCADE"), index=True
+    )
+    page_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("pages.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    scope: Mapped[str] = mapped_column(String(30), default="page", index=True)
+    metric_name: Mapped[str] = mapped_column(String(150), index=True)
+    value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unit: Mapped[str] = mapped_column(String(30))
+    classification: Mapped[str] = mapped_column(String(30), index=True)
+    confidence: Mapped[float] = mapped_column(Float, default=100.0)
+    confidence_band: Mapped[str] = mapped_column(String(30), default="high")
+    capture_mode: Mapped[str] = mapped_column(String(50))
+    statement: Mapped[str] = mapped_column(Text)
+    evidence: Mapped[list] = mapped_column(JSON)
+    limitations: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    scan: Mapped["Scan"] = relationship(back_populates="performance_metrics")
+    page: Mapped[Optional["Page"]] = relationship()
 
 
 class SecurityFinding(Base):

@@ -15,6 +15,7 @@ from app.models.scan import (
     HTTPResponse,
     Observation,
     Page,
+    PerformanceMetric,
     Resource,
     Scan,
     SecurityFinding,
@@ -25,6 +26,7 @@ from app.services.admission import AdmissionError, AdmissionService
 from app.services.api_intelligence import ApiIntelligenceAgent
 from app.services.crawler import CrawlerService
 from app.services.network_intelligence import NetworkIntelligenceAgent
+from app.services.performance import PerformanceEngine
 from app.services.security import SecurityAnalysisService
 from app.services.structure import StructureAgent
 from app.services.technology import TechnologyDetectionService
@@ -127,6 +129,7 @@ def create_scan(scan_req: ScanCreate, db: Session = Depends(get_db)):
             ApiIntelligenceAgent(db, scan.id).analyze()
             NetworkIntelligenceAgent(db, scan.id).analyze()
             SecurityAnalysisService(db, scan.id).analyze()
+            PerformanceEngine(db, scan.id).analyze()
         except Exception as exc:
             scan.state = "FAILED"
             scan.error_reason = f"Analysis pipeline failed: {exc}"
@@ -188,6 +191,24 @@ def get_scan_evidence(scan_id: UUID, db: Session = Depends(get_db)):
             "page_id": str(finding.page_id) if finding.page_id else None,
         }
         for finding in findings
+    )
+    performance_metrics = (
+        db.query(PerformanceMetric)
+        .filter(PerformanceMetric.scan_id == scan_id)
+        .order_by(PerformanceMetric.created_at, PerformanceMetric.id)
+        .all()
+    )
+    result.extend(
+        {
+            "id": str(metric.id),
+            "category": "PERFORMANCE",
+            "subject": metric.metric_name,
+            "observation": metric.statement,
+            "classification": metric.classification,
+            "created_at": metric.created_at.isoformat(),
+            "page_id": str(metric.page_id) if metric.page_id else None,
+        }
+        for metric in performance_metrics
     )
     return result
 
@@ -262,6 +283,109 @@ def get_scan_security(scan_id: UUID, db: Session = Depends(get_db)):
         }
         for finding in findings
     ]
+
+
+@router.get("/{scan_id}/performance")
+def get_scan_performance(scan_id: UUID, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    metrics = (
+        db.query(PerformanceMetric)
+        .filter(PerformanceMetric.scan_id == scan_id)
+        .order_by(PerformanceMetric.scope, PerformanceMetric.page_id, PerformanceMetric.metric_name)
+        .all()
+    )
+    return {
+        "scan_id": str(scan_id),
+        "rule_version": "phase8-v1",
+        "metrics": [
+            {
+                "id": str(metric.id),
+                "scope": metric.scope,
+                "metric_name": metric.metric_name,
+                "value": metric.value,
+                "unit": metric.unit,
+                "classification": metric.classification,
+                "confidence": metric.confidence,
+                "confidence_band": metric.confidence_band,
+                "capture_mode": metric.capture_mode,
+                "statement": metric.statement,
+                "limitations": metric.limitations,
+                "page_id": str(metric.page_id) if metric.page_id else None,
+                "evidence": metric.evidence,
+                "created_at": metric.created_at.isoformat(),
+            }
+            for metric in metrics
+        ],
+        "page_metrics": [
+            {
+                "page_id": str(page.id),
+                "url": page.canonical_url,
+                "metrics": [
+                    {
+                        "id": str(metric.id),
+                        "scope": metric.scope,
+                        "metric_name": metric.metric_name,
+                        "value": metric.value,
+                        "unit": metric.unit,
+                        "classification": metric.classification,
+                        "confidence": metric.confidence,
+                        "confidence_band": metric.confidence_band,
+                        "capture_mode": metric.capture_mode,
+                        "statement": metric.statement,
+                        "limitations": metric.limitations,
+                        "page_id": str(metric.page_id) if metric.page_id else None,
+                        "evidence": metric.evidence,
+                        "created_at": metric.created_at.isoformat(),
+                    }
+                    for metric in metrics
+                    if metric.page_id == page.id
+                ],
+            }
+            for page in sorted(scan.pages, key=lambda item: (item.depth, item.canonical_url))
+        ],
+        "site_metrics": [
+            {
+                "id": str(metric.id),
+                "scope": metric.scope,
+                "metric_name": metric.metric_name,
+                "value": metric.value,
+                "unit": metric.unit,
+                "classification": metric.classification,
+                "confidence": metric.confidence,
+                "confidence_band": metric.confidence_band,
+                "capture_mode": metric.capture_mode,
+                "statement": metric.statement,
+                "limitations": metric.limitations,
+                "page_id": str(metric.page_id) if metric.page_id else None,
+                "evidence": metric.evidence,
+                "created_at": metric.created_at.isoformat(),
+            }
+            for metric in metrics
+            if metric.scope == "site"
+        ],
+        "diagnostics": [
+            {
+                "id": str(metric.id),
+                "scope": metric.scope,
+                "metric_name": metric.metric_name,
+                "value": metric.value,
+                "unit": metric.unit,
+                "classification": metric.classification,
+                "confidence": metric.confidence,
+                "confidence_band": metric.confidence_band,
+                "statement": metric.statement,
+                "limitations": metric.limitations,
+                "page_id": str(metric.page_id) if metric.page_id else None,
+                "evidence": metric.evidence,
+                "created_at": metric.created_at.isoformat(),
+            }
+            for metric in metrics
+            if metric.metric_name.startswith("diagnosis:")
+        ],
+    }
 
 
 @router.get("/{scan_id}/pages")

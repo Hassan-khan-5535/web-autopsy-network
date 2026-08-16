@@ -92,6 +92,47 @@ export type SecurityFinding = {
   created_at: string;
 };
 
+export type PerformanceEvidence = {
+  id: string;
+  type: string;
+  source: string;
+  observation: string;
+  page_id: string | null;
+  captured_at: string;
+};
+
+export type PerformanceMetric = {
+  id: string;
+  scope: "page" | "site";
+  metric_name: string;
+  value: number | null;
+  unit: string;
+  classification: "OBSERVED" | "INFERRED" | "UNKNOWN";
+  confidence: number;
+  confidence_band: "low" | "medium" | "high" | "unknown";
+  capture_mode: string;
+  statement: string;
+  limitations: string | null;
+  page_id: string | null;
+  evidence: PerformanceEvidence[];
+  created_at?: string;
+};
+
+export type PerformancePageMetrics = {
+  page_id: string;
+  url: string;
+  metrics: PerformanceMetric[];
+};
+
+export type PerformanceResponse = {
+  scan_id: string;
+  rule_version: string;
+  metrics: PerformanceMetric[];
+  page_metrics: PerformancePageMetrics[];
+  site_metrics: PerformanceMetric[];
+  diagnostics: PerformanceMetric[];
+};
+
 export type CrawledPage = {
   id: string;
   url: string;
@@ -173,6 +214,19 @@ export async function getScanSecurity(id: string): Promise<SecurityFinding[]> {
   }
 
   return response.json() as Promise<SecurityFinding[]>;
+}
+
+export async function getScanPerformance(id: string): Promise<PerformanceResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/performance`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch performance metrics for scan ${id}`);
+  }
+
+  return response.json() as Promise<PerformanceResponse>;
 }
 
 export async function getScanPages(id: string): Promise<CrawledPage[]> {

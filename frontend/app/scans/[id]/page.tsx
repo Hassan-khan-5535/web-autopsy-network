@@ -12,6 +12,7 @@ import {
   getScanDependencies,
   getScanApiEndpoints,
   getScanSecurity,
+  getScanPerformance,
   getScanPageRendered,
   type CrawledPage,
   type TechnologyDetection,
@@ -22,6 +23,7 @@ import {
   type ApiEndpointItem,
   type PageRenderedResponse,
   type SecurityFinding,
+  type PerformanceResponse,
 } from "@/lib/api";
 import DependencyGraph from "@/components/DependencyGraph";
 
@@ -37,6 +39,7 @@ export default function ScanResultPage() {
   const [dependencies, setDependencies] = useState<DependencyItem[]>([]);
   const [apiEndpoints, setApiEndpoints] = useState<ApiEndpointItem[]>([]);
   const [securityFindings, setSecurityFindings] = useState<SecurityFinding[]>([]);
+  const [performance, setPerformance] = useState<PerformanceResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,7 +59,7 @@ export default function ScanResultPage() {
         setScan(scanData);
 
         if (scanData.state === "COMPLETED" || scanData.state === "FAILED") {
-          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, securityData] = await Promise.all([
+          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, securityData, performanceData] = await Promise.all([
             getScanPages(id).catch(() => []),
             getScanTechnologies(id).catch(() => []),
             getScanEvidence(id).catch(() => []),
@@ -64,6 +67,7 @@ export default function ScanResultPage() {
             getScanDependencies(id).catch(() => []),
             getScanApiEndpoints(id).catch(() => []),
             getScanSecurity(id).catch(() => []),
+            getScanPerformance(id).catch(() => null),
           ]);
 
           if (mounted) {
@@ -74,6 +78,7 @@ export default function ScanResultPage() {
             setDependencies(depsData);
             setApiEndpoints(apiData);
             setSecurityFindings(securityData);
+            setPerformance(performanceData);
           }
         }
       } catch (err: unknown) {
@@ -359,6 +364,81 @@ export default function ScanResultPage() {
                   No technology signals were detected from the stored static evidence.
                 </div>
               )}
+            </div>
+          </section>
+        )}
+
+        {/* Phase 8 Performance Section */}
+        {(isCompleted || isFailed) && performance && (
+          <section className="space-y-5 rounded-2xl border border-emerald-900/30 bg-[#0b1714] p-6">
+            <div className="flex items-end justify-between border-b border-emerald-900/20 pb-4">
+              <div>
+                <h2 className="text-xl font-semibold text-emerald-400">Performance</h2>
+                <p className="mt-1 text-sm text-emerald-100/50">
+                  Deterministic metrics computed only from stored HTTP, resource, and browser timing evidence. Missing browser timing is shown as UNKNOWN.
+                </p>
+              </div>
+              <span className="text-xs font-mono text-emerald-100/50">{performance.metrics.length} METRICS</span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {performance.site_metrics.filter((metric) => ["site_total_document_size_bytes", "site_average_document_size_bytes", "site_total_static_resource_reference_count", "site_average_request_count", "site_average_page_load_time_ms"].includes(metric.metric_name)).map((metric) => (
+                <div key={metric.id} className="rounded-xl border border-white/5 bg-black/20 p-4">
+                  <p className="text-xs uppercase tracking-wider text-emerald-100/45">{metric.metric_name.replaceAll("_", " ")}</p>
+                  <p className="mt-2 text-lg font-semibold text-emerald-50">
+                    {metric.value === null ? "UNKNOWN" : metric.unit === "bytes" ? `${(metric.value / 1024 / 1024).toFixed(2)} MB` : `${metric.value.toFixed(1)} ${metric.unit}`}
+                  </p>
+                  <p className="mt-1 text-xs text-emerald-100/45">{metric.classification} · {metric.capture_mode}</p>
+                </div>
+              ))}
+            </div>
+            <div>
+              <div className="mb-2 flex items-center justify-between text-xs text-emerald-100/45">
+                <span>Payload composition from captured size evidence</span>
+                <span>JS · CSS · Images · Fonts</span>
+              </div>
+              <div className="flex h-4 overflow-hidden rounded-full bg-white/5">
+                {(["js", "css", "image", "font"] as const).map((kind) => {
+                  const metric = performance.metrics.find((item) => item.scope === "site" && item.metric_name === `site_total_${kind}_payload_size_bytes`);
+                  const total = ["js", "css", "image", "font"].reduce((sum, name) => sum + (performance.metrics.find((item) => item.scope === "site" && item.metric_name === `site_total_${name}_payload_size_bytes`)?.value ?? 0), 0);
+                  const width = metric?.value !== null && metric?.value !== undefined && total > 0 ? (metric.value / total) * 100 : 0;
+                  return <div key={kind} title={`${kind}: ${metric?.value ?? "UNKNOWN"}`} className={`${kind === "js" ? "bg-amber-400" : kind === "css" ? "bg-sky-400" : kind === "image" ? "bg-emerald-400" : "bg-purple-400"} h-full`} style={{ width: `${width}%` }} />;
+                })}
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {performance.diagnostics.map((diagnostic) => (
+                <details key={diagnostic.id} className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="font-semibold text-amber-200">{diagnostic.metric_name.replace("diagnosis:", "").replaceAll("_", " ")}</p>
+                      <span className="text-xs font-mono text-amber-200/70">{diagnostic.confidence}% {diagnostic.classification}</span>
+                    </div>
+                  </summary>
+                  <p className="mt-3 text-sm text-emerald-50/80">{diagnostic.statement}</p>
+                  <p className="mt-2 text-xs text-emerald-100/45">Evidence: {diagnostic.evidence.length} item(s)</p>
+                  <div className="mt-3 space-y-2">
+                    {diagnostic.evidence.map((item) => (
+                      <div key={item.id} className="rounded-lg bg-black/20 p-3 text-xs">
+                        <p className="text-emerald-100/45">{item.type}</p>
+                        <p className="mt-1 text-emerald-50/80">{item.observation}</p>
+                        <p className="mt-1 break-all text-emerald-100/40">{item.source}</p>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ))}
+              {performance.diagnostics.length === 0 && <p className="text-sm text-emerald-100/45">No deterministic performance diagnoses were triggered.</p>}
+            </div>
+            <div className="overflow-auto rounded-xl border border-white/5 bg-black/20">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-white/5 text-xs uppercase tracking-wider text-emerald-100/40"><tr><th className="px-4 py-3">Page</th><th className="px-4 py-3">Metrics</th><th className="px-4 py-3">UNKNOWN timing</th></tr></thead>
+                <tbody className="divide-y divide-white/5">
+                  {performance.page_metrics.map((pageMetric) => {
+                    const unknownTiming = pageMetric.metrics.filter((metric) => metric.metric_name.endsWith("_ms") && metric.value === null).length;
+                    return <tr key={pageMetric.page_id}><td className="max-w-[360px] truncate px-4 py-3 text-emerald-50" title={pageMetric.url}>{pageMetric.url}</td><td className="px-4 py-3 text-emerald-100/60">{pageMetric.metrics.length}</td><td className="px-4 py-3 text-emerald-100/60">{unknownTiming}</td></tr>;
+                  })}
+                </tbody>
+              </table>
             </div>
           </section>
         )}
