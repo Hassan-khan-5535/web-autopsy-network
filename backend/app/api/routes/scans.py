@@ -9,15 +9,25 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.core.config import get_settings
-from app.models.scan import ApiEndpoint, Dependency, Header, HTTPResponse, Observation, Page, Resource, Scan, Technology, Website
-
+from app.models.scan import (
+    ApiEndpoint,
+    Dependency,
+    HTTPResponse,
+    Observation,
+    Page,
+    Resource,
+    Scan,
+    SecurityFinding,
+    Technology,
+    Website,
+)
 from app.services.admission import AdmissionError, AdmissionService
 from app.services.api_intelligence import ApiIntelligenceAgent
 from app.services.crawler import CrawlerService
 from app.services.network_intelligence import NetworkIntelligenceAgent
+from app.services.security import SecurityAnalysisService
 from app.services.structure import StructureAgent
 from app.services.technology import TechnologyDetectionService
-
 
 router = APIRouter()
 
@@ -116,6 +126,7 @@ def create_scan(scan_req: ScanCreate, db: Session = Depends(get_db)):
             StructureAgent(db, scan.id).analyze()
             ApiIntelligenceAgent(db, scan.id).analyze()
             NetworkIntelligenceAgent(db, scan.id).analyze()
+            SecurityAnalysisService(db, scan.id).analyze()
         except Exception as exc:
             scan.state = "FAILED"
             scan.error_reason = f"Analysis pipeline failed: {exc}"
@@ -146,7 +157,7 @@ def get_scan_evidence(scan_id: UUID, db: Session = Depends(get_db)):
         .order_by(Observation.created_at, Observation.id)
         .all()
     )
-    return [
+    result = [
         {
             "id": str(observation.id),
             "category": observation.category,
@@ -160,6 +171,25 @@ def get_scan_evidence(scan_id: UUID, db: Session = Depends(get_db)):
         }
         for observation in observations
     ]
+    findings = (
+        db.query(SecurityFinding)
+        .filter(SecurityFinding.scan_id == scan_id)
+        .order_by(SecurityFinding.created_at, SecurityFinding.id)
+        .all()
+    )
+    result.extend(
+        {
+            "id": str(finding.id),
+            "category": "SECURITY",
+            "subject": finding.subject,
+            "observation": finding.statement,
+            "classification": finding.classification,
+            "created_at": finding.created_at.isoformat(),
+            "page_id": str(finding.page_id) if finding.page_id else None,
+        }
+        for finding in findings
+    )
+    return result
 
 
 @router.get("/{scan_id}/technologies")
@@ -198,6 +228,39 @@ def get_scan_technologies(scan_id: UUID, db: Session = Depends(get_db)):
             ],
         }
         for technology in technologies
+    ]
+
+
+@router.get("/{scan_id}/security")
+def get_scan_security(scan_id: UUID, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    findings = (
+        db.query(SecurityFinding)
+        .filter(SecurityFinding.scan_id == scan_id)
+        .order_by(SecurityFinding.severity, SecurityFinding.subject, SecurityFinding.created_at)
+        .all()
+    )
+    return [
+        {
+            "id": str(finding.id),
+            "category": finding.category,
+            "subject": finding.subject,
+            "statement": finding.statement,
+            "classification": finding.classification,
+            "confidence": finding.confidence,
+            "confidence_band": finding.confidence_band,
+            "severity": finding.severity,
+            "rule_id": finding.rule_id,
+            "rule_version": finding.rule_version,
+            "limitations": finding.limitations,
+            "page_id": str(finding.page_id) if finding.page_id else None,
+            "evidence": finding.evidence,
+            "created_at": finding.created_at.isoformat(),
+        }
+        for finding in findings
     ]
 
 
@@ -331,5 +394,3 @@ def get_page_rendered(scan_id: UUID, page_id: UUID, db: Session = Depends(get_db
             if o.category == "BROWSER_CONSOLE"
         ],
     }
-
-

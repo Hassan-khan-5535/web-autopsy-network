@@ -11,6 +11,7 @@ from app.models.scan import (
     PageLink,
     Resource,
     Scan,
+    SecurityFinding,
     Technology,
     TechnologyEvidence,
     Website,
@@ -30,5 +31,6 @@ __all__ = [
     "Observation",
     "Dependency",
     "ApiEndpoint",
+    "SecurityFinding",
 ]
 

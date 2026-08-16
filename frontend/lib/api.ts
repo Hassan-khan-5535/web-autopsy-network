@@ -66,6 +66,32 @@ export type TechnologyDetection = {
   evidence: TechnologyEvidence[];
 };
 
+export type SecurityEvidence = {
+  id: string;
+  type: string;
+  source: string;
+  observation: string;
+  page_id: string | null;
+  captured_at: string;
+};
+
+export type SecurityFinding = {
+  id: string;
+  category: "security";
+  subject: string;
+  statement: string;
+  classification: "OBSERVED" | "INFERRED";
+  confidence: number;
+  confidence_band: "low" | "medium" | "high";
+  severity: "info" | "low" | "medium" | "high";
+  rule_id: string;
+  rule_version: string;
+  limitations: string | null;
+  page_id: string | null;
+  evidence: SecurityEvidence[];
+  created_at: string;
+};
+
 export type CrawledPage = {
   id: string;
   url: string;
@@ -134,6 +160,19 @@ export async function getScanTechnologies(id: string): Promise<TechnologyDetecti
   }
 
   return response.json() as Promise<TechnologyDetection[]>;
+}
+
+export async function getScanSecurity(id: string): Promise<SecurityFinding[]> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/security`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch security findings for scan ${id}`);
+  }
+
+  return response.json() as Promise<SecurityFinding[]>;
 }
 
 export async function getScanPages(id: string): Promise<CrawledPage[]> {

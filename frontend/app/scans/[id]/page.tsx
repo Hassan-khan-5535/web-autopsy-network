@@ -11,6 +11,7 @@ import {
   getScanArchitecture,
   getScanDependencies,
   getScanApiEndpoints,
+  getScanSecurity,
   getScanPageRendered,
   type CrawledPage,
   type TechnologyDetection,
@@ -20,6 +21,7 @@ import {
   type DependencyItem,
   type ApiEndpointItem,
   type PageRenderedResponse,
+  type SecurityFinding,
 } from "@/lib/api";
 import DependencyGraph from "@/components/DependencyGraph";
 
@@ -34,6 +36,7 @@ export default function ScanResultPage() {
   const [architecture, setArchitecture] = useState<SiteArchitecture | null>(null);
   const [dependencies, setDependencies] = useState<DependencyItem[]>([]);
   const [apiEndpoints, setApiEndpoints] = useState<ApiEndpointItem[]>([]);
+  const [securityFindings, setSecurityFindings] = useState<SecurityFinding[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,13 +56,14 @@ export default function ScanResultPage() {
         setScan(scanData);
 
         if (scanData.state === "COMPLETED" || scanData.state === "FAILED") {
-          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData] = await Promise.all([
+          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, securityData] = await Promise.all([
             getScanPages(id).catch(() => []),
             getScanTechnologies(id).catch(() => []),
             getScanEvidence(id).catch(() => []),
             getScanArchitecture(id).catch(() => null),
             getScanDependencies(id).catch(() => []),
             getScanApiEndpoints(id).catch(() => []),
+            getScanSecurity(id).catch(() => []),
           ]);
 
           if (mounted) {
@@ -69,6 +73,7 @@ export default function ScanResultPage() {
             setArchitecture(archData);
             setDependencies(depsData);
             setApiEndpoints(apiData);
+            setSecurityFindings(securityData);
           }
         }
       } catch (err: unknown) {
@@ -352,6 +357,65 @@ export default function ScanResultPage() {
               {technologies.length === 0 && (
                 <div className="md:col-span-2 rounded-xl border border-white/5 bg-black/20 px-5 py-8 text-center text-emerald-100/45">
                   No technology signals were detected from the stored static evidence.
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Phase 7 Passive Security Section */}
+        {(isCompleted || isFailed) && (
+          <section className="space-y-4">
+            <div className="flex items-end justify-between">
+              <div>
+                <h2 className="text-xl font-semibold">Security</h2>
+                <p className="mt-1 text-sm text-emerald-100/50">
+                  Passive analysis of stored headers, cookies, redirects, HTML, resources, and browser evidence. No new target requests are issued.
+                </p>
+              </div>
+              <span className="text-xs font-mono bg-white/5 px-2 py-0.5 rounded text-emerald-100/50">
+                {securityFindings.length} FINDINGS
+              </span>
+            </div>
+            <div className="space-y-3">
+              {securityFindings.map((finding) => (
+                <details key={finding.id} className="rounded-xl border border-white/5 bg-black/20 p-5 group">
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-base font-semibold text-emerald-50">{finding.subject}</p>
+                        <p className="mt-1 text-xs uppercase tracking-wider text-emerald-100/45">
+                          {finding.classification} · {finding.rule_id.replaceAll("_", " ")}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2 text-xs font-mono">
+                        <span className={`rounded-full px-2.5 py-1 ${
+                          finding.severity === "high" ? "bg-red-500/15 text-red-300" :
+                          finding.severity === "medium" ? "bg-amber-500/15 text-amber-300" :
+                          finding.severity === "low" ? "bg-sky-500/15 text-sky-300" :
+                          "bg-emerald-500/15 text-emerald-300"
+                        }`}>{finding.severity}</span>
+                        <span className="rounded-full bg-white/5 px-2.5 py-1 text-emerald-100/60">{Math.round(finding.confidence)}%</span>
+                      </div>
+                    </div>
+                  </summary>
+                  <div className="mt-4 space-y-3 border-t border-white/5 pt-4">
+                    <p className="text-sm text-emerald-50/85">{finding.statement}</p>
+                    <p className="text-xs text-emerald-100/45">Ruleset {finding.rule_version} · Confidence band {finding.confidence_band} · Evidence {finding.evidence.length}</p>
+                    {finding.limitations && <p className="text-xs text-amber-200/60">Limitation: {finding.limitations}</p>}
+                    {finding.evidence.map((item) => (
+                      <div key={item.id} className="rounded-lg bg-white/[0.03] p-3 text-sm">
+                        <p className="text-xs uppercase tracking-wider text-emerald-100/45">{item.type}</p>
+                        <p className="mt-1 break-words text-emerald-50/85">{item.observation}</p>
+                        <p className="mt-1 break-all text-xs text-emerald-100/40">Source: {item.source}</p>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ))}
+              {securityFindings.length === 0 && (
+                <div className="rounded-xl border border-white/5 bg-black/20 px-5 py-8 text-center text-emerald-100/45">
+                  No passive security findings were produced from the stored evidence.
                 </div>
               )}
             </div>

@@ -9,7 +9,7 @@ Web Autopsy Network captures observable evidence from target web applications, e
 
 ## 🏛️ Platform Architecture & Implemented Phases
 
-Web Autopsy Network is built as a microservice monorepo across 6 completed phases:
+Web Autopsy Network is built as a microservice monorepo across 7 completed phases:
 
 ```
                                   +-----------------------+
@@ -48,6 +48,10 @@ Web Autopsy Network is built as a microservice monorepo across 6 completed phase
   - **Sub-Resource SSRF Protection**: Intercepts *every single outbound request* (scripts, CSS, fetch/XHR, iframes, redirects) via `page.route("**/*")` and aborts forbidden private IP targets before network execution.
   - Captures post-JS fully rendered DOM HTML (`rendered_body`), dynamic runtime network requests (`capture_source="browser_runtime"`), Navigation & Resource Timing API performance metrics (`timing_data`), and browser console warnings/errors (`BROWSER_CONSOLE`).
   - Interactive frontend DOM Inspector allowing side-by-side comparison of Static Raw HTML vs. Rendered DOM HTML.
+- 🟢 **Phase 7 — Passive Security Analysis**:
+  - Evaluates stored security headers, HTTPS/HSTS observations, cookie attributes, CORS response headers, verbose metadata, source-map references, and sensitive-looking HTML comments without issuing new target requests.
+  - Persists `SecurityFinding` records with `OBSERVED` or `INFERRED` classification, confidence bands, severity, rule version, limitations, and non-empty evidence arrays enforced by an Evidence Agent gate.
+  - Adds `GET /v1/scans/{id}/security` and a Security section with expandable evidence to the scan results page.
 
 ---
 
@@ -91,7 +95,7 @@ docker compose up --build
 Apply schema migrations against the running PostgreSQL container:
 
 ```bash
-# Apply all schema migrations up to latest (0001 through 0006_phase6_browser_analysis)
+# Apply all schema migrations up to latest (0001 through 0007_phase7_security)
 docker compose exec backend alembic upgrade head
 ```
 
@@ -109,7 +113,7 @@ docker compose exec backend alembic revision --autogenerate -m "description of c
 
 ### 3. Backend Testing Suite (Pytest)
 
-Run the full automated Pytest test suite (20 tests covering SSRF, Crawler, Tech DNA, Structure, API Intelligence, Network Intelligence, Playwright Worker, and REST APIs):
+Run the full automated Pytest test suite (25 tests covering SSRF, Crawler, Tech DNA, Structure, API Intelligence, Network Intelligence, Playwright Worker, REST APIs, and passive Security Analysis):
 
 ```bash
 # Change directory into backend
@@ -149,6 +153,9 @@ pytest tests/test_network_intelligence.py -v
 # Test Technology DNA Fingerprinting & Evidence Gating (Phase 4)
 pytest tests/test_technology.py -v
 
+# Test Phase 7 passive Security Analysis and Evidence Agent enforcement
+pytest tests/test_security.py tests/test_phase7_endpoints.py -v
+
 # Test Crawler & Admission SSRF Safeguards (Phase 2 & 3)
 pytest tests/test_crawler.py -v
 ```
@@ -175,6 +182,20 @@ npm run lint
 ```
 
 ---
+
+## 🔐 Phase 7 Security Analysis
+
+Phase 7 is strictly passive. `SecurityAnalysisService` reads only persisted `HTTPResponse`, `Header`, `Resource`, `Page`, `Observation`, and browser-capture fields. It does not call the target, probe suspected paths, fetch source maps, submit forms, test credentials, exploit any condition, or perform active CORS/security testing.
+
+Header presence and literal configuration facts are classified as `OBSERVED`. Combined risk framing, such as missing CSP together with stored inline scripts or wildcard CORS together with credentials allowed, is classified as `INFERRED` and cites every contributing evidence item. A missing header is not itself proof of compromise, and a suspected `.git`, `.env`, or source-map reference is recorded as a passive manual follow-up suggestion rather than fetched.
+
+The API endpoint is:
+
+```text
+GET /v1/scans/{scan_id}/security
+```
+
+Each finding includes its subject, statement, classification, confidence, confidence band, severity, rule ID, ruleset version, limitations, page provenance, and a non-empty evidence array. The existing `/v1/scans/{scan_id}/evidence` feed also includes security findings with category `SECURITY`.
 
 ## 📡 REST API Reference & cURL Usage
 

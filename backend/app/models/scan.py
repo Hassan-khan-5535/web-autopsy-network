@@ -65,6 +65,9 @@ class Scan(Base):
     api_endpoints: Mapped[list["ApiEndpoint"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan"
     )
+    security_findings: Mapped[list["SecurityFinding"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
 
 
 
@@ -159,7 +162,9 @@ class Resource(Base):
     url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     type: Mapped[str] = mapped_column(String(50))
     attributes: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    capture_source: Mapped[str] = mapped_column(String(50), default="static_http", server_default="static_http", index=True)
+    capture_source: Mapped[str] = mapped_column(
+        String(50), default="static_http", server_default="static_http", index=True
+    )
 
 
     page: Mapped["Page"] = relationship(back_populates="resources")
@@ -243,6 +248,33 @@ class Dependency(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     scan: Mapped["Scan"] = relationship(back_populates="dependencies")
+
+
+class SecurityFinding(Base):
+    __tablename__ = "security_findings"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scans.id", ondelete="CASCADE"), index=True
+    )
+    page_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("pages.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    category: Mapped[str] = mapped_column(String(100), default="security", index=True)
+    subject: Mapped[str] = mapped_column(String(2048), index=True)
+    statement: Mapped[str] = mapped_column(Text)
+    classification: Mapped[str] = mapped_column(String(30), index=True)
+    confidence: Mapped[float] = mapped_column(Float)
+    confidence_band: Mapped[str] = mapped_column(String(30))
+    severity: Mapped[str] = mapped_column(String(30), index=True)
+    rule_id: Mapped[str] = mapped_column(String(100), index=True)
+    rule_version: Mapped[str] = mapped_column(String(50))
+    evidence: Mapped[list] = mapped_column(JSON)
+    limitations: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    scan: Mapped["Scan"] = relationship(back_populates="security_findings")
+    page: Mapped[Optional["Page"]] = relationship()
 
 
 class ApiEndpoint(Base):
