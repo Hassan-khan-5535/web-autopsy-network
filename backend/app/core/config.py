@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     crawl_min_delay_ms: int = 100
     crawl_same_domain_mode: str = "hostname"
 
+    llm_api_key: str | None = None
+    llm_api_base: str | None = None
+    llm_model: str = "gpt-4o-mini"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

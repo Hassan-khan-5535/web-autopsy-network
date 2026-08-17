@@ -42,6 +42,7 @@ export type ObservationResponse = {
   classification: string;
   created_at: string;
   page_id: string | null;
+  evidence?: string[];
 };
 
 export type TechnologyEvidence = {
@@ -436,4 +437,33 @@ export async function getScanContent(id: string): Promise<ContentFinding[]> {
   }
 
   return response.json() as Promise<ContentFinding[]>;
+}
+
+export type AIInterpretationResponse = {
+  id: string;
+  category: string;
+  subject: string;
+  statement: string;
+  classification: "ai_interpretation";
+  evidence: string[];
+  created_at: string;
+};
+
+export async function askScanQuestion(
+  scanId: string,
+  question: string
+): Promise<AIInterpretationResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${scanId}/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ question }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Question failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<AIInterpretationResponse>;
 }

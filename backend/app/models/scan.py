@@ -77,6 +77,9 @@ class Scan(Base):
     content_findings: Mapped[list["ContentFinding"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan"
     )
+    ai_interpretations: Mapped[list["AIInterpretation"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
 
 
 
@@ -372,3 +375,20 @@ class ContentFinding(Base):
 
     scan: Mapped["Scan"] = relationship(back_populates="content_findings")
     page: Mapped[Optional["Page"]] = relationship()
+
+
+class AIInterpretation(Base):
+    __tablename__ = "ai_interpretations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scans.id", ondelete="CASCADE"), index=True
+    )
+    category: Mapped[str] = mapped_column(String(100), index=True)
+    subject: Mapped[str] = mapped_column(String(2048), index=True)
+    statement: Mapped[str] = mapped_column(Text)
+    classification: Mapped[str] = mapped_column(String(30), default="ai_interpretation", index=True)
+    evidence: Mapped[list] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    scan: Mapped["Scan"] = relationship(back_populates="ai_interpretations")

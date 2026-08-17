@@ -30,6 +30,7 @@ import {
   type ContentFinding,
 } from "@/lib/api";
 import DependencyGraph from "@/components/DependencyGraph";
+import { AIDoctor } from "@/components/ai-doctor";
 
 export default function ScanResultPage() {
   const params = useParams();
@@ -168,6 +169,13 @@ export default function ScanResultPage() {
           <section className="bg-red-500/5 border border-red-500/10 rounded-2xl p-6">
             <h3 className="text-red-400 font-semibold mb-2">Collection Failed</h3>
             <p className="text-red-200/70 text-sm font-mono whitespace-pre-wrap">{scan.error_reason}</p>
+          </section>
+        )}
+
+        {/* AI Doctor Section */}
+        {isCompleted && (
+          <section className="mb-10">
+            <AIDoctor scanId={scan.id} />
           </section>
         )}
 
@@ -328,7 +336,7 @@ export default function ScanResultPage() {
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               {technologies.map((technology) => (
-                <details key={technology.id} className="rounded-xl border border-white/5 bg-black/20 p-5 group">
+                <details key={technology.id} id={`evidence-${technology.id}`} className="rounded-xl border border-white/5 bg-black/20 p-5 group target:ring-2 target:ring-blue-500 transition-all duration-500">
                   <summary className="cursor-pointer list-none">
                     <div className="flex items-start justify-between gap-4">
                       <div>
@@ -355,7 +363,7 @@ export default function ScanResultPage() {
                       Ruleset {technology.rule_version}. Confidence combines unique matched rule weights plus a small corroboration bonus for independent signals.
                     </p>
                     {technology.evidence.map((item) => (
-                      <div key={item.id} className="rounded-lg bg-white/[0.03] p-3 text-sm">
+                      <div key={item.id} id={`evidence-${item.id}`} className="rounded-lg bg-white/[0.03] p-3 text-sm target:ring-2 target:ring-blue-500 target:bg-blue-900/30 transition-all duration-500">
                         <div className="flex items-center justify-between gap-3 text-xs text-emerald-100/45">
                           <span>
                             {item.type} · {item.match_rule}
@@ -392,7 +400,7 @@ export default function ScanResultPage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {performance.site_metrics.filter((metric) => ["site_total_document_size_bytes", "site_average_document_size_bytes", "site_total_static_resource_reference_count", "site_average_request_count", "site_average_page_load_time_ms"].includes(metric.metric_name)).map((metric) => (
-                <div key={metric.id} className="rounded-xl border border-white/5 bg-black/20 p-4">
+                <div key={metric.id} id={`evidence-${metric.id}`} className="rounded-xl border border-white/5 bg-black/20 p-4 target:ring-2 target:ring-blue-500 transition-all duration-500">
                   <p className="text-xs uppercase tracking-wider text-emerald-100/45">{metric.metric_name.replaceAll("_", " ")}</p>
                   <p className="mt-2 text-lg font-semibold text-emerald-50">
                     {metric.value === null ? "UNKNOWN" : metric.unit === "bytes" ? `${(metric.value / 1024 / 1024).toFixed(2)} MB` : `${metric.value.toFixed(1)} ${metric.unit}`}
@@ -417,7 +425,7 @@ export default function ScanResultPage() {
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               {performance.diagnostics.map((diagnostic) => (
-                <details key={diagnostic.id} className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+                <details key={diagnostic.id} id={`evidence-${diagnostic.id}`} className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 target:ring-2 target:ring-blue-500 transition-all duration-500">
                   <summary className="cursor-pointer list-none">
                     <div className="flex items-start justify-between gap-3">
                       <p className="font-semibold text-amber-200">{diagnostic.metric_name.replace("diagnosis:", "").replaceAll("_", " ")}</p>
@@ -428,7 +436,7 @@ export default function ScanResultPage() {
                   <p className="mt-2 text-xs text-emerald-100/45">Evidence: {diagnostic.evidence.length} item(s)</p>
                   <div className="mt-3 space-y-2">
                     {diagnostic.evidence.map((item) => (
-                      <div key={item.id} className="rounded-lg bg-black/20 p-3 text-xs">
+                      <div key={item.id} id={`evidence-${item.id}`} className="rounded-lg bg-black/20 p-3 text-xs target:ring-2 target:ring-blue-500 target:bg-blue-900/30 transition-all duration-500">
                         <p className="text-emerald-100/45">{item.type}</p>
                         <p className="mt-1 text-emerald-50/80">{item.observation}</p>
                         <p className="mt-1 break-all text-emerald-100/40">{item.source}</p>
@@ -469,7 +477,7 @@ export default function ScanResultPage() {
             </div>
             <div className="space-y-3">
               {securityFindings.map((finding) => (
-                <details key={finding.id} className="rounded-xl border border-white/5 bg-black/20 p-5 group">
+                <details key={finding.id} id={`evidence-${finding.id}`} className="rounded-xl border border-white/5 bg-black/20 p-5 group target:ring-2 target:ring-blue-500 transition-all duration-500">
                   <summary className="cursor-pointer list-none">
                     <div className="flex items-start justify-between gap-4">
                       <div>
@@ -494,7 +502,7 @@ export default function ScanResultPage() {
                     <p className="text-xs text-emerald-100/45">Ruleset {finding.rule_version} · Confidence band {finding.confidence_band} · Evidence {finding.evidence.length}</p>
                     {finding.limitations && <p className="text-xs text-amber-200/60">Limitation: {finding.limitations}</p>}
                     {finding.evidence.map((item) => (
-                      <div key={item.id} className="rounded-lg bg-white/[0.03] p-3 text-sm">
+                      <div key={item.id} id={`evidence-${item.id}`} className="rounded-lg bg-white/[0.03] p-3 text-sm target:ring-2 target:ring-blue-500 target:bg-blue-900/30 transition-all duration-500">
                         <p className="text-xs uppercase tracking-wider text-emerald-100/45">{item.type}</p>
                         <p className="mt-1 break-words text-emerald-50/85">{item.observation}</p>
                         <p className="mt-1 break-all text-xs text-emerald-100/40">Source: {item.source}</p>
@@ -539,7 +547,7 @@ export default function ScanResultPage() {
 
             <div className="space-y-3">
               {accessibilityFindings.map((finding) => (
-                <details key={finding.id} className="rounded-xl border border-white/5 bg-black/20 p-5 group">
+                <details key={finding.id} id={`evidence-${finding.id}`} className="rounded-xl border border-white/5 bg-black/20 p-5 group target:ring-2 target:ring-blue-500 transition-all duration-500">
                   <summary className="cursor-pointer list-none">
                     <div className="flex items-start justify-between gap-4">
                       <div>
@@ -560,7 +568,7 @@ export default function ScanResultPage() {
                   <div className="mt-4 space-y-3 border-t border-white/5 pt-4">
                     <p className="text-sm text-emerald-50/85">{finding.statement}</p>
                     {finding.evidence && finding.evidence.map((item, idx) => (
-                      <div key={idx} className="rounded-lg bg-white/[0.03] p-3 text-sm">
+                      <div key={item.id ?? `acc-ev-${idx}`} id={`evidence-${item.id}`} className="rounded-lg bg-white/[0.03] p-3 text-sm target:ring-2 target:ring-blue-500 target:bg-blue-900/30 transition-all duration-500">
                         <p className="text-xs uppercase tracking-wider text-emerald-100/45">{item.type}</p>
                         <p className="mt-1 break-words text-emerald-50/85">{item.observation}</p>
                         <p className="mt-1 break-all text-xs text-emerald-100/40">Source: {item.source}</p>
@@ -597,7 +605,7 @@ export default function ScanResultPage() {
             
             <div className="space-y-3">
               {contentFindings.map((finding) => (
-                <details key={finding.id} className="rounded-xl border border-white/5 bg-black/20 p-5 group">
+                <details key={finding.id} id={`evidence-${finding.id}`} className="rounded-xl border border-white/5 bg-black/20 p-5 group target:ring-2 target:ring-blue-500 transition-all duration-500">
                   <summary className="cursor-pointer list-none">
                     <div className="flex items-start justify-between gap-4">
                       <div>
@@ -618,7 +626,7 @@ export default function ScanResultPage() {
                   <div className="mt-4 space-y-3 border-t border-white/5 pt-4">
                     <p className="text-sm text-emerald-50/85">{finding.statement}</p>
                     {finding.evidence && finding.evidence.map((item, idx) => (
-                      <div key={idx} className="rounded-lg bg-white/[0.03] p-3 text-sm">
+                      <div key={item.id ?? `cnt-ev-${idx}`} id={`evidence-${item.id}`} className="rounded-lg bg-white/[0.03] p-3 text-sm target:ring-2 target:ring-blue-500 target:bg-blue-900/30 transition-all duration-500">
                         <p className="text-xs uppercase tracking-wider text-emerald-100/45">{item.type}</p>
                         <p className="mt-1 break-words text-emerald-50/85">{item.observation}</p>
                         <p className="mt-1 break-all text-xs text-emerald-100/40">Source: {item.source}</p>
@@ -881,7 +889,7 @@ export default function ScanResultPage() {
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {evidence.map((obs) => (
-                    <tr key={obs.id} className="hover:bg-white/[0.02] transition-colors">
+                    <tr key={obs.id} id={`evidence-${obs.id}`} className="hover:bg-white/[0.02] transition-colors target:ring-2 target:ring-blue-500 target:bg-blue-900/30">
                       <td className="px-4 py-3 whitespace-nowrap text-emerald-200/70">{obs.category}</td>
                       <td className="px-4 py-3 text-emerald-100/50 truncate max-w-[200px]" title={obs.subject}>
                         {obs.subject}

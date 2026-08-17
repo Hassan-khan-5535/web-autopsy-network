@@ -11,6 +11,7 @@ from app.api.deps import get_db
 from app.core.config import get_settings
 from app.models.scan import (
     AccessibilityFinding,
+    AIInterpretation,
     ApiEndpoint,
     ContentFinding,
     Dependency,
@@ -26,6 +27,7 @@ from app.models.scan import (
 )
 from app.services.accessibility import AccessibilityEngine
 from app.services.admission import AdmissionError, AdmissionService
+from app.services.ai_synthesis import AIDoctorEngine, AISynthesisEngine
 from app.services.api_intelligence import ApiIntelligenceAgent
 from app.services.content import ContentEngine
 from app.services.crawler import CrawlerService
@@ -127,6 +129,8 @@ def create_scan(scan_req: ScanCreate, db: Session = Depends(get_db)):
     CrawlerService(db, scan, canonical_url).crawl()
     db.refresh(scan)
     if scan.state == "COMPLETED":
+        scan.state = "ANALYZING"
+        db.commit()
         try:
             TechnologyDetectionService(db, scan.id).detect()
             StructureAgent(db, scan.id).analyze()
@@ -136,6 +140,14 @@ def create_scan(scan_req: ScanCreate, db: Session = Depends(get_db)):
             PerformanceEngine(db, scan.id).analyze()
             AccessibilityEngine(db, scan.id).analyze()
             ContentEngine(db, scan.id).analyze()
+            
+            scan.state = "SYNTHESIZING"
+            db.commit()
+            
+            AISynthesisEngine(db, scan.id).synthesize()
+            
+            scan.state = "COMPLETED"
+            db.commit()
         except Exception as exc:
             scan.state = "FAILED"
             scan.error_reason = f"Analysis pipeline failed: {exc}"
@@ -252,7 +264,63 @@ def get_scan_evidence(scan_id: UUID, db: Session = Depends(get_db)):
         }
         for finding in content_findings
     )
+    ai_interpretations = (
+        db.query(AIInterpretation)
+        .filter(AIInterpretation.scan_id == scan_id)
+        .order_by(AIInterpretation.created_at, AIInterpretation.id)
+        .all()
+    )
+    result.extend(
+        {
+            "id": str(interp.id),
+            "category": interp.category,
+            "subject": interp.subject,
+            "observation": interp.statement,
+            "classification": interp.classification,
+            "created_at": interp.created_at.isoformat(),
+            "page_id": None,
+            "evidence": interp.evidence,
+        }
+        for interp in ai_interpretations
+    )
     return result
+
+class QuestionRequest(BaseModel):
+    question: str
+
+@router.post("/{scan_id}/ask")
+def ask_scan_question(scan_id: UUID, req: QuestionRequest, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+        
+    # Rate limit: Max 5 questions per scan
+    current_questions_count = db.query(AIInterpretation).filter(
+        AIInterpretation.scan_id == scan_id, 
+        AIInterpretation.category != "SUMMARY"
+    ).count()
+    
+    if current_questions_count >= 5:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded: Max 5 questions per scan.")
+        
+    engine = AIDoctorEngine(db, scan_id)
+    answer_data = engine.ask_question(req.question)
+    
+    if answer_data["category"] != "ERROR":
+        interp = AIInterpretation(
+            scan_id=scan_id,
+            category=answer_data["category"],
+            subject=answer_data["subject"],
+            statement=answer_data["statement"],
+            evidence=answer_data.get("evidence", [])
+        )
+        db.add(interp)
+        db.commit()
+        db.refresh(interp)
+        answer_data["id"] = str(interp.id)
+        answer_data["created_at"] = interp.created_at.isoformat()
+    
+    return answer_data
 
 
 @router.get("/{scan_id}/accessibility")

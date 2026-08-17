@@ -2,7 +2,10 @@
 
 from app.models.base import Base
 from app.models.scan import (
+    AccessibilityFinding,
+    AIInterpretation,
     ApiEndpoint,
+    ContentFinding,
     Dependency,
     Header,
     HTTPResponse,
@@ -34,5 +37,8 @@ __all__ = [
     "ApiEndpoint",
     "SecurityFinding",
     "PerformanceMetric",
+    "AccessibilityFinding",
+    "ContentFinding",
+    "AIInterpretation",
 ]
 
