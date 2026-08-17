@@ -46,6 +46,11 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       BROWSER_WORKER_URL: ${BROWSER_WORKER_URL:-http://browser-worker:8001}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      QUEUE_BACKEND_URL: redis://redis:6379/0
+      QUEUE_MODE: ${QUEUE_MODE:-celery}
+      MAX_CONCURRENT_SCANS: ${MAX_CONCURRENT_SCANS:-5}
+      MAX_CONCURRENT_TASKS_PER_POOL: ${MAX_CONCURRENT_TASKS_PER_POOL:-2}
+      SCAN_TIMEOUT_SECONDS: ${SCAN_TIMEOUT_SECONDS:-1800}
       APP_ENV: ${APP_ENV:-development}
       JWT_SECRET: ${JWT_SECRET:-replace-with-a-long-local-only-secret}
 
@@ -59,6 +64,90 @@ services:
       redis:
         condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+
+  worker-crawl:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-web_autopsy}:${POSTGRES_PASSWORD:-change-me-for-local-development}@postgres:5432/${POSTGRES_DB:-web_autopsy}
+      QUEUE_BACKEND_URL: redis://redis:6379/0
+      QUEUE_MODE: celery
+      BROWSER_WORKER_URL: http://browser-worker:8001
+      APP_ENV: ${APP_ENV:-development}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.services.queue:celery_app worker --loglevel=INFO --pool=solo -Q crawl --concurrency=${CRAWL_WORKER_CONCURRENCY:-2}
+    restart: unless-stopped
+
+  worker-browser:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-web_autopsy}:${POSTGRES_PASSWORD:-change-me-for-local-development}@postgres:5432/${POSTGRES_DB:-web_autopsy}
+      QUEUE_BACKEND_URL: redis://redis:6379/0
+      QUEUE_MODE: celery
+      BROWSER_WORKER_URL: http://browser-worker:8001
+      APP_ENV: ${APP_ENV:-development}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      browser-worker:
+        condition: service_started
+    command: celery -A app.services.queue:celery_app worker --loglevel=INFO --pool=solo -Q browser --concurrency=${BROWSER_WORKER_CONCURRENCY:-2}
+    restart: unless-stopped
+
+  worker-analysis:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-web_autopsy}:${POSTGRES_PASSWORD:-change-me-for-local-development}@postgres:5432/${POSTGRES_DB:-web_autopsy}
+      QUEUE_BACKEND_URL: redis://redis:6379/0
+      QUEUE_MODE: celery
+      BROWSER_WORKER_URL: http://browser-worker:8001
+      APP_ENV: ${APP_ENV:-development}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.services.queue:celery_app worker --loglevel=INFO --pool=solo -Q analysis --concurrency=${ANALYSIS_WORKER_CONCURRENCY:-2}
+    restart: unless-stopped
+
+  worker-ai:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-web_autopsy}:${POSTGRES_PASSWORD:-change-me-for-local-development}@postgres:5432/${POSTGRES_DB:-web_autopsy}
+      QUEUE_BACKEND_URL: redis://redis:6379/0
+      QUEUE_MODE: celery
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_API_BASE: ${LLM_API_BASE:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      APP_ENV: ${APP_ENV:-development}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.services.queue:celery_app worker --loglevel=INFO --pool=solo -Q ai --concurrency=${AI_WORKER_CONCURRENCY:-1}
     restart: unless-stopped
 
   frontend:

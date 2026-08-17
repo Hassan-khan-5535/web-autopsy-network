@@ -2,6 +2,8 @@ import uuid
 
 from sqlalchemy.orm import Session
 
+from app.models.scan import ScanDifference
+
 from app.models.scan import Scan
 
 
@@ -24,6 +26,38 @@ class EvidenceAgent:
         """
         if not evidence or len(evidence) == 0:
             raise EvidenceValidationError("A finding cannot be persisted without evidence.")
+
+    def validate_difference_citations(self, difference_id: uuid.UUID, cited_ids: list[str]) -> None:
+        """Validate AI citations against one persisted structured diff only."""
+        if not cited_ids:
+            raise EvidenceValidationError("AI change explanations must cite at least one diff item.")
+        try:
+            difference_uuid = uuid.UUID(str(difference_id))
+        except (TypeError, ValueError) as exc:
+            raise EvidenceValidationError(f"Invalid scan difference ID: {difference_id}") from exc
+        difference = self.db.query(ScanDifference).filter(ScanDifference.id == difference_uuid).first()
+        if not difference:
+            raise EvidenceValidationError(f"Scan difference {difference_id} not found.")
+        valid_ids = {
+            str(item.get("id"))
+            for item in (difference.diff_data or {}).get("items", [])
+            if item.get("id")
+        }
+        invalid = [citation for citation in cited_ids if citation not in valid_ids]
+        if invalid:
+            raise EvidenceValidationError(
+                f"LLM hallucinated citation: diff item IDs {invalid} do not exist in this comparison."
+            )
+
+    def validate_diagnosis_citations(self, cited_ids: list[str], allowed_ids: list[str]) -> None:
+        """Validate AI narrative citations against the deterministic diagnosis evidence set."""
+        if not cited_ids:
+            raise EvidenceValidationError("Diagnosis narrative must cite at least one diagnosis evidence item.")
+        invalid = sorted(set(cited_ids) - set(allowed_ids))
+        if invalid:
+            raise EvidenceValidationError(
+                f"AI narrative cited evidence outside the deterministic diagnosis: {invalid}"
+            )
 
     def validate_ai_citations(self, cited_evidence_ids: list[str]) -> None:
         """

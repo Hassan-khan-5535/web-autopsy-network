@@ -1,21 +1,26 @@
 import uuid
 
 import structlog
+from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.models.scan import AIInterpretation, Scan
 from app.services.evidence import EvidenceAgent, EvidenceValidationError
+from app.services.diagnosis import CauseOfDeathEngine, CauseOfDeathNarrative
 from app.services.llm import LLMClient, LLMError
 
 logger = structlog.get_logger(__name__)
 
 
 class AIDoctorEngine:
-    def __init__(self, db: Session, scan_id: uuid.UUID):
+    def __init__(self, db: Session, scan_id: UUID):
         self.db = db
         self.scan_id = scan_id
         self.evidence_agent = EvidenceAgent(db, scan_id)
-        self.llm = LLMClient()
+        try:
+            self.llm: LLMClient | None = LLMClient()
+        except LLMError:
+            self.llm = None
 
     def _build_context(self) -> str:
         scan = self.db.query(Scan).filter(Scan.id == self.scan_id).first()
@@ -71,6 +76,8 @@ DO NOT hallucinate evidence IDs. ONLY use the IDs enclosed in [ID: ...] from the
         user_prompt = f"Evidence Context:\n{context}\n\nQuestion: {question}"
 
         try:
+            if self.llm is None:
+                raise LLMError("LLM_API_KEY is not configured.")
             response = self.llm.generate_json(system_prompt, user_prompt)
             cited_ids = response.get("evidence", [])
             
@@ -98,11 +105,14 @@ DO NOT hallucinate evidence IDs. ONLY use the IDs enclosed in [ID: ...] from the
 
 
 class AISynthesisEngine:
-    def __init__(self, db: Session, scan_id: uuid.UUID):
+    def __init__(self, db: Session, scan_id: UUID):
         self.db = db
         self.scan_id = scan_id
         self.evidence_agent = EvidenceAgent(db, scan_id)
-        self.llm = LLMClient()
+        try:
+            self.llm: LLMClient | None = LLMClient()
+        except LLMError:
+            self.llm = None
 
     def synthesize(self) -> None:
         """
@@ -111,6 +121,11 @@ class AISynthesisEngine:
         scan = self.db.query(Scan).filter(Scan.id == self.scan_id).first()
         if not scan:
             return
+
+        diagnosis_engine = CauseOfDeathEngine(self.db, self.scan_id)
+        diagnosis = diagnosis_engine.compute(allow_in_progress=True)
+        narrative = CauseOfDeathNarrative(self.db).generate(diagnosis)
+        diagnosis_engine.persist(narrative=narrative, allow_in_progress=True)
 
         engine = AIDoctorEngine(self.db, self.scan_id)
         context = engine._build_context()
@@ -129,6 +144,8 @@ DO NOT hallucinate evidence IDs. ONLY use the IDs enclosed in [ID: ...] from the
         user_prompt = f"Evidence Context:\n{context}\n\nPlease generate the Executive Summary."
         
         try:
+            if self.llm is None:
+                raise LLMError("LLM_API_KEY is not configured.")
             response = self.llm.generate_json(system_prompt, user_prompt)
             cited_ids = response.get("evidence", [])
             

@@ -28,8 +28,8 @@ export function AIDoctor({ scanId }: { scanId: string }) {
         ...prev,
         { role: "doctor", content: response.statement, response },
       ]);
-    } catch (err: any) {
-      setError(err.message || "Failed to get an answer.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to get an answer.");
       setChatHistory((prev) => [
         ...prev,
         { role: "doctor", content: "Sorry, I encountered an error. Please try again." },
@@ -49,7 +49,7 @@ export function AIDoctor({ scanId }: { scanId: string }) {
           <h3 className="font-semibold text-blue-100 flex items-center gap-2">
             AI Doctor <span className="text-xs bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30">Beta</span>
           </h3>
-          <p className="text-xs text-blue-400/80">Ask questions about this scan's evidence</p>
+          <p className="text-xs text-blue-400/80">Ask questions about this scan&apos;s evidence</p>
         </div>
       </div>
 
@@ -58,11 +58,11 @@ export function AIDoctor({ scanId }: { scanId: string }) {
           <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-50">
             <MessageCircle className="w-12 h-12 text-blue-400 mb-2" />
             <p className="text-sm text-blue-200 max-w-xs">
-              I can analyze the deterministic evidence from this scan. Ask me anything about the site's security, performance, or content.
+              I can analyze the deterministic evidence from this scan. Ask me anything about the site&apos;s security, performance, or content.
             </p>
             <div className="flex flex-wrap justify-center gap-2 mt-4 text-xs">
-              <span className="bg-blue-950 border border-blue-800/50 rounded-full px-3 py-1 cursor-pointer hover:bg-blue-900/50 transition-colors" onClick={() => setQuestion("What are the most critical security risks?")}>"What are the most critical security risks?"</span>
-              <span className="bg-blue-950 border border-blue-800/50 rounded-full px-3 py-1 cursor-pointer hover:bg-blue-900/50 transition-colors" onClick={() => setQuestion("Summarize the performance issues.")}>"Summarize performance issues"</span>
+              <span className="bg-blue-950 border border-blue-800/50 rounded-full px-3 py-1 cursor-pointer hover:bg-blue-900/50 transition-colors" onClick={() => setQuestion("What are the most critical security risks?")}>&quot;What are the most critical security risks?&quot;</span>
+              <span className="bg-blue-950 border border-blue-800/50 rounded-full px-3 py-1 cursor-pointer hover:bg-blue-900/50 transition-colors" onClick={() => setQuestion("Summarize the performance issues.")}>&quot;Summarize performance issues&quot;</span>
             </div>
           </div>
         )}

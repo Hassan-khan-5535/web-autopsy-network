@@ -24,6 +24,15 @@ class Settings(BaseSettings):
     crawl_min_delay_ms: int = 100
     crawl_same_domain_mode: str = "hostname"
 
+    queue_backend_url: str = "redis://localhost:6379/0"
+    queue_mode: str = "auto"
+    max_concurrent_scans: int = 5
+    max_concurrent_tasks_per_pool: int = 2
+    scan_timeout_seconds: int = 1800
+    task_heartbeat_seconds: int = 15
+    task_max_retries: int = 2
+    task_retry_backoff_seconds: int = 2
+
     llm_api_key: str | None = None
     llm_api_base: str | None = None
     llm_model: str = "gpt-4o-mini"

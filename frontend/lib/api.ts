@@ -20,13 +20,45 @@ export async function getHealth(): Promise<HealthResponse> {
   return response.json() as Promise<HealthResponse>;
 }
 
+export type DiagnosisIssue = {
+  finding_id: string | null;
+  category: string;
+  subject: string;
+  statement: string;
+  classification: string;
+  score: number;
+  dimensions: Record<string, number>;
+  evidence: Array<{ id: string; type: string; observation: string; source: string }>;
+  evidence_count: number;
+  dependency_context?: string | null;
+};
+
+export type CauseOfDeathDiagnosis = {
+  id: string;
+  scan_id: string;
+  primary_issue: DiagnosisIssue;
+  secondary_issues: DiagnosisIssue[];
+  contributing_factors: DiagnosisIssue[];
+  confidence: number;
+  evidence_count: number;
+  evidence: Array<{ id: string; type: string; observation: string; source: string }>;
+  ai_narrative: string | null;
+  ai_evidence: string[];
+  disclaimer: string;
+  rubric: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
 export type ScanResponse = {
   id: string;
+  website_id: string;
   state: string;
   requested_url: string;
   error_reason: string | null;
   max_depth: number;
   max_pages: number;
+  diagnosis: CauseOfDeathDiagnosis | null;
 };
 
 export type ScanOptions = {
@@ -163,6 +195,15 @@ export async function createScan(
   }
 
   return response.json() as Promise<ScanResponse>;
+}
+
+export async function getScanDiagnosis(id: string): Promise<CauseOfDeathDiagnosis> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/diagnosis`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Failed to fetch diagnosis for scan ${id}`);
+  return response.json() as Promise<CauseOfDeathDiagnosis>;
 }
 
 export async function getScan(id: string): Promise<ScanResponse> {
@@ -398,7 +439,7 @@ export type AccessibilityFinding = {
   classification: "OBSERVED" | "INFERRED" | "UNKNOWN";
   disclaimer: string;
   page_id: string | null;
-  evidence: Array<{ type: string; observation: string; source: string; [key: string]: unknown }>;
+  evidence: Array<{ id?: string; type: string; observation: string; source: string; [key: string]: unknown }>;
   created_at: string;
 };
 
@@ -409,7 +450,7 @@ export type ContentFinding = {
   statement: string;
   classification: "OBSERVED" | "INFERRED" | "UNKNOWN";
   page_id: string | null;
-  evidence: Array<{ type: string; observation: string; source: string; [key: string]: unknown }>;
+  evidence: Array<{ id?: string; type: string; observation: string; source: string; [key: string]: unknown }>;
   created_at: string;
 };
 
@@ -466,4 +507,120 @@ export async function askScanQuestion(
   }
 
   return response.json() as Promise<AIInterpretationResponse>;
+}
+
+
+export type WebsiteScanHistoryItem = {
+  id: string;
+  state: string;
+  requested_url: string;
+  created_at: string;
+  page_count: number;
+};
+
+export type DiffItem = {
+  id: string;
+  category: "structure" | "technology" | "dependencies" | "security" | "performance" | "content";
+  change: string;
+  before: unknown;
+  after: unknown;
+  classification: "OBSERVED" | "INFERRED" | "AI_INTERPRETATION" | "UNKNOWN";
+  evidence: string[];
+  note: string | null;
+};
+
+export type ScanDifferenceResponse = {
+  difference_id: string;
+  scan_a: { id: string; website_id: string; requested_url: string; state: string; created_at: string | null };
+  scan_b: { id: string; website_id: string; requested_url: string; state: string; created_at: string | null };
+  categories: Record<string, { items: DiffItem[]; [key: string]: unknown }>;
+  items: DiffItem[];
+  item_count: number;
+  performance_threshold: number;
+  ai_summary: {
+    summary: string;
+    evidence: string[];
+    classification: string;
+    status: string;
+  };
+};
+
+export type WebsiteScanHistoryResponse = {
+  website_id: string;
+  canonical_origin: string;
+  scans: WebsiteScanHistoryItem[];
+};
+
+export async function getWebsiteScans(websiteId: string): Promise<WebsiteScanHistoryResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/websites/${websiteId}/scans`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Failed to fetch scan history for website ${websiteId}`);
+  return response.json() as Promise<WebsiteScanHistoryResponse>;
+}
+
+export async function compareScans(scanA: string, scanB: string): Promise<ScanDifferenceResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/compare`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ scan_a: scanA, scan_b: scanB }),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Comparison failed with status ${response.status}`);
+  }
+  return response.json() as Promise<ScanDifferenceResponse>;
+}
+
+
+export type ScanTaskProgress = {
+  id: string;
+  task_key: string;
+  task_type: string;
+  queue: string;
+  status: string;
+  attempt: number;
+  max_retries: number;
+  progress: number;
+  dependencies: string[];
+  error_reason: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+};
+
+export type ScanProgressResponse = {
+  scan_id: string;
+  state: string;
+  cancel_requested: boolean;
+  percent: number;
+  completed_tasks: number;
+  total_tasks: number;
+  queue_position: number | null;
+  estimated_wait_seconds: number;
+  tasks: ScanTaskProgress[];
+  events: Array<{ type: string; payload: Record<string, unknown>; created_at: string }>;
+};
+
+export async function getScanProgress(id: string): Promise<ScanProgressResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/progress`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Failed to fetch progress for scan ${id}`);
+  return response.json() as Promise<ScanProgressResponse>;
+}
+
+export async function cancelScan(id: string): Promise<ScanProgressResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/cancel`, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Cancellation failed with status ${response.status}`);
+  }
+  return response.json() as Promise<ScanProgressResponse>;
 }

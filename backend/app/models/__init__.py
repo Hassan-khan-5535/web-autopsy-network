@@ -4,8 +4,11 @@ from app.models.base import Base
 from app.models.scan import (
     AccessibilityFinding,
     AIInterpretation,
+    AgentEvent,
+    AgentTask,
     ApiEndpoint,
     ContentFinding,
+    CauseOfDeathDiagnosis,
     Dependency,
     Header,
     HTTPResponse,
@@ -15,6 +18,7 @@ from app.models.scan import (
     PerformanceMetric,
     Resource,
     Scan,
+    ScanDifference,
     SecurityFinding,
     Technology,
     TechnologyEvidence,
@@ -25,6 +29,7 @@ __all__ = [
     "Base",
     "Website",
     "Scan",
+    "ScanDifference",
     "Page",
     "PageLink",
     "Technology",
@@ -39,6 +44,9 @@ __all__ = [
     "PerformanceMetric",
     "AccessibilityFinding",
     "ContentFinding",
+    "CauseOfDeathDiagnosis",
     "AIInterpretation",
+    "AgentTask",
+    "AgentEvent",
 ]
 

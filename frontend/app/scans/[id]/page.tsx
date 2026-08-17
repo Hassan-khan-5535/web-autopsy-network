@@ -16,6 +16,7 @@ import {
   getScanPageRendered,
   getScanAccessibility,
   getScanContent,
+  getScanDiagnosis,
   type CrawledPage,
   type TechnologyDetection,
   type ObservationResponse,
@@ -28,9 +29,13 @@ import {
   type PerformanceResponse,
   type AccessibilityFinding,
   type ContentFinding,
+  type CauseOfDeathDiagnosis,
 } from "@/lib/api";
 import DependencyGraph from "@/components/DependencyGraph";
 import { AIDoctor } from "@/components/ai-doctor";
+import { HistoryPanel } from "@/components/history-panel";
+import { CauseOfDeath } from "@/components/cause-of-death";
+import { ScanProgress } from "@/components/scan-progress";
 
 export default function ScanResultPage() {
   const params = useParams();
@@ -47,6 +52,7 @@ export default function ScanResultPage() {
   const [performance, setPerformance] = useState<PerformanceResponse | null>(null);
   const [accessibilityFindings, setAccessibilityFindings] = useState<AccessibilityFinding[]>([]);
   const [contentFindings, setContentFindings] = useState<ContentFinding[]>([]);
+  const [diagnosis, setDiagnosis] = useState<CauseOfDeathDiagnosis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +70,11 @@ export default function ScanResultPage() {
         const scanData = await getScan(id);
         if (!mounted) return;
         setScan(scanData);
+
+        if (scanData.state === "COMPLETED") {
+          const diagnosisData = scanData.diagnosis ?? await getScanDiagnosis(id).catch(() => null);
+          if (mounted) setDiagnosis(diagnosisData);
+        }
 
         if (scanData.state === "COMPLETED" || scanData.state === "FAILED") {
           const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, securityData, performanceData, accessData, contentData] = await Promise.all([
@@ -165,6 +176,8 @@ export default function ScanResultPage() {
           </Link>
         </header>
 
+        {!isCompleted && !isFailed && <ScanProgress scanId={scan.id} state={scan.state} />}
+
         {isFailed && (
           <section className="bg-red-500/5 border border-red-500/10 rounded-2xl p-6">
             <h3 className="text-red-400 font-semibold mb-2">Collection Failed</h3>
@@ -172,12 +185,18 @@ export default function ScanResultPage() {
           </section>
         )}
 
+        {/* Phase 12 Cause of Death */}
+        {isCompleted && diagnosis && <CauseOfDeath diagnosis={diagnosis} />}
+
         {/* AI Doctor Section */}
         {isCompleted && (
           <section className="mb-10">
             <AIDoctor scanId={scan.id} />
           </section>
         )}
+
+        {/* Phase 11 History / Time Machine */}
+        {isCompleted && <HistoryPanel websiteId={scan.website_id} currentScanId={scan.id} />}
 
         {/* Phase 5 Interactive Dependency Graph */}
         {(isCompleted || isFailed) && dependencies.length > 0 && (

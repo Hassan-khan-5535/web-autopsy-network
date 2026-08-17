@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
+import time
 from urllib.parse import urlsplit
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -12,8 +15,11 @@ from app.core.config import get_settings
 from app.models.scan import (
     AccessibilityFinding,
     AIInterpretation,
+    AgentEvent,
+    AgentTask,
     ApiEndpoint,
     ContentFinding,
+    CauseOfDeathDiagnosis,
     Dependency,
     HTTPResponse,
     Observation,
@@ -21,6 +27,7 @@ from app.models.scan import (
     PerformanceMetric,
     Resource,
     Scan,
+    ScanDifference,
     SecurityFinding,
     Technology,
     Website,
@@ -30,6 +37,9 @@ from app.services.admission import AdmissionError, AdmissionService
 from app.services.ai_synthesis import AIDoctorEngine, AISynthesisEngine
 from app.services.api_intelligence import ApiIntelligenceAgent
 from app.services.content import ContentEngine
+from app.services.diff import DiffEngine, DiffValidationError
+from app.services.diff_ai import DiffExplanationEngine
+from app.services.diagnosis import CauseOfDeathEngine, CauseOfDeathNarrative
 from app.services.crawler import CrawlerService
 from app.services.network_intelligence import NetworkIntelligenceAgent
 from app.services.performance import PerformanceEngine
@@ -47,13 +57,20 @@ class ScanCreate(BaseModel):
     max_pages: int | None = Field(default=None, ge=1)
 
 
+class ScanCompareRequest(BaseModel):
+    scan_a: UUID
+    scan_b: UUID
+
+
 class ScanResponse(BaseModel):
     id: UUID
+    website_id: UUID
     state: str
     requested_url: str
     error_reason: str | None
     max_depth: int
     max_pages: int
+    diagnosis: dict[str, object] | None = None
 
 
 class ObservationResponse(BaseModel):
@@ -66,15 +83,33 @@ class ObservationResponse(BaseModel):
     page_id: UUID | None = None
 
 
+def _diagnosis_response(scan: Scan) -> dict[str, object] | None:
+    diagnosis = scan.cause_of_death
+    return CauseOfDeathEngine.to_response(diagnosis) if diagnosis else None
+
+
 def _scan_response(scan: Scan) -> dict[str, object]:
     return {
         "id": scan.id,
+        "website_id": scan.website_id,
         "state": scan.state,
         "requested_url": scan.requested_url,
         "error_reason": scan.error_reason,
         "max_depth": scan.max_depth,
         "max_pages": scan.max_pages,
+        "diagnosis": _diagnosis_response(scan),
     }
+
+
+@router.post("/compare")
+def compare_scans(req: ScanCompareRequest, db: Session = Depends(get_db)):
+    try:
+        diff = DiffEngine(db).compare(req.scan_a, req.scan_b, persist=True)
+    except DiffValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    summary = DiffExplanationEngine(db).explain(UUID(diff["difference_id"]))
+    diff["ai_summary"] = summary
+    return diff
 
 
 @router.post("", response_model=ScanResponse, status_code=202)
@@ -83,14 +118,11 @@ def create_scan(scan_req: ScanCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=422, detail="Authorization must be acknowledged.")
 
     settings = get_settings()
-    try:
-        canonical_url, _ = AdmissionService.validate_and_resolve(scan_req.url)
-    except AdmissionError as exc:
-        raise HTTPException(status_code=422, detail=f"URL Admission failed: {exc}") from exc
-
-    hostname = urlsplit(canonical_url).hostname
-    if not hostname:
-        raise HTTPException(status_code=422, detail="URL must contain a hostname.")
+    parsed = urlsplit(scan_req.url)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+        raise HTTPException(status_code=422, detail="URL must use http/https and contain a hostname.")
+    canonical_url = scan_req.url.strip()
+    hostname = parsed.hostname
 
     max_depth = min(
         scan_req.max_depth if scan_req.max_depth is not None else settings.crawl_default_max_depth,
@@ -114,7 +146,7 @@ def create_scan(scan_req: ScanCreate, db: Session = Depends(get_db)):
 
     scan = Scan(
         website_id=website.id,
-        state="CREATED",
+        state="QUEUED",
         requested_url=canonical_url,
         max_depth=max_depth,
         max_pages=max_pages,
@@ -126,35 +158,97 @@ def create_scan(scan_req: ScanCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(scan)
 
-    CrawlerService(db, scan, canonical_url).crawl()
+    from app.services.tasks import TaskGraphCoordinator
+    TaskGraphCoordinator.initialize_scan(db, scan.id)
     db.refresh(scan)
-    if scan.state == "COMPLETED":
-        scan.state = "ANALYZING"
-        db.commit()
-        try:
-            TechnologyDetectionService(db, scan.id).detect()
-            StructureAgent(db, scan.id).analyze()
-            ApiIntelligenceAgent(db, scan.id).analyze()
-            NetworkIntelligenceAgent(db, scan.id).analyze()
-            SecurityAnalysisService(db, scan.id).analyze()
-            PerformanceEngine(db, scan.id).analyze()
-            AccessibilityEngine(db, scan.id).analyze()
-            ContentEngine(db, scan.id).analyze()
-            
-            scan.state = "SYNTHESIZING"
-            db.commit()
-            
-            AISynthesisEngine(db, scan.id).synthesize()
-            
-            scan.state = "COMPLETED"
-            db.commit()
-        except Exception as exc:
-            scan.state = "FAILED"
-            scan.error_reason = f"Analysis pipeline failed: {exc}"
-            db.commit()
-        db.refresh(scan)
-
     return _scan_response(scan)
+
+
+def _progress_payload(scan_id: UUID, db: Session) -> dict[str, object]:
+    from app.services.tasks import TaskGraphCoordinator
+    TaskGraphCoordinator.recover_stale_tasks(db)
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    tasks = db.query(AgentTask).filter(AgentTask.scan_id == scan_id).order_by(AgentTask.created_at, AgentTask.task_key).all()
+    terminal = {"SUCCEEDED", "FAILED", "CANCELLED"}
+    total = len(tasks)
+    completed = sum(task.status in terminal for task in tasks)
+    percent = round(sum(task.progress if task.status not in {"SUCCEEDED", "FAILED", "CANCELLED"} else 100 for task in tasks) / total) if total else 0
+    position = None
+    if scan.state == "QUEUED":
+        position = db.query(Scan).filter(Scan.state == "QUEUED", Scan.cancel_requested.is_(False), Scan.queued_at <= scan.queued_at).count()
+    events = db.query(AgentEvent).filter(AgentEvent.scan_id == scan_id).order_by(AgentEvent.created_at.desc()).limit(50).all()
+    return {
+        "scan_id": str(scan_id),
+        "state": scan.state,
+        "cancel_requested": scan.cancel_requested,
+        "percent": percent,
+        "completed_tasks": completed,
+        "total_tasks": total,
+        "queue_position": position,
+        "estimated_wait_seconds": max(0, (position or 0) - 1) * 30 if position else 0,
+        "tasks": [{
+            "id": str(task.id), "task_key": task.task_key, "task_type": task.task_type,
+            "queue": task.queue_name, "status": task.status, "attempt": task.attempt,
+            "max_retries": task.max_retries, "progress": task.progress,
+            "dependencies": task.dependency_keys or [], "error_reason": task.error_reason,
+            "started_at": task.started_at.isoformat() if task.started_at else None,
+            "finished_at": task.finished_at.isoformat() if task.finished_at else None,
+        } for task in tasks],
+        "events": [{"type": event.event_type, "payload": event.payload or {}, "created_at": event.created_at.isoformat()} for event in reversed(events)],
+    }
+
+
+@router.get("/{scan_id}/progress")
+def get_scan_progress(scan_id: UUID, db: Session = Depends(get_db)):
+    return _progress_payload(scan_id, db)
+
+
+@router.get("/{scan_id}/progress/stream")
+def stream_scan_progress(scan_id: UUID):
+    def event_stream():
+        from app.core.database import SessionLocal
+        for _ in range(60):
+            with SessionLocal() as stream_db:
+                payload = _progress_payload(scan_id, stream_db)
+            yield f"event: progress\\ndata: {json.dumps(payload, default=str)}\\n\\n"
+            if payload["state"] in {"COMPLETED", "FAILED", "PARTIAL_FAILED", "CANCELLED"}:
+                break
+            time.sleep(1)
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@router.post("/{scan_id}/cancel")
+def cancel_scan(scan_id: UUID, db: Session = Depends(get_db)):
+    from app.services.tasks import TaskGraphCoordinator
+    scan = TaskGraphCoordinator.cancel_scan(db, scan_id)
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return _progress_payload(scan_id, db)
+
+
+@router.get("/{scan_id}/risk")
+def get_scan_risk(scan_id: UUID, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    if scan.state != "COMPLETED":
+        raise HTTPException(status_code=409, detail="Risk ranking is available only for completed scans")
+    from app.services.risk import RUBRIC_WEIGHTS, RiskImpactEngine
+    return {"scan_id": str(scan_id), "rubric_weights": RUBRIC_WEIGHTS, "findings": RiskImpactEngine(db, scan_id).rank()}
+
+
+@router.get("/{scan_id}/diagnosis")
+def get_scan_diagnosis(scan_id: UUID, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    if scan.state != "COMPLETED":
+        raise HTTPException(status_code=409, detail="Diagnosis is available only for completed scans")
+    diagnosis = CauseOfDeathEngine(db, scan_id).compute()
+    narrative = CauseOfDeathNarrative(db).generate(diagnosis)
+    return CauseOfDeathEngine(db, scan_id).persist(narrative=narrative)
 
 
 @router.get("/{scan_id}", response_model=ScanResponse)
@@ -303,8 +397,53 @@ def ask_scan_question(scan_id: UUID, req: QuestionRequest, db: Session = Depends
     if current_questions_count >= 5:
         raise HTTPException(status_code=429, detail="Rate limit exceeded: Max 5 questions per scan.")
         
-    engine = AIDoctorEngine(db, scan_id)
-    answer_data = engine.ask_question(req.question)
+    change_question = any(
+        phrase in req.question.lower()
+        for phrase in ("what changed", "previous scan", "last scan", "since the prior", "history")
+    )
+    if change_question:
+        previous = (
+            db.query(Scan)
+            .filter(
+                Scan.website_id == scan.website_id,
+                Scan.id != scan.id,
+                Scan.state == "COMPLETED",
+                Scan.created_at < scan.created_at,
+            )
+            .order_by(Scan.created_at.desc(), Scan.id.desc())
+            .first()
+        )
+        if not previous:
+            answer_data = {
+                "category": "HISTORY",
+                "subject": "History unavailable",
+                "statement": "Insufficient evidence to answer this question because no earlier completed scan exists for this website.",
+                "classification": "ai_interpretation",
+                "evidence": [],
+            }
+        else:
+            try:
+                diff = DiffEngine(db).compare(previous.id, scan.id, persist=True)
+                summary = DiffExplanationEngine(db).explain(UUID(diff["difference_id"]))
+                answer_data = {
+                    "category": "HISTORY",
+                    "subject": "Changes since the previous scan",
+                    "statement": summary["summary"],
+                    "classification": "ai_interpretation",
+                    "evidence": summary["evidence"],
+                    "difference_id": diff["difference_id"],
+                }
+            except DiffValidationError as exc:
+                answer_data = {
+                    "category": "ERROR",
+                    "subject": req.question,
+                    "statement": str(exc),
+                    "classification": "ai_interpretation",
+                    "evidence": [],
+                }
+    else:
+        engine = AIDoctorEngine(db, scan_id)
+        answer_data = engine.ask_question(req.question)
     
     if answer_data["category"] != "ERROR":
         interp = AIInterpretation(

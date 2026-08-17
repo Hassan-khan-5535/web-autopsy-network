@@ -1,8 +1,8 @@
-import uuid
 from datetime import UTC, datetime
+import uuid
 from typing import Optional
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -80,6 +80,18 @@ class Scan(Base):
     ai_interpretations: Mapped[list["AIInterpretation"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan"
     )
+    cause_of_death: Mapped[Optional["CauseOfDeathDiagnosis"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan", uselist=False
+    )
+    agent_tasks: Mapped[list["AgentTask"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
+    agent_events: Mapped[list["AgentEvent"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 
@@ -392,3 +404,91 @@ class AIInterpretation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     scan: Mapped["Scan"] = relationship(back_populates="ai_interpretations")
+
+
+class ScanDifference(Base):
+    __tablename__ = "scan_differences"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    website_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("websites.id", ondelete="CASCADE"), index=True
+    )
+    scan_a_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scans.id", ondelete="CASCADE"), index=True
+    )
+    scan_b_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scans.id", ondelete="CASCADE"), index=True
+    )
+    diff_data: Mapped[dict] = mapped_column(JSON)
+    ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_evidence: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    website: Mapped["Website"] = relationship()
+    scan_a: Mapped["Scan"] = relationship(foreign_keys=[scan_a_id])
+    scan_b: Mapped["Scan"] = relationship(foreign_keys=[scan_b_id])
+
+
+class CauseOfDeathDiagnosis(Base):
+    __tablename__ = "cause_of_death_diagnoses"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scans.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    primary_issue: Mapped[dict] = mapped_column(JSON)
+    secondary_issues: Mapped[list] = mapped_column(JSON)
+    contributing_factors: Mapped[list] = mapped_column(JSON)
+    confidence: Mapped[float] = mapped_column(Float)
+    evidence_count: Mapped[int] = mapped_column(Integer)
+    evidence: Mapped[list] = mapped_column(JSON)
+    ai_narrative: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_evidence: Mapped[list] = mapped_column(JSON, default=list)
+    disclaimer: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    scan: Mapped["Scan"] = relationship(back_populates="cause_of_death")
+
+
+class AgentTask(Base):
+    __tablename__ = "agent_tasks"
+    __table_args__ = (UniqueConstraint("scan_id", "task_key", name="uq_agent_tasks_scan_task_key"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
+    task_key: Mapped[str] = mapped_column(String(120), index=True)
+    task_type: Mapped[str] = mapped_column(String(80), index=True)
+    queue_name: Mapped[str] = mapped_column(String(50), index=True)
+    status: Mapped[str] = mapped_column(String(30), default="QUEUED", index=True)
+    attempt: Mapped[int] = mapped_column(Integer, default=0)
+    max_retries: Mapped[int] = mapped_column(Integer, default=2)
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    dependency_keys: Mapped[list] = mapped_column(JSON, default=list)
+    error_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    available_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    scan: Mapped["Scan"] = relationship(back_populates="agent_tasks")
+    events: Mapped[list["AgentEvent"]] = relationship(back_populates="task", cascade="all, delete-orphan")
+
+
+class AgentEvent(Base):
+    __tablename__ = "agent_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
+    task_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("agent_tasks.id", ondelete="SET NULL"), nullable=True, index=True)
+    event_type: Mapped[str] = mapped_column(String(60), index=True)
+    payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+    scan: Mapped["Scan"] = relationship(back_populates="agent_events")
+    task: Mapped[Optional["AgentTask"]] = relationship(back_populates="events")
