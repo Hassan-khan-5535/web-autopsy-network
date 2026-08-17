@@ -385,6 +385,7 @@ export async function getScanPageRendered(
     throw new Error(`Failed to fetch rendered DOM for page ${pageId}`);
   }
 
+  return response.json() as Promise<PageRenderedResponse>;
 }
 
 
@@ -396,7 +397,7 @@ export type AccessibilityFinding = {
   classification: "OBSERVED" | "INFERRED" | "UNKNOWN";
   disclaimer: string;
   page_id: string | null;
-  evidence: any[];
+  evidence: Array<{ type: string; observation: string; source: string; [key: string]: unknown }>;
   created_at: string;
 };
 
@@ -407,7 +408,7 @@ export type ContentFinding = {
   statement: string;
   classification: "OBSERVED" | "INFERRED" | "UNKNOWN";
   page_id: string | null;
-  evidence: any[];
+  evidence: Array<{ type: string; observation: string; source: string; [key: string]: unknown }>;
   created_at: string;
 };
 

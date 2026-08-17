@@ -3,7 +3,7 @@ import uuid
 from sqlalchemy.orm import Session
 from bs4 import BeautifulSoup
 
-from app.models.scan import Scan, Page, HTTPResponse, AccessibilityFinding
+from app.models.scan import Scan, HTTPResponse, AccessibilityFinding
 
 class AccessibilityEngine:
     def __init__(self, db: Session, scan_id: uuid.UUID):
