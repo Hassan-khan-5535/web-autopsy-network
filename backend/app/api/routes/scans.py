@@ -21,6 +21,8 @@ from app.models.scan import (
     SecurityFinding,
     Technology,
     Website,
+    AccessibilityFinding,
+    ContentFinding,
 )
 from app.services.admission import AdmissionError, AdmissionService
 from app.services.api_intelligence import ApiIntelligenceAgent
@@ -30,6 +32,8 @@ from app.services.performance import PerformanceEngine
 from app.services.security import SecurityAnalysisService
 from app.services.structure import StructureAgent
 from app.services.technology import TechnologyDetectionService
+from app.services.accessibility import AccessibilityEngine
+from app.services.content import ContentEngine
 
 router = APIRouter()
 
@@ -130,6 +134,8 @@ def create_scan(scan_req: ScanCreate, db: Session = Depends(get_db)):
             NetworkIntelligenceAgent(db, scan.id).analyze()
             SecurityAnalysisService(db, scan.id).analyze()
             PerformanceEngine(db, scan.id).analyze()
+            AccessibilityEngine(db, scan.id).analyze()
+            ContentEngine(db, scan.id).analyze()
         except Exception as exc:
             scan.state = "FAILED"
             scan.error_reason = f"Analysis pipeline failed: {exc}"
@@ -210,7 +216,98 @@ def get_scan_evidence(scan_id: UUID, db: Session = Depends(get_db)):
         }
         for metric in performance_metrics
     )
+    accessibility_findings = (
+        db.query(AccessibilityFinding)
+        .filter(AccessibilityFinding.scan_id == scan_id)
+        .order_by(AccessibilityFinding.created_at, AccessibilityFinding.id)
+        .all()
+    )
+    result.extend(
+        {
+            "id": str(finding.id),
+            "category": "ACCESSIBILITY",
+            "subject": finding.subject,
+            "observation": finding.statement,
+            "classification": finding.classification,
+            "created_at": finding.created_at.isoformat(),
+            "page_id": str(finding.page_id) if finding.page_id else None,
+        }
+        for finding in accessibility_findings
+    )
+    content_findings = (
+        db.query(ContentFinding)
+        .filter(ContentFinding.scan_id == scan_id)
+        .order_by(ContentFinding.created_at, ContentFinding.id)
+        .all()
+    )
+    result.extend(
+        {
+            "id": str(finding.id),
+            "category": "CONTENT",
+            "subject": finding.subject,
+            "observation": finding.statement,
+            "classification": finding.classification,
+            "created_at": finding.created_at.isoformat(),
+            "page_id": str(finding.page_id) if finding.page_id else None,
+        }
+        for finding in content_findings
+    )
     return result
+
+
+@router.get("/{scan_id}/accessibility")
+def get_scan_accessibility(scan_id: UUID, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    findings = (
+        db.query(AccessibilityFinding)
+        .filter(AccessibilityFinding.scan_id == scan_id)
+        .order_by(AccessibilityFinding.classification, AccessibilityFinding.subject, AccessibilityFinding.created_at)
+        .all()
+    )
+    return [
+        {
+            "id": str(finding.id),
+            "category": finding.category,
+            "subject": finding.subject,
+            "statement": finding.statement,
+            "classification": finding.classification,
+            "disclaimer": finding.disclaimer,
+            "page_id": str(finding.page_id) if finding.page_id else None,
+            "evidence": finding.evidence,
+            "created_at": finding.created_at.isoformat(),
+        }
+        for finding in findings
+    ]
+
+
+@router.get("/{scan_id}/content")
+def get_scan_content(scan_id: UUID, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    findings = (
+        db.query(ContentFinding)
+        .filter(ContentFinding.scan_id == scan_id)
+        .order_by(ContentFinding.classification, ContentFinding.subject, ContentFinding.created_at)
+        .all()
+    )
+    return [
+        {
+            "id": str(finding.id),
+            "category": finding.category,
+            "subject": finding.subject,
+            "statement": finding.statement,
+            "classification": finding.classification,
+            "page_id": str(finding.page_id) if finding.page_id else None,
+            "evidence": finding.evidence,
+            "created_at": finding.created_at.isoformat(),
+        }
+        for finding in findings
+    ]
 
 
 @router.get("/{scan_id}/technologies")

@@ -385,7 +385,54 @@ export async function getScanPageRendered(
     throw new Error(`Failed to fetch rendered DOM for page ${pageId}`);
   }
 
-  return response.json() as Promise<PageRenderedResponse>;
 }
 
 
+export type AccessibilityFinding = {
+  id: string;
+  category: "ACCESSIBILITY";
+  subject: string;
+  statement: string;
+  classification: "OBSERVED" | "INFERRED" | "UNKNOWN";
+  disclaimer: string;
+  page_id: string | null;
+  evidence: any[];
+  created_at: string;
+};
+
+export type ContentFinding = {
+  id: string;
+  category: "CONTENT";
+  subject: string;
+  statement: string;
+  classification: "OBSERVED" | "INFERRED" | "UNKNOWN";
+  page_id: string | null;
+  evidence: any[];
+  created_at: string;
+};
+
+export async function getScanAccessibility(id: string): Promise<AccessibilityFinding[]> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/accessibility`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch accessibility findings for scan ${id}`);
+  }
+
+  return response.json() as Promise<AccessibilityFinding[]>;
+}
+
+export async function getScanContent(id: string): Promise<ContentFinding[]> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/content`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch content findings for scan ${id}`);
+  }
+
+  return response.json() as Promise<ContentFinding[]>;
+}

@@ -14,6 +14,8 @@ import {
   getScanSecurity,
   getScanPerformance,
   getScanPageRendered,
+  getScanAccessibility,
+  getScanContent,
   type CrawledPage,
   type TechnologyDetection,
   type ObservationResponse,
@@ -24,6 +26,8 @@ import {
   type PageRenderedResponse,
   type SecurityFinding,
   type PerformanceResponse,
+  type AccessibilityFinding,
+  type ContentFinding,
 } from "@/lib/api";
 import DependencyGraph from "@/components/DependencyGraph";
 
@@ -40,6 +44,8 @@ export default function ScanResultPage() {
   const [apiEndpoints, setApiEndpoints] = useState<ApiEndpointItem[]>([]);
   const [securityFindings, setSecurityFindings] = useState<SecurityFinding[]>([]);
   const [performance, setPerformance] = useState<PerformanceResponse | null>(null);
+  const [accessibilityFindings, setAccessibilityFindings] = useState<AccessibilityFinding[]>([]);
+  const [contentFindings, setContentFindings] = useState<ContentFinding[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,7 +65,7 @@ export default function ScanResultPage() {
         setScan(scanData);
 
         if (scanData.state === "COMPLETED" || scanData.state === "FAILED") {
-          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, securityData, performanceData] = await Promise.all([
+          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, securityData, performanceData, accessData, contentData] = await Promise.all([
             getScanPages(id).catch(() => []),
             getScanTechnologies(id).catch(() => []),
             getScanEvidence(id).catch(() => []),
@@ -68,6 +74,8 @@ export default function ScanResultPage() {
             getScanApiEndpoints(id).catch(() => []),
             getScanSecurity(id).catch(() => []),
             getScanPerformance(id).catch(() => null),
+            getScanAccessibility(id).catch(() => []),
+            getScanContent(id).catch(() => []),
           ]);
 
           if (mounted) {
@@ -79,6 +87,8 @@ export default function ScanResultPage() {
             setApiEndpoints(apiData);
             setSecurityFindings(securityData);
             setPerformance(performanceData);
+            setAccessibilityFindings(accessData);
+            setContentFindings(contentData);
           }
         }
       } catch (err: unknown) {
@@ -496,6 +506,130 @@ export default function ScanResultPage() {
               {securityFindings.length === 0 && (
                 <div className="rounded-xl border border-white/5 bg-black/20 px-5 py-8 text-center text-emerald-100/45">
                   No passive security findings were produced from the stored evidence.
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Phase 9 Accessibility Section */}
+        {(isCompleted || isFailed) && (
+          <section className="space-y-4">
+            <div className="flex items-end justify-between">
+              <div>
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <span className="text-emerald-400">Accessibility (Automated)</span>
+                </h2>
+                <p className="mt-1 text-sm text-emerald-100/50">
+                  Deterministic accessibility checks against rendered DOM.
+                </p>
+              </div>
+              <span className="text-xs font-mono bg-white/5 px-2 py-0.5 rounded text-emerald-100/50">
+                {accessibilityFindings.length} FINDINGS
+              </span>
+            </div>
+            
+            {accessibilityFindings.length > 0 && (
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mb-4">
+                <p className="text-amber-200/90 text-sm font-medium">
+                  {accessibilityFindings[0].disclaimer}
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              {accessibilityFindings.map((finding) => (
+                <details key={finding.id} className="rounded-xl border border-white/5 bg-black/20 p-5 group">
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-base font-semibold text-emerald-50">{finding.subject}</p>
+                        <p className="mt-1 text-xs uppercase tracking-wider text-emerald-100/45">
+                          {finding.classification}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2 text-xs font-mono">
+                         <span className={`rounded-full px-2.5 py-1 ${
+                          finding.classification === "OBSERVED" ? "bg-emerald-500/15 text-emerald-300" :
+                          finding.classification === "INFERRED" ? "bg-amber-500/15 text-amber-300" :
+                          "bg-slate-500/15 text-slate-300"
+                        }`}>{finding.classification}</span>
+                      </div>
+                    </div>
+                  </summary>
+                  <div className="mt-4 space-y-3 border-t border-white/5 pt-4">
+                    <p className="text-sm text-emerald-50/85">{finding.statement}</p>
+                    {finding.evidence && finding.evidence.map((item, idx) => (
+                      <div key={idx} className="rounded-lg bg-white/[0.03] p-3 text-sm">
+                        <p className="text-xs uppercase tracking-wider text-emerald-100/45">{item.type}</p>
+                        <p className="mt-1 break-words text-emerald-50/85">{item.observation}</p>
+                        <p className="mt-1 break-all text-xs text-emerald-100/40">Source: {item.source}</p>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ))}
+              {accessibilityFindings.length === 0 && (
+                <div className="rounded-xl border border-white/5 bg-black/20 px-5 py-8 text-center text-emerald-100/45">
+                  No automated accessibility findings were produced from the stored evidence.
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Phase 9 Content Section */}
+        {(isCompleted || isFailed) && (
+          <section className="space-y-4">
+            <div className="flex items-end justify-between">
+              <div>
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <span className="text-emerald-400">Content & SEO</span>
+                </h2>
+                <p className="mt-1 text-sm text-emerald-100/50">
+                  Metadata analysis, duplicate content detection, and structural SEO checks.
+                </p>
+              </div>
+              <span className="text-xs font-mono bg-white/5 px-2 py-0.5 rounded text-emerald-100/50">
+                {contentFindings.length} FINDINGS
+              </span>
+            </div>
+            
+            <div className="space-y-3">
+              {contentFindings.map((finding) => (
+                <details key={finding.id} className="rounded-xl border border-white/5 bg-black/20 p-5 group">
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-base font-semibold text-emerald-50">{finding.subject}</p>
+                        <p className="mt-1 text-xs uppercase tracking-wider text-emerald-100/45">
+                          {finding.classification}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2 text-xs font-mono">
+                         <span className={`rounded-full px-2.5 py-1 ${
+                          finding.classification === "OBSERVED" ? "bg-emerald-500/15 text-emerald-300" :
+                          finding.classification === "INFERRED" ? "bg-amber-500/15 text-amber-300" :
+                          "bg-slate-500/15 text-slate-300"
+                        }`}>{finding.classification}</span>
+                      </div>
+                    </div>
+                  </summary>
+                  <div className="mt-4 space-y-3 border-t border-white/5 pt-4">
+                    <p className="text-sm text-emerald-50/85">{finding.statement}</p>
+                    {finding.evidence && finding.evidence.map((item, idx) => (
+                      <div key={idx} className="rounded-lg bg-white/[0.03] p-3 text-sm">
+                        <p className="text-xs uppercase tracking-wider text-emerald-100/45">{item.type}</p>
+                        <p className="mt-1 break-words text-emerald-50/85">{item.observation}</p>
+                        <p className="mt-1 break-all text-xs text-emerald-100/40">Source: {item.source}</p>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ))}
+              {contentFindings.length === 0 && (
+                <div className="rounded-xl border border-white/5 bg-black/20 px-5 py-8 text-center text-emerald-100/45">
+                  No automated content/SEO findings were produced from the stored evidence.
                 </div>
               )}
             </div>

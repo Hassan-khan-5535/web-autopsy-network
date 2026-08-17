@@ -71,6 +71,12 @@ class Scan(Base):
     performance_metrics: Mapped[list["PerformanceMetric"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan"
     )
+    accessibility_findings: Mapped[list["AccessibilityFinding"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
+    content_findings: Mapped[list["ContentFinding"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
 
 
 
@@ -324,3 +330,45 @@ class ApiEndpoint(Base):
 
     scan: Mapped["Scan"] = relationship(back_populates="api_endpoints")
 
+
+class AccessibilityFinding(Base):
+    __tablename__ = "accessibility_findings"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scans.id", ondelete="CASCADE"), index=True
+    )
+    page_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("pages.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    category: Mapped[str] = mapped_column(String(100), index=True)
+    subject: Mapped[str] = mapped_column(String(2048), index=True)
+    statement: Mapped[str] = mapped_column(Text)
+    classification: Mapped[str] = mapped_column(String(30), index=True)
+    disclaimer: Mapped[str] = mapped_column(Text, default="Automated checks are partial and do not constitute WCAG compliance certification.")
+    evidence: Mapped[list] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    scan: Mapped["Scan"] = relationship(back_populates="accessibility_findings")
+    page: Mapped[Optional["Page"]] = relationship()
+
+
+class ContentFinding(Base):
+    __tablename__ = "content_findings"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scans.id", ondelete="CASCADE"), index=True
+    )
+    page_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("pages.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    category: Mapped[str] = mapped_column(String(100), index=True)
+    subject: Mapped[str] = mapped_column(String(2048), index=True)
+    statement: Mapped[str] = mapped_column(Text)
+    classification: Mapped[str] = mapped_column(String(30), index=True)
+    evidence: Mapped[list] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    scan: Mapped["Scan"] = relationship(back_populates="content_findings")
+    page: Mapped[Optional["Page"]] = relationship()
