@@ -9,7 +9,7 @@ Web Autopsy Network captures observable evidence from target web applications, e
 
 ## 🏛️ Platform Architecture & Implemented Phases
 
-Web Autopsy Network is built as a microservice monorepo across 7 completed phases:
+Web Autopsy Network is built as a microservice monorepo across **13 completed and pushed phases**. The latest implementation is available on the repository `main` branch.
 
 ```
                                   +-----------------------+
@@ -52,6 +52,12 @@ Web Autopsy Network is built as a microservice monorepo across 7 completed phase
   - Evaluates stored security headers, HTTPS/HSTS observations, cookie attributes, CORS response headers, verbose metadata, source-map references, and sensitive-looking HTML comments without issuing new target requests.
   - Persists `SecurityFinding` records with `OBSERVED` or `INFERRED` classification, confidence bands, severity, rule version, limitations, and non-empty evidence arrays enforced by an Evidence Agent gate.
   - Adds `GET /v1/scans/{id}/security` and a Security section with expandable evidence to the scan results page.
+- 🟢 **Phase 8 — Passive Performance Intelligence**: Deterministic performance metrics and diagnoses from persisted HTTP, resource, browser timing, and runtime evidence, including payload composition, render-blocking resources, third-party overhead, and evidence-linked recommendations.
+- 🟢 **Phase 9 — Accessibility and Content/SEO Intelligence**: Automated rendered-DOM accessibility checks, metadata and content analysis, duplicate-content signals, page provenance, confidence classifications, and report sections with evidence links.
+- 🟢 **Phase 10 — AI Doctor and Evidence-Grounded Synthesis**: Provider-abstracted LLM integration, structured AI Doctor answers, executive synthesis, rate limiting, strict citation validation, and graceful degradation when an AI provider is unavailable. AI output remains `🔵 AI INTERPRETATION` and cannot replace deterministic findings.
+- 🟢 **Phase 11 — History / Time Machine**: Persisted scan comparisons with deterministic page, technology, dependency, security, performance, accessibility, and content diffs; stable difference IDs; AI change explanations constrained by the shared evidence gate; comparison APIs; and the interactive History panel.
+- 🟢 **Phase 12 — Cause of Death Diagnosis**: Explicit Risk/Impact Engine ranking across impact, confidence, severity, dependency criticality, frequency, and user-facing effect; persisted primary, secondary, and contributing issues; evidence-count confidence; constrained AI narrative; required diagnostic disclaimer; risk and diagnosis APIs; and the branded Cause of Death report card.
+- 🟢 **Phase 13 — Distributed Scaling**: Redis/Celery task queues, persisted `AgentTask` and `AgentEvent` state, dependency-aware lifecycle graph, independently scalable crawl/browser/analysis/AI worker pools, retries, idempotency keys, concurrency backpressure, stale-worker recovery, scan timeouts, cancellation propagation, worker health, progress APIs, SSE updates, and the live checklist progress view. **Phase 13 is implemented, locally verified, committed, and pushed to `main`.**
 
 ---
 
@@ -63,7 +69,7 @@ Every finding in Web Autopsy Network is strictly classified under a four-level c
 |---|---|---|
 | 🟢 **OBSERVED** | Directly measured facts captured during HTTP collection or browser rendering. | HTTP status 200, response header `server: nginx`, DOM element `<script src="react.js">`, console error. |
 | 🟡 **INFERRED** | Technically supported conclusions derived from one or more observations. | Detected React technology (confidence 0.95), page classified as `contact_or_form`, API route `/v1/scans`. |
-| 🔵 **AI INTERPRETATION** | Higher-level architectural summaries or natural language explanations. | (Deferred to Phase 10 — AI reasons strictly over 🟢 and 🟡 data). |
+| 🔵 **AI INTERPRETATION** | Higher-level architectural summaries or natural language explanations. | AI Doctor answers, change explanations, executive synthesis, and Cause of Death narrative; always grounded in 🟢 and 🟡 evidence. |
 | ⚫ **UNKNOWN** | Properties that cannot be observed or confirmed from public evidence. | Server filesystem path, backend database engine, internal environment variables. |
 
 ---
@@ -113,7 +119,7 @@ docker compose exec backend alembic revision --autogenerate -m "description of c
 
 ### 3. Backend Testing Suite (Pytest)
 
-Run the full automated Pytest test suite (25 tests covering SSRF, Crawler, Tech DNA, Structure, API Intelligence, Network Intelligence, Playwright Worker, REST APIs, and passive Security Analysis):
+Run the full automated Pytest test suite (44 tests covering SSRF, Crawler, Tech DNA, Structure, API Intelligence, Network Intelligence, Playwright Worker, REST APIs, passive Security Analysis, History, Cause of Death, and distributed task execution):
 
 ```bash
 # Change directory into backend
