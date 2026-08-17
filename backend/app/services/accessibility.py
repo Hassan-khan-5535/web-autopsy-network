@@ -1,9 +1,11 @@
-from typing import Any
 import uuid
-from sqlalchemy.orm import Session
-from bs4 import BeautifulSoup
+from typing import Any
 
-from app.models.scan import Scan, HTTPResponse, AccessibilityFinding
+from bs4 import BeautifulSoup
+from sqlalchemy.orm import Session
+
+from app.models.scan import AccessibilityFinding, HTTPResponse, Scan
+
 
 class AccessibilityEngine:
     def __init__(self, db: Session, scan_id: uuid.UUID):

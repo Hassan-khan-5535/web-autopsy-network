@@ -1,11 +1,11 @@
 from collections.abc import Generator
 from dataclasses import dataclass
 
-from collections.abc import Generator
 from fastapi import Header, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
+
 
 @dataclass(frozen=True)
 class AuthIdentity:

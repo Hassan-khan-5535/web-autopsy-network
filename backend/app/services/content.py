@@ -1,11 +1,13 @@
-from typing import Any
-import uuid
 import re
+import uuid
 from collections import defaultdict
-from sqlalchemy.orm import Session
-from bs4 import BeautifulSoup
+from typing import Any
 
-from app.models.scan import Scan, Page, HTTPResponse, PageLink, ContentFinding
+from bs4 import BeautifulSoup
+from sqlalchemy.orm import Session
+
+from app.models.scan import ContentFinding, HTTPResponse, Page, PageLink, Scan
+
 
 class ContentEngine:
     def __init__(self, db: Session, scan_id: uuid.UUID):

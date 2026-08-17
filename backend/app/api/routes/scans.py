@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.core.config import get_settings
 from app.models.scan import (
+    AccessibilityFinding,
     ApiEndpoint,
+    ContentFinding,
     Dependency,
     HTTPResponse,
     Observation,
@@ -21,19 +23,17 @@ from app.models.scan import (
     SecurityFinding,
     Technology,
     Website,
-    AccessibilityFinding,
-    ContentFinding,
 )
+from app.services.accessibility import AccessibilityEngine
 from app.services.admission import AdmissionError, AdmissionService
 from app.services.api_intelligence import ApiIntelligenceAgent
+from app.services.content import ContentEngine
 from app.services.crawler import CrawlerService
 from app.services.network_intelligence import NetworkIntelligenceAgent
 from app.services.performance import PerformanceEngine
 from app.services.security import SecurityAnalysisService
 from app.services.structure import StructureAgent
 from app.services.technology import TechnologyDetectionService
-from app.services.accessibility import AccessibilityEngine
-from app.services.content import ContentEngine
 
 router = APIRouter()
 
