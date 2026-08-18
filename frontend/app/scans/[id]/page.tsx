@@ -399,7 +399,7 @@ export default function ScanResultPage() {
                     <p className="text-xs text-emerald-100/45">
                       Ruleset {technology.rule_version}. Confidence combines unique matched rule weights plus a small corroboration bonus for independent signals.
                     </p>
-                    {technology.evidence.map((item) => (
+                    {technology.evidence?.map((item) => (
                       <div key={item.id} id={`evidence-${item.id}`} className="rounded-lg bg-white/[0.03] p-3 text-sm target:ring-2 target:ring-blue-500 target:bg-blue-900/30 transition-all duration-500">
                         <div className="flex items-center justify-between gap-3 text-xs text-emerald-100/45">
                           <span>
@@ -436,7 +436,7 @@ export default function ScanResultPage() {
               <span className="text-xs font-mono text-emerald-100/50">{performance.metrics.length} METRICS</span>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {performance.site_metrics.filter((metric) => ["site_total_document_size_bytes", "site_average_document_size_bytes", "site_total_static_resource_reference_count", "site_average_request_count", "site_average_page_load_time_ms"].includes(metric.metric_name)).map((metric) => (
+              {(performance.site_metrics ?? []).filter((metric) => ["site_total_document_size_bytes", "site_average_document_size_bytes", "site_total_static_resource_reference_count", "site_average_request_count", "site_average_page_load_time_ms"].includes(metric.metric_name)).map((metric) => (
                 <div key={metric.id} id={`evidence-${metric.id}`} className="rounded-xl border border-white/5 bg-black/20 p-4 target:ring-2 target:ring-blue-500 transition-all duration-500">
                   <p className="text-xs uppercase tracking-wider text-emerald-100/45">{metric.metric_name.replaceAll("_", " ")}</p>
                   <p className="mt-2 text-lg font-semibold text-emerald-50">
@@ -459,20 +459,38 @@ export default function ScanResultPage() {
                   return <div key={kind} title={`${kind}: ${metric?.value ?? "UNKNOWN"}`} className={`${kind === "js" ? "bg-amber-400" : kind === "css" ? "bg-sky-400" : kind === "image" ? "bg-emerald-400" : "bg-purple-400"} h-full`} style={{ width: `${width}%` }} />;
                 })}
               </div>
+              <div className="rounded-xl border border-white/5 bg-black/20 p-4">
+                <p className="text-xs text-emerald-100/45">LCP (Largest Contentful Paint)</p>
+                <p className="mt-1 text-2xl font-semibold text-emerald-200">{performance.lcp_seconds !== undefined && performance.lcp_seconds !== null ? `${performance.lcp_seconds.toFixed(2)}s` : "N/A"}</p>
+              </div>
+              <div className="rounded-xl border border-white/5 bg-black/20 p-4">
+                <p className="text-xs text-emerald-100/45">TTFB (Time to First Byte)</p>
+                <p className="mt-1 text-2xl font-semibold text-emerald-200">{performance.ttfb_ms !== undefined && performance.ttfb_ms !== null ? `${Math.round(performance.ttfb_ms)}ms` : "N/A"}</p>
+              </div>
+              <div className="rounded-xl border border-white/5 bg-black/20 p-4">
+                <p className="text-xs text-emerald-100/45">FID (First Input Delay)</p>
+                <p className="mt-1 text-2xl font-semibold text-emerald-200">{performance.fid_ms !== undefined && performance.fid_ms !== null ? `${Math.round(performance.fid_ms)}ms` : "N/A"}</p>
+              </div>
+              <div className="rounded-xl border border-white/5 bg-black/20 p-4">
+                <p className="text-xs text-emerald-100/45">CLS (Cumulative Layout Shift)</p>
+                <p className="mt-1 text-2xl font-semibold text-emerald-200">{performance.cls !== undefined && performance.cls !== null ? performance.cls.toFixed(3) : "N/A"}</p>
+              </div>
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              {performance.diagnostics.map((diagnostic) => (
-                <details key={diagnostic.id} id={`evidence-${diagnostic.id}`} className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 target:ring-2 target:ring-blue-500 transition-all duration-500">
+
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-emerald-100/60 uppercase tracking-wider">Performance Diagnoses</h3>
+              {performance.diagnostics?.map((diagnostic) => (
+                <details key={diagnostic.id} id={`evidence-${diagnostic.id}`} className="rounded-xl border border-white/5 bg-black/20 p-4 group target:ring-2 target:ring-blue-500 transition-all duration-500">
                   <summary className="cursor-pointer list-none">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="font-semibold text-amber-200">{diagnostic.metric_name.replace("diagnosis:", "").replaceAll("_", " ")}</p>
-                      <span className="text-xs font-mono text-amber-200/70">{diagnostic.confidence}% {diagnostic.classification}</span>
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-emerald-50">{diagnostic.metric_name}</span>
+                      <span className="text-xs font-mono text-emerald-100/50">{diagnostic.classification}</span>
                     </div>
                   </summary>
                   <p className="mt-3 text-sm text-emerald-50/80">{diagnostic.statement}</p>
-                  <p className="mt-2 text-xs text-emerald-100/45">Evidence: {diagnostic.evidence.length} item(s)</p>
+                  <p className="mt-2 text-xs text-emerald-100/45">Evidence: {diagnostic.evidence?.length ?? 0} item(s)</p>
                   <div className="mt-3 space-y-2">
-                    {diagnostic.evidence.map((item) => (
+                    {diagnostic.evidence?.map((item) => (
                       <div key={item.id} id={`evidence-${item.id}`} className="rounded-lg bg-black/20 p-3 text-xs target:ring-2 target:ring-blue-500 target:bg-blue-900/30 transition-all duration-500">
                         <p className="text-emerald-100/45">{item.type}</p>
                         <p className="mt-1 text-emerald-50/80">{item.observation}</p>
@@ -482,19 +500,21 @@ export default function ScanResultPage() {
                   </div>
                 </details>
               ))}
-              {performance.diagnostics.length === 0 && <p className="text-sm text-emerald-100/45">No deterministic performance diagnoses were triggered.</p>}
+              {(!performance.diagnostics || performance.diagnostics.length === 0) && <p className="text-sm text-emerald-100/45">No deterministic performance diagnoses were triggered.</p>}
             </div>
-            <div className="overflow-auto rounded-xl border border-white/5 bg-black/20">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-white/5 text-xs uppercase tracking-wider text-emerald-100/40"><tr><th className="px-4 py-3">Page</th><th className="px-4 py-3">Metrics</th><th className="px-4 py-3">UNKNOWN timing</th></tr></thead>
-                <tbody className="divide-y divide-white/5">
-                  {performance.page_metrics.map((pageMetric) => {
-                    const unknownTiming = pageMetric.metrics.filter((metric) => metric.metric_name.endsWith("_ms") && metric.value === null).length;
-                    return <tr key={pageMetric.page_id}><td className="max-w-[360px] truncate px-4 py-3 text-emerald-50" title={pageMetric.url}>{pageMetric.url}</td><td className="px-4 py-3 text-emerald-100/60">{pageMetric.metrics.length}</td><td className="px-4 py-3 text-emerald-100/60">{unknownTiming}</td></tr>;
-                  })}
-                </tbody>
-              </table>
-            </div>
+            {performance.page_metrics && performance.page_metrics.length > 0 && (
+              <div className="overflow-auto rounded-xl border border-white/5 bg-black/20">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-white/5 text-xs uppercase tracking-wider text-emerald-100/40"><tr><th className="px-4 py-3">Page</th><th className="px-4 py-3">Metrics</th><th className="px-4 py-3">UNKNOWN timing</th></tr></thead>
+                  <tbody className="divide-y divide-white/5">
+                    {performance.page_metrics.map((pageMetric) => {
+                      const unknownTiming = pageMetric.metrics.filter((metric) => metric.metric_name.endsWith("_ms") && metric.value === null).length;
+                      return <tr key={pageMetric.page_id}><td className="max-w-[360px] truncate px-4 py-3 text-emerald-50" title={pageMetric.url}>{pageMetric.url}</td><td className="px-4 py-3 text-emerald-100/60">{pageMetric.metrics.length}</td><td className="px-4 py-3 text-emerald-100/60">{unknownTiming}</td></tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
         )}
 
@@ -520,31 +540,37 @@ export default function ScanResultPage() {
                       <div>
                         <p className="text-base font-semibold text-emerald-50">{finding.subject}</p>
                         <p className="mt-1 text-xs uppercase tracking-wider text-emerald-100/45">
-                          {finding.classification} · {finding.rule_id.replaceAll("_", " ")}
+                          {finding.classification} · {(finding.rule_id ?? "").replaceAll("_", " ")}
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2 text-xs font-mono">
                         <span className={`rounded-full px-2.5 py-1 ${
-                          finding.severity === "high" ? "bg-red-500/15 text-red-300" :
-                          finding.severity === "medium" ? "bg-amber-500/15 text-amber-300" :
-                          finding.severity === "low" ? "bg-sky-500/15 text-sky-300" :
+                          finding.severity === "high" || finding.severity === "HIGH" ? "bg-red-500/15 text-red-300" :
+                          finding.severity === "medium" || finding.severity === "MEDIUM" ? "bg-amber-500/15 text-amber-300" :
+                          finding.severity === "low" || finding.severity === "LOW" ? "bg-sky-500/15 text-sky-300" :
                           "bg-emerald-500/15 text-emerald-300"
                         }`}>{finding.severity}</span>
-                        <span className="rounded-full bg-white/5 px-2.5 py-1 text-emerald-100/60">{Math.round(finding.confidence)}%</span>
+                        <span className="rounded-full bg-white/5 px-2.5 py-1 text-emerald-100/60">{Math.round(finding.confidence ?? 0)}%</span>
                       </div>
                     </div>
                   </summary>
                   <div className="mt-4 space-y-3 border-t border-white/5 pt-4">
                     <p className="text-sm text-emerald-50/85">{finding.statement}</p>
-                    <p className="text-xs text-emerald-100/45">Ruleset {finding.rule_version} · Confidence band {finding.confidence_band} · Evidence {finding.evidence.length}</p>
-                    {finding.limitations && <p className="text-xs text-amber-200/60">Limitation: {finding.limitations}</p>}
-                    {finding.evidence.map((item) => (
-                      <div key={item.id} id={`evidence-${item.id}`} className="rounded-lg bg-white/[0.03] p-3 text-sm target:ring-2 target:ring-blue-500 target:bg-blue-900/30 transition-all duration-500">
-                        <p className="text-xs uppercase tracking-wider text-emerald-100/45">{item.type}</p>
-                        <p className="mt-1 break-words text-emerald-50/85">{item.observation}</p>
-                        <p className="mt-1 break-all text-xs text-emerald-100/40">Source: {item.source}</p>
-                      </div>
-                    ))}
+                    <p className="text-xs text-emerald-100/45">Ruleset {finding.rule_version ?? "1.0"} · Confidence band {finding.confidence_band ?? "unknown"} · Evidence {finding.evidence?.length ?? 0}</p>
+                    {finding.limitations && <p className="text-xs text-[#fca5a5]">Limitation: {finding.limitations}</p>}
+                    {finding.evidence?.map((item) => {
+                      const id = typeof item === "string" ? item : item.id;
+                      const type = typeof item === "string" ? "EVIDENCE" : item.type;
+                      const obs = typeof item === "string" ? item : item.observation;
+                      const src = typeof item === "string" ? "N/A" : item.source;
+                      return (
+                        <div key={id} id={`evidence-${id}`} className="rounded-lg bg-white/[0.03] p-3 text-sm target:ring-2 target:ring-blue-500 target:bg-blue-900/30 transition-all duration-500">
+                          <p className="text-xs uppercase tracking-wider text-emerald-100/45">{type}</p>
+                          <p className="mt-1 break-words text-emerald-50/85">{obs}</p>
+                          <p className="mt-1 break-all text-xs text-emerald-100/40">Source: {src}</p>
+                        </div>
+                      );
+                    })}
                   </div>
                 </details>
               ))}

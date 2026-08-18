@@ -24,11 +24,14 @@ function IssueRow({ issue, tone }: { issue: DiagnosisIssue; tone: "primary" | "s
       <p className="mt-3 text-sm leading-6 text-emerald-50/80">{issue.statement}</p>
       {issue.evidence && issue.evidence.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
-          {issue.evidence.map((item) => (
-            <span key={item.id} className="rounded border border-emerald-500/20 px-2 py-1 text-[10px] font-mono text-emerald-300">
-              evidence {item.id.slice(0, 8)}
-            </span>
-          ))}
+          {issue.evidence.map((item) => {
+            const id = typeof item === "string" ? item : item.id;
+            return (
+              <span key={id} className="rounded border border-emerald-500/20 px-2 py-1 text-[10px] font-mono text-emerald-300">
+                evidence {id.slice(0, 8)}
+              </span>
+            );
+          })}
         </div>
       )}
     </article>

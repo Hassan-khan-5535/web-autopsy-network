@@ -27,27 +27,31 @@ export type DiagnosisIssue = {
   statement: string;
   classification: string;
   score: number;
-  dimensions: Record<string, number>;
-  evidence: Array<{ id: string; type: string; observation: string; source: string }>;
-  evidence_count: number;
+  dimensions?: Record<string, number>;
+  evidence?: Array<{ id: string; type: string; observation: string; source: string }> | string[];
+  evidence_count?: number;
   dependency_context?: string | null;
 };
 
 export type CauseOfDeathDiagnosis = {
   id: string;
   scan_id: string;
-  primary_issue: DiagnosisIssue;
-  secondary_issues: DiagnosisIssue[];
-  contributing_factors: DiagnosisIssue[];
+  primary_issue?: DiagnosisIssue | null;
+  secondary_issues?: DiagnosisIssue[];
+  contributing_factors?: DiagnosisIssue[];
+  primary_issue_id?: string | null;
+  primary_category?: string;
+  statement?: string;
+  impact_score?: number;
   confidence: number;
-  evidence_count: number;
-  evidence: Array<{ id: string; type: string; observation: string; source: string }>;
-  ai_narrative: string | null;
-  ai_evidence: string[];
+  evidence_count?: number;
+  evidence?: Array<{ id: string; type: string; observation: string; source: string }> | string[];
+  ai_narrative?: string | null;
+  ai_evidence?: string[];
   disclaimer: string;
-  rubric: Record<string, unknown>;
-  created_at: string | null;
-  updated_at: string | null;
+  rubric?: Record<string, unknown>;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 export type ScanResponse = {
@@ -58,7 +62,12 @@ export type ScanResponse = {
   error_reason: string | null;
   max_depth: number;
   max_pages: number;
-  diagnosis: CauseOfDeathDiagnosis | null;
+  max_concurrency?: number;
+  request_delay_ms?: number;
+  same_domain_mode?: string;
+  created_at?: string;
+  updated_at?: string;
+  diagnosis?: CauseOfDeathDiagnosis | null;
 };
 
 export type ScanOptions = {
@@ -72,8 +81,8 @@ export type ObservationResponse = {
   subject: string;
   observation: string;
   classification: string;
-  created_at: string;
-  page_id: string | null;
+  created_at?: string;
+  page_id?: string | null;
   evidence?: string[];
 };
 
@@ -92,11 +101,12 @@ export type TechnologyDetection = {
   id: string;
   name: string;
   category: string;
-  classification: "inferred";
+  classification?: "inferred";
   confidence: number;
-  confidence_band: "low" | "medium" | "high";
-  rule_version: string;
-  evidence: TechnologyEvidence[];
+  confidence_band?: "low" | "medium" | "high";
+  rule_version?: string;
+  evidence?: TechnologyEvidence[];
+  evidence_ids?: string[];
 };
 
 export type SecurityEvidence = {
@@ -110,19 +120,19 @@ export type SecurityEvidence = {
 
 export type SecurityFinding = {
   id: string;
-  category: "security";
+  category: "security" | "SECURITY";
   subject: string;
   statement: string;
   classification: "OBSERVED" | "INFERRED";
-  confidence: number;
-  confidence_band: "low" | "medium" | "high";
-  severity: "info" | "low" | "medium" | "high";
-  rule_id: string;
-  rule_version: string;
-  limitations: string | null;
-  page_id: string | null;
-  evidence: SecurityEvidence[];
-  created_at: string;
+  confidence?: number;
+  confidence_band?: "low" | "medium" | "high";
+  severity: "info" | "low" | "medium" | "high" | "HIGH" | "MEDIUM" | "LOW";
+  rule_id?: string;
+  rule_version?: string;
+  limitations?: string | null;
+  page_id?: string | null;
+  evidence?: SecurityEvidence[] | string[];
+  created_at?: string;
 };
 
 export type PerformanceEvidence = {
@@ -136,18 +146,18 @@ export type PerformanceEvidence = {
 
 export type PerformanceMetric = {
   id: string;
-  scope: "page" | "site";
+  scope?: "page" | "site";
   metric_name: string;
   value: number | null;
   unit: string;
   classification: "OBSERVED" | "INFERRED" | "UNKNOWN";
-  confidence: number;
-  confidence_band: "low" | "medium" | "high" | "unknown";
-  capture_mode: string;
+  confidence?: number;
+  confidence_band?: "low" | "medium" | "high" | "unknown";
+  capture_mode?: string;
   statement: string;
-  limitations: string | null;
-  page_id: string | null;
-  evidence: PerformanceEvidence[];
+  limitations?: string | null;
+  page_id?: string | null;
+  evidence?: PerformanceEvidence[];
   created_at?: string;
 };
 
@@ -158,23 +168,28 @@ export type PerformancePageMetrics = {
 };
 
 export type PerformanceResponse = {
-  scan_id: string;
-  rule_version: string;
+  scan_id?: string;
+  rule_version?: string;
+  page_id?: string;
+  lcp_seconds?: number | null;
+  fid_ms?: number | null;
+  cls?: number | null;
+  ttfb_ms?: number | null;
   metrics: PerformanceMetric[];
-  page_metrics: PerformancePageMetrics[];
-  site_metrics: PerformanceMetric[];
-  diagnostics: PerformanceMetric[];
+  page_metrics?: PerformancePageMetrics[];
+  site_metrics?: PerformanceMetric[];
+  diagnostics?: PerformanceMetric[];
 };
 
 export type CrawledPage = {
   id: string;
   url: string;
-  canonical_url: string;
+  canonical_url?: string | null;
   depth: number;
   status_code: number | null;
   title: string | null;
-  discovered_from: string | null;
-  discovered_from_page_id: string | null;
+  discovered_from?: string | null;
+  discovered_from_page_id?: string | null;
 };
 
 export async function createScan(

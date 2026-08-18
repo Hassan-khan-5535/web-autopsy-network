@@ -3,13 +3,8 @@ import {
   CrawledPage,
   TechnologyDetection,
   ObservationResponse,
-  SiteArchitecture,
-  DependencyItem,
-  ApiEndpointItem,
   SecurityFinding,
   PerformanceResponse,
-  AccessibilityFinding,
-  ContentFinding,
   CauseOfDeathDiagnosis,
 } from "./api";
 

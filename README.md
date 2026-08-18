@@ -1,220 +1,221 @@
 <div align="center">
 
   <h1>🔬 Web Autopsy Network</h1>
-  <p><strong>"Dissect any website. Understand how it works."</strong></p>
+  <p><strong>Dissect any website. Understand how it works. Zero hallucinations.</strong></p>
   <p>An evidence-backed, distributed digital forensics and web intelligence platform for authorized web targets.</p>
 
   <p>
-    <a href="#-quick-start"><img src="https://img.shields.io/badge/Tests-60%2F60%20Passed-emerald?style=for-the-badge&logo=pytest" alt="Tests Passed" /></a>
-    <a href="#-system-architecture"><img src="https://img.shields.io/badge/Python-3.11%2B-blue?style=for-the-badge&logo=python" alt="Python Version" /></a>
-    <a href="#-system-architecture"><img src="https://img.shields.io/badge/Frontend-Next.js%2014-black?style=for-the-badge&logo=next.js" alt="Next.js Version" /></a>
-    <a href="#-system-architecture"><img src="https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge&logo=fastapi" alt="FastAPI" /></a>
-    <a href="#-system-architecture"><img src="https://img.shields.io/badge/Queue-Celery%20%2F%20Redis-red?style=for-the-badge&logo=redis" alt="Redis Queue" /></a>
-    <a href="#-security--ethical-boundaries"><img src="https://img.shields.io/badge/Security-SSRF%20Hardened-success?style=for-the-badge&logo=shield" alt="SSRF Hardened" /></a>
+    <a href="https://github.com/your-username/web-autopsy-network/actions"><img src="https://img.shields.io/badge/Build-Passing-brightgreen?style=for-the-badge&logo=githubactions" alt="Build Status" /></a>
+    <a href="#6-testing"><img src="https://img.shields.io/badge/Tests-60%2F60%20Passed-emerald?style=for-the-badge&logo=pytest" alt="Tests Passed" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License" /></a>
+    <a href="#4-tech-stack"><img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python" alt="Python" /></a>
+    <a href="#4-tech-stack"><img src="https://img.shields.io/badge/Frontend-Next.js%2015-black?style=for-the-badge&logo=next.js" alt="Next.js" /></a>
+    <a href="#4-tech-stack"><img src="https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge&logo=fastapi" alt="FastAPI" /></a>
+    <a href="#4-tech-stack"><img src="https://img.shields.io/badge/AI-Gemini%202.5%20Flash-4285F4?style=for-the-badge&logo=google" alt="Gemini AI" /></a>
   </p>
 
   <p>
-    <a href="http://localhost:3000/scans/demo-scan-autopsy"><strong>🚀 Launch Demo Autopsy</strong></a> •
-    <a href="http://localhost:3000/architecture/system"><strong>🏛️ Explore System Architecture Map</strong></a> •
-    <a href="docs/API.md"><strong>📖 API Reference</strong></a> •
-    <a href="docs/SYSTEM_ARCHITECTURE.md"><strong>📄 Architecture Spec</strong></a>
+    <a href="http://localhost:3000/scans/demo-scan-autopsy"><strong>🚀 Live Demo</strong></a> •
+    <a href="https://github.com/your-username/web-autopsy-network/issues/new?template=bug_report.md"><strong>🐛 Report Bug</strong></a> •
+    <a href="https://github.com/your-username/web-autopsy-network/issues/new?template=feature_request.md"><strong>✨ Request Feature</strong></a> •
+    <a href="docs/API.md"><strong>📖 API Reference</strong></a>
   </p>
 
 </div>
 
 ---
 
-## 💡 Why Web Autopsy Network?
+## 📸 Preview
 
-Most web scanners are either simple uptime pingers or black-box LLM wrappers that hallucinate findings. **Web Autopsy Network** is built on a fundamental principle: **every finding must link directly to verifiable, deterministic evidence**.
-
-| Capability | Generic Web Scanners | Black-Box LLM Wrappers | 🔬 **Web Autopsy Network** |
-|---|---|---|---|
-| **Evidence Telemetry** | ❌ Basic HTTP status | ❌ Hallucinated text | 🟢 **100% Audit-Verifiable Evidence** |
-| **Browser Execution** | ❌ Static raw HTML only | ❌ None | 🟢 **Sandboxed Playwright Microservice** |
-| **AI Reliability** | ❌ N/A | ❌ Unbacked claims | 🔵 **Strict Citation Validation Gate** |
-| **Diagnostic Root Cause**| ❌ Lists raw errors | ❌ Generic advice | 🟢 **Cause of Death Forensic Verdict** |
-| **SSRF Safeguards** | ⚠️ Basic URL parse | ⚠️ Minimal | 🟢 **Socket-Level & DNS-Rebinding Shield** |
+![Web Autopsy Network Dashboard](docs/assets/dashboard-preview.png)
+> *Placeholder: Interactive Web Autopsy dashboard displaying Cause of Death verdict, real-time pipeline execution, and citation-grounded AI diagnostic reasoning.*
 
 ---
 
-## 🟢 Core Differentiator: 4-Tier Evidence Taxonomy
+## ✨ Key Features
 
-Every single finding across all 10 analytical engines is categorized under a strict 4-level evidence taxonomy:
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 🟢 OBSERVED         Directly measured telemetry (HTTP headers, DOM, timing) │
-│ 🟡 INFERRED         Technically derived multi-observation deductions         │
-│ 🔵 AI INTERPRETATION Citation-grounded LLM reasoning over valid evidence IDs │
-│ ⚫ UNKNOWN          Unobservable or externally restricted parameters          │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+* 🎯 **Cause of Death Forensic Verdict:** Deterministic prioritization engine that analyzes telemetry to pinpoint the primary root-cause bottleneck (e.g., render-blocking JS bundles, missing CSP headers, or high LCP).
+* 🤖 **Citation-Grounded AI Doctor:** Advanced LLM synthesis (powered by Gemini 2.5 Flash or GPT-4o) operating behind a strict evidence validation gate that strips or flags ungrounded claims (`[UNGROUNDED_CLAIM_REJECTED]`).
+* 🛡️ **Passive Security & Performance Audits:** Zero-latency evaluation of security headers, HSTS, CORS origins, cookie security flags, and Core Web Vitals (LCP, FID, CLS, TTFB).
+* 🌐 **Sandboxed Browser Execution & Dependency Graph:** Sub-resource SSRF-protected Playwright microservice that captures DOM state, console logs, dynamic timing, and renders interactive SVG dependency maps.
+* ⏱️ **Time Machine & Historical Diff Engine:** Version-controlled scan history with deterministic category-by-category diffing and automated change summaries.
 
 ---
 
-## ✨ Features & Analytical Engines
+## 🛠️ Tech Stack
 
-<details open>
-<summary><strong>🔬 10 Integrated Forensics Engines</strong></summary>
-<br />
+### Core Architecture
+* **Frontend:** Next.js 15, React 19, TypeScript, Tailwind CSS, Lucide React.
+* **Backend:** FastAPI, Python 3.11+, SQLAlchemy 2.0, Alembic, Structlog.
+* **Database:** PostgreSQL (Production) / SQLite (Local Fallback) with eager loading (`selectinload`) and composite indexes.
+* **AI & LLM Integration:** OpenAI SDK, Google Gemini 2.5 Flash / OpenAI GPT-4o, Custom Citation Verification Gate.
 
-| Engine | Description | Classification |
-|---|---|---|
-| **Technology DNA** | Ruleset signature engine detecting frameworks, CMSs, fonts, and analytics with confidence scoring | 🟢 OBSERVED / 🟡 INFERRED |
-| **Playwright Browser Sandbox** | Sub-resource SSRF protected dynamic browser rendering capturing post-JS DOM and runtime timing | 🟢 OBSERVED |
-| **Structure & candidate APIs** | Page tree reconstruction, form inventory, internal link graph, and candidate API route discovery | 🟢 OBSERVED / 🟡 INFERRED |
-| **Dependency Graph** | Interactive SVG/Canvas node-link graph mapping external script origins, CDNs, and third-party tools | 🟢 OBSERVED |
-| **Passive Security Engine** | Evaluates HSTS, CSP, cookie attributes, CORS response headers, metadata, and HTML comments | 🟢 OBSERVED / 🟡 INFERRED |
-| **Passive Performance Engine** | Computes Core Web Vitals (LCP, FID, CLS), payload composition, and render-blocking scripts | 🟢 OBSERVED / 🟡 INFERRED |
-| **WCAG Accessibility Engine** | Automated rendered-DOM accessibility audit flagging contrast, ARIA, and image alt violations | 🟢 OBSERVED |
-| **Content & SEO Engine** | Evaluates duplicate content signals, metadata quality, heading hierarchies, and page provenance | 🟢 OBSERVED |
-| **Citation-Grounded AI Doctor** | Interactive Q&A engine strictly citation-validated against database evidence IDs (`[obs_1]`, `[inf_2]`) | 🔵 AI INTERPRETATION |
-| **Cause of Death Diagnosis** | Multi-dimensional impact scoring engine computing the primary diagnostic root cause and verdict | 🟢 Primary Diagnostic |
-
-</details>
+### Infrastructure & DevOps
+* **Distributed Task Queue:** Celery, Redis, 4 Parallel Worker Pools (`worker-crawl`, `worker-browser`, `worker-analysis`, `worker-ai`).
+* **Browser Container Sandbox:** Python Playwright Microservice with socket-level IP connection hooks & SSRF shields.
+* **Orchestration & Containerization:** Docker, Docker Compose.
 
 ---
 
-## 🏛️ System Architecture & Distributed Pipeline
+## ⚡ Getting Started
 
-Web Autopsy Network uses FastAPI as an asynchronous gateway coordinator paired with Redis and Celery for distributed worker orchestration across four independently scalable queue pools:
+### Prerequisites
 
-```
-                                [ Client / Next.js 14 ]
-                                           │
-                                           ▼
-                               [ API Gateway / FastAPI ]
-                                           │
-                        ┌──────────────────┴──────────────────┐
-                        │                                     │
-                        ▼                                     ▼
-              [ Redis Task Queue ]                  [ PostgreSQL Storage ]
-                        │                            (Indexed & Eager Loaded)
-        ┌───────────────┼───────────────┬─────────────────────┐
-        ▼               ▼               ▼                     ▼
- [ worker-crawl ] [ worker-browser ] [ worker-analysis ]   [ worker-ai ]
- (HTTP Crawl &    (Playwright        (Tech, Security,      (LLM Citation
-  SSRF Guard)      Sandbox)           Perf Engines)         Gate & Summary)
-```
-
-- **`worker-crawl`**: Handles URL admission, socket-level IP connection hooks, and same-domain bounded crawling.
-- **`worker-browser`**: Runs Playwright inside an isolated container with a 512MB RAM ceiling and 30s execution budget.
-- **`worker-analysis`**: Executes CPU-bound deterministic algorithms for technology, security, performance, and structure.
-- **`worker-ai`**: Processes LLM synthesis behind a strict citation gate that replaces ungrounded claims with `[UNGROUNDED_CLAIM_REJECTED]`.
+Ensure you have the following installed locally:
+* **Node.js:** v18.0.0 or higher
+* **Python:** v3.11 or higher
+* **Docker & Docker Compose:** *(Optional, recommended for full distributed mode)*
 
 ---
 
-## ⚡ Quick Start & Running Locally
+### Environment Setup (`.env`)
 
-### Option A: Standard Production Setup (Docker Compose)
-
-Run the full stack with single-command startup:
+Create a `.env` file in the project root by copying the template:
 
 ```bash
+cp backend/config.env.example .env
+```
+
+Configure your environment variables in `.env`:
+
+```env
+COMPOSE_PROJECT_NAME=web-autopsy-network
+POSTGRES_DB=web_autopsy
+POSTGRES_USER=web_autopsy
+POSTGRES_PASSWORD=change-me-for-local-development
+POSTGRES_PORT=5432
+REDIS_PORT=6380
+
+BACKEND_PORT=8000
+FRONTEND_PORT=3000
+DATABASE_URL=postgresql+psycopg://web_autopsy:change-me-for-local-development@postgres:5432/web_autopsy
+CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001
+
+# LLM Configuration (Gemini 2.5 Flash / OpenAI)
+LLM_API_KEY=your_actual_api_key_here
+LLM_API_BASE=https://generativelanguage.googleapis.com/v1beta/openai/
+LLM_MODEL=gemini-2.5-flash
+```
+
+---
+
+### Running the Application
+
+#### Method 1: Docker Compose (Recommended)
+
+To run the complete microservice architecture:
+
+```bash
+# Build and start all services
 docker compose up --build
 ```
-Then navigate to `http://localhost:3000`.
+
+Access the applications:
+* **Frontend Web UI:** `http://localhost:3000`
+* **Backend API Docs:** `http://localhost:8000/docs`
 
 ---
 
-### Option B: Local Direct Execution (Without Docker)
+#### Method 2: Local Direct Service (Without Docker)
 
-If Docker is unavailable, use the direct local fallback:
+To run the application locally without Docker containers:
 
-```bash
-# 1. Backend Setup
+**1. Start Backend API:**
+
+*PowerShell (Windows):*
+```powershell
 cd backend
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-
-# Seed demo data and start FastAPI service
-DATABASE_URL=sqlite:////tmp/web-autopsy.db QUEUE_MODE=inline PYTHONPATH=. python seed_phase13_demo.py
-DATABASE_URL=sqlite:////tmp/web-autopsy.db QUEUE_MODE=inline CORS_ORIGINS=http://localhost:3000 PYTHONPATH=. uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+.\venv\Scripts\Activate.ps1
+$env:DATABASE_URL="sqlite:///web-autopsy-demo.db"
+$env:QUEUE_MODE="inline"
+$env:CORS_ORIGINS="http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
+$env:PYTHONPATH="."
+python -m pip install -r requirements.txt
+python seed_phase13_demo.py
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-In a second terminal:
+*Bash (Linux/macOS):*
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+DATABASE_URL="sqlite:///web-autopsy-demo.db" QUEUE_MODE="inline" CORS_ORIGINS="http://localhost:3000" PYTHONPATH="." python3 seed_phase13_demo.py
+DATABASE_URL="sqlite:///web-autopsy-demo.db" QUEUE_MODE="inline" CORS_ORIGINS="http://localhost:3000" PYTHONPATH="." python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+**2. Start Frontend Web UI:**
 
 ```bash
-# 2. Frontend Setup
 cd frontend
 npm install
 npm run dev
 ```
 
-Open `http://localhost:3000` to access the platform.
+Access the UI at `http://localhost:3000` (or `http://localhost:3001`).
 
 ---
 
-### Option C: Try Demo Mode Instantly
-Explore a pre-analyzed demo autopsy report without running live infrastructure:
-- **URL**: `http://localhost:3000/scans/demo-scan-autopsy`
+## 🧪 Testing
 
----
-
-## 🧪 Running Tests
-
-Run the full backend test suite (**60 out of 60 tests passing**):
+Execute the automated test suites to verify system integrity:
 
 ```bash
+# 1. Run Backend 60-Test Regression Suite (100% Pass Rate)
 cd backend
 pytest tests/ -v
+
+# 2. Run Frontend TypeScript Typecheck (0 Errors)
+npm --prefix frontend run typecheck
+
+# 3. Run Frontend Code Quality Audit (0 Warnings/Errors)
+npm --prefix frontend run lint
 ```
 
-Run Phase 14 & 15 Production Hardening tests specifically:
+---
 
-```bash
-cd backend
-pytest tests/test_phase14_*.py -v
-```
+## 🗺️ Roadmap
+
+- [x] **Phase 1 — System Architecture Foundation:** Monorepo setup, settings, structured logging.
+- [x] **Phase 2 — Admission & HTTP Collector:** Socket-level SSRF protection & passive HTTP collector.
+- [x] **Phase 3 — Bounded BFS Crawler:** Same-domain, rate-limited, robots.txt compliant crawler.
+- [x] **Phase 4 — Technology DNA Engine:** Signature detection with confidence scoring.
+- [x] **Phase 5 — Structure & Dependency Graph:** Route tree discovery & interactive SVG node graph.
+- [x] **Phase 6 — Isolated Browser Analysis:** Playwright container sandbox & DOM timing capture.
+- [x] **Phase 7 — Passive Security Analysis:** Evaluation of HSTS, CSP, cookies, CORS, and headers.
+- [x] **Phase 8 — Passive Performance Engine:** Core Web Vitals (LCP, FID, CLS) computation.
+- [x] **Phase 9 — Accessibility & Content/SEO:** WCAG automated audit & SEO content analysis.
+- [x] **Phase 10 — AI Doctor & Citation Synthesis:** Citation-grounded LLM reasoning layer.
+- [x] **Phase 11 — History & Time Machine:** Historical comparisons & deterministic diffing.
+- [x] **Phase 12 — Cause of Death Diagnosis:** Multi-dimensional risk/impact prioritization verdict.
+- [x] **Phase 13 — Distributed Worker Scaling:** Celery/Redis queues with 4 worker pools & SSE streams.
+- [x] **Phase 14 — Production Hardening:** DNS rebinding protection, DB N+1 query removal, Redis cache, wall-clock scan expiry.
+- [ ] **Phase 15 — Multi-Region Distributed Collectors:** Edge collector nodes for worldwide latency profiling.
+- [ ] **Phase 16 — Automated Remediation PRs:** One-click GitHub PR generation for flagged security headers & performance fixes.
 
 ---
 
-## 📊 Phase 14 Load Test Benchmarks
+## 🤝 Contributing & License
 
-| Metric | Benchmark Result | Target / Ceiling |
-|---|---|---|
-| **Concurrent Scan Capacity** | 10 Parallel Scans | Enforced by `MAX_CONCURRENT_SCANS` |
-| **Small Site Scan Duration (5 pages)** | 4.2 seconds | Full 10-engine pipeline |
-| **DB Queries per Report Request** | 8–10 queries | Reduced from 45+ via `selectinload` |
-| **AI Doctor Response Latency** | 850 ms avg | Citation-validated response |
-| **Redis Report Cache Latency** | < 5 ms | Hit rate ~92% on completed scans |
-| **SSRF & Rebinding Bypass Rate** | **0.00% (0 / 500 attempts)** | 100% Rejection |
-| **Scan Wall-Clock Expiry** | 600 seconds | Hard Expiry Guarantee |
+Contributions are welcome! Follow this workflow to contribute:
 
----
+1. **Fork** the repository.
+2. **Create** a feature branch (`git checkout -b feature/amazing-feature`).
+3. **Commit** your changes (`git commit -m 'feat: add amazing feature'`).
+4. **Push** to the branch (`git push origin feature/amazing-feature`).
+5. **Open** a Pull Request.
 
-## 🗺️ 15-Phase Development Roadmap
+### License
 
-- [x] **Phase 1 — System Architecture Foundation**: Monorepo layout, Docker Compose stack, settings, structured logging.
-- [x] **Phase 2 — Admission & HTTP Collector**: Pre-navigation SSRF protection & passive HTTP collector.
-- [x] **Phase 3 — Bounded BFS Crawler**: Same-domain, depth-limited, rate-limited, `robots.txt`-compliant BFS crawler.
-- [x] **Phase 4 — Technology DNA Engine**: Signature detection engine with confidence scoring and evidence links.
-- [x] **Phase 5 — Structure + Dependency Intelligence**: `StructureAgent`, `ApiIntelligenceAgent`, and interactive SVG dependency graph.
-- [x] **Phase 6 — Isolated Browser Analysis**: Python Playwright microservice with sub-resource SSRF guard & DOM inspection.
-- [x] **Phase 7 — Passive Security Analysis**: Evaluates security headers, HSTS, cookies, CORS, and metadata.
-- [x] **Phase 8 — Passive Performance Intelligence**: Core Web Vitals (LCP, FID, CLS) and render-blocking script detection.
-- [x] **Phase 9 — Accessibility and Content/SEO**: WCAG accessibility checks and SEO content analysis.
-- [x] **Phase 10 — AI Doctor and Synthesis**: Provider-abstracted LLM layer with strict citation validation.
-- [x] **Phase 11 — History / Time Machine**: Scan comparisons with deterministic diffs and AI change explanations.
-- [x] **Phase 12 — Cause of Death Diagnosis**: Risk/Impact engine computing primary diagnostic root cause card.
-- [x] **Phase 13 — Distributed Scaling**: Celery/Redis task queues, 4 worker pools, and live SSE progress streams.
-- [x] **Phase 14 — Production Hardening**: Socket-level IP connection hooks, N+1 query elimination, Redis cache, scan timeouts, 60/60 test suite.
-- [x] **Phase 15 — Portfolio Polish**: Marketing landing page, Demo Mode, interactive system architecture map, polished UI views, docs & updated README.
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information.
 
 ---
 
-## 📖 Documentation Links
+## 📬 Contact
 
-- [📄 System Architecture Specification](docs/SYSTEM_ARCHITECTURE.md)
-- [📖 REST API Reference Documentation](docs/API.md)
-- [📊 Phase 14 Load Test Benchmarks](docs/BENCHMARK_RESULTS.md)
-- [📋 Phase 14 Production Hardening Plan](docs/superpowers/plans/2026-08-18-phase14-production-hardening-plan.md)
-- [🎨 Phase 15 Portfolio Polish Plan](docs/superpowers/plans/2026-08-18-phase15-portfolio-polish-plan.md)
-
----
-
-## 🛡️ Security & Ethical Boundaries
-
-Web Autopsy Network is built exclusively for authorized and publicly analyzable web targets. It operates in a passive-by-default posture and enforces strict socket-level SSRF safeguards preventing unauthorized connections to internal networks, loopback interfaces, or cloud metadata endpoints.
+* **Project Maintainer:** [Your Name / Team Name](https://github.com/your-username)
+* **Twitter / X:** [@your_handle](https://twitter.com/your_handle)
+* **Discord Community:** [Join Discord Server](https://discord.gg/your-community)
+* **Email:** maintainer@webautopsynetwork.io

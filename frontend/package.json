@@ -2,7 +2,6 @@
   "name": "web-autopsy-network-frontend",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@10.4.1",
   "scripts": {
     "dev": "next dev -H 0.0.0.0",
     "build": "next build",
@@ -11,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "lucide-react": "^1.31.0",
+    "lucide-react": "^1.32.0",
     "next": "15.3.0",
     "react": "19.1.0",
     "react-dom": "19.1.0"

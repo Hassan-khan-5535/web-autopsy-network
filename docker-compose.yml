@@ -165,7 +165,7 @@ services:
     depends_on:
       backend:
         condition: service_started
-    command: pnpm dev
+    command: npm run dev
     restart: unless-stopped
 
 volumes:
