@@ -93,3 +93,25 @@ class EvidenceAgent:
                 raise EvidenceValidationError(
                     f"LLM hallucinated citation: Evidence ID {cited_id} does not exist in this scan."
                 )
+
+
+def get_scan_full_evidence_optimized(db: Session, scan_id: uuid.UUID) -> Scan | None:
+    """Eager-load all scan relationships to avoid N+1 query overhead during report generation."""
+    from sqlalchemy.orm import selectinload
+    return (
+        db.query(Scan)
+        .options(
+            selectinload(Scan.pages),
+            selectinload(Scan.observations),
+            selectinload(Scan.technologies),
+            selectinload(Scan.security_findings),
+            selectinload(Scan.performance_metrics),
+            selectinload(Scan.accessibility_findings),
+            selectinload(Scan.content_findings),
+            selectinload(Scan.ai_interpretations),
+        )
+        .filter(Scan.id == scan_id)
+        .first()
+    )
+
+
