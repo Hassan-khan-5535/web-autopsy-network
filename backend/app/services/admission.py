@@ -110,3 +110,55 @@ class AdmissionService:
                 left_host
             ) == AdmissionService.registrable_domain(right_host)
         return left_host == right_host
+
+BLOCKED_NETWORKS = [
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.0.0.0/24"),
+    ipaddress.ip_network("192.0.2.0/24"),
+    ipaddress.ip_network("192.88.99.0/24"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("198.18.0.0/15"),
+    ipaddress.ip_network("198.51.100.0/24"),
+    ipaddress.ip_network("203.0.113.0/24"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("240.0.0.0/4"),
+    ipaddress.ip_network("255.255.255.255/32"),
+    # IPv6 equivalents
+    ipaddress.ip_network("::/128"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("::ffff:0:0/96"),
+    ipaddress.ip_network("100::/64"),
+    ipaddress.ip_network("2001:db8::/32"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+def is_private_ip(ip_str: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(ip_str)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
+            return True
+        for net in BLOCKED_NETWORKS:
+            if ip in net:
+                return True
+        return False
+    except ValueError:
+        return True
+
+def validate_socket_ip(ip_str: str) -> bool:
+    return not is_private_ip(ip_str)
+
+def validate_admission_url(url: str) -> tuple[bool, str]:
+    try:
+        canonical_url, resolved_ip = AdmissionService.validate_and_resolve(url)
+        if is_private_ip(resolved_ip):
+            return False, f"Resolved IP {resolved_ip} is in blocked range"
+        return True, "Valid admission target"
+    except Exception as exc:
+        return False, str(exc)
+
