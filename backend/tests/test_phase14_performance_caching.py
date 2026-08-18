@@ -29,3 +29,17 @@ def test_n_plus_one_query_budget(db: Session):
     finally:
         event.remove(db.bind, "before_cursor_execute", count_queries)
 
+
+def test_cache_set_get():
+    from app.services.cache import set_cache, get_cache, delete_cache
+    key = "test_scan_report_123"
+    data = {"status": "COMPLETED", "overview": "Everything clean"}
+
+    set_cache(key, data, ttl_seconds=60)
+    cached = get_cache(key)
+    assert cached == data
+
+    delete_cache(key)
+    assert get_cache(key) is None
+
+

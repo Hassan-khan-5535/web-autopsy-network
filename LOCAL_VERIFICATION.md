@@ -22,7 +22,19 @@ Docker is not installed in the sandbox, so the local check used the documented d
 | Frontend typecheck | Passed |
 | Frontend lint | Passed |
 
+## Phase 14 Checks Completed
+
+| Check | Result |
+|---|---:|
+| `test_phase14_ssrf_security.py` | Passed (Socket-level IP & DNS rebinding checks, IPv6, metadata endpoints, browser client precheck) |
+| `test_phase14_auth_injection.py` | Passed (Prompt injection XML escaping `<untrusted_scanned_content>` and citation gate `[UNGROUNDED_CLAIM_REJECTED]`) |
+| `test_phase14_performance_caching.py` | Passed (N+1 query elimination with `selectinload` eager loading, Redis/in-memory caching `cache.py`) |
+| `test_phase14_chaos_resilience.py` | Passed (Scan wall-clock timeout enforcement transitioning expired scans to `PARTIAL_FAILED`) |
+| `test_phase14_production_hardening.py` | Passed (Consolidated Phase 14 production hardening security & resilience matrix) |
+| Full backend test suite | **60 passed** (100% pass rate across Phase 1 to Phase 14) |
+
 ## Reproduce locally
+
 
 From the repository root, the production path is:
 

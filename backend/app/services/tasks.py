@@ -60,6 +60,24 @@ def task_key(task_type: str, suffix: str | None = None) -> str:
     return f"{task_type}:{suffix}" if suffix else task_type
 
 
+def check_scan_wall_clock_timeout(scan: Scan, timeout_seconds: int = 600) -> bool:
+    """Enforce scan wall-clock expiry. If scan execution time exceeds threshold, mark as PARTIAL_FAILED."""
+    if scan.state in {"COMPLETED", "FAILED", "CANCELLED", "PARTIAL_FAILED"}:
+        return False
+
+    created_at = as_utc(scan.created_at)
+    if created_at is None:
+        return False
+
+    elapsed = (utc_now() - created_at).total_seconds()
+    if elapsed > timeout_seconds:
+        scan.state = "PARTIAL_FAILED"
+        scan.error_reason = f"Scan wall-clock timeout exceeded ({int(elapsed)}s > {timeout_seconds}s)"
+        return True
+    return False
+
+
+
 class TaskGraphCoordinator:
     """Persists task dependencies and schedules only dependency-ready work."""
 
