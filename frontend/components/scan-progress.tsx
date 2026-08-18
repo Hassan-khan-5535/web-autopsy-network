@@ -70,7 +70,8 @@ export function ScanProgress({ scanId, state }: { scanId: string; state: string 
     };
 
     void poll();
-    source = new EventSource(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}/v1/scans/${scanId}/progress/stream`);
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
+    source = new EventSource(`${apiBaseUrl}/v1/scans/${scanId}/progress/stream`);
     source.addEventListener("progress", (event) => {
       if (!active) return;
       try {

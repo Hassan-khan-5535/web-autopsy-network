@@ -173,7 +173,7 @@ The error `Could not find a production build in the '.next' directory` means `np
 
 **Public sandbox/link mode:**
 
-When the frontend is opened through a public proxy URL, the browser cannot reach a backend bound only to `127.0.0.1`, and a frontend built with the default `http://localhost:8000` will call the viewer's own computer. Bind the backend to all interfaces and set the public API URL before building the frontend:
+The frontend now uses a same-origin `/api` proxy by default. This prevents a public browser from accidentally calling its own `localhost:8000`. Run the backend and frontend on the same machine; no `NEXT_PUBLIC_API_BASE_URL` value is required for the public link:
 
 ```bash
 # Backend terminal
@@ -181,17 +181,16 @@ cd backend
 source venv/bin/activate
 DATABASE_URL="sqlite:///web-autopsy-demo.db" \
 QUEUE_MODE="inline" \
-CORS_ORIGINS="https://YOUR-FRONTEND-HOST" \
 PYTHONPATH="." \
 python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 
-# Frontend terminal; replace with the public backend URL
+# Frontend terminal
 cd frontend
-NEXT_PUBLIC_API_BASE_URL="https://YOUR-BACKEND-HOST" npm run build
+npm run build
 npm run start:3001
 ```
 
-For a normal local browser session, keep the backend on `127.0.0.1:8000` and use the default `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000`.
+The Next.js server forwards `/api/*` to `http://127.0.0.1:8000/*`, so browser requests remain same-origin. Set `NEXT_PUBLIC_API_BASE_URL` only when the backend is deployed on a separate host.
 
 ---
 
