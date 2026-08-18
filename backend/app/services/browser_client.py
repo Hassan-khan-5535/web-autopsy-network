@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.models.scan import HTTPResponse, Observation, Resource
 
+from app.services.admission import validate_admission_url
+
 logger = logging.getLogger("web_autopsy.browser_client")
 
 
@@ -16,6 +18,20 @@ class BrowserWorkerClient:
         self.settings = get_settings()
 
     def analyze_page(self, scan_id: UUID, page_id: UUID, url: str) -> bool:
+        valid, reason = validate_admission_url(url)
+        if not valid:
+            logger.warning(f"Browser rendering blocked by SSRF check: {reason}")
+            obs = Observation(
+                scan_id=scan_id,
+                category="BROWSER_ANALYSIS",
+                subject=url,
+                observation=f"Browser analysis blocked by SSRF protection: {reason}",
+                classification="OBSERVED",
+            )
+            self.db.add(obs)
+            self.db.commit()
+            return False
+
         try:
             response = httpx.post(
                 f"{self.settings.browser_worker_url}/render",

@@ -35,3 +35,12 @@ def test_validate_admission_url_cloud_metadata():
 def test_validate_admission_url_valid():
     valid, reason = validate_admission_url("https://example.com")
     assert valid is True
+
+def test_browser_client_ssrf_precheck():
+    from app.services.browser_client import BrowserWorkerClient
+    from unittest.mock import MagicMock
+    db = MagicMock()
+    client = BrowserWorkerClient(db)
+    result = client.analyze_page("00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000000", "http://169.254.169.254/latest/meta-data/")
+    assert result is False
+
