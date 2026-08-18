@@ -142,19 +142,34 @@ cd backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-DATABASE_URL="sqlite:///web-autopsy-demo.db" QUEUE_MODE="inline" CORS_ORIGINS="http://localhost:3000" PYTHONPATH="." python3 seed_phase13_demo.py
-DATABASE_URL="sqlite:///web-autopsy-demo.db" QUEUE_MODE="inline" CORS_ORIGINS="http://localhost:3000" PYTHONPATH="." python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+DATABASE_URL="sqlite:///web-autopsy-demo.db" QUEUE_MODE="inline" CORS_ORIGINS="http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001" PYTHONPATH="." python3 seed_phase13_demo.py
+DATABASE_URL="sqlite:///web-autopsy-demo.db" QUEUE_MODE="inline" CORS_ORIGINS="http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001" PYTHONPATH="." python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-**2. Start Frontend Web UI:**
+**2. Start Frontend Web UI in development mode:**
+
+Open a second terminal and run:
 
 ```bash
 cd frontend
-npm install
-npm run dev
+npm ci
+npm run dev:3001
 ```
 
-Access the UI at `http://localhost:3000` (or `http://localhost:3001`).
+Access the UI at `http://localhost:3001`. The `dev:3001` command compiles the app on demand; do not use `npm start` for development.
+
+**Production-mode alternative:**
+
+If you specifically want `next start`, a production build must exist first. Run these commands in the `frontend` directory:
+
+```bash
+npm ci
+rm -rf .next
+npm run build
+npm run start:3001
+```
+
+The error `Could not find a production build in the '.next' directory` means `npm start` was run before `npm run build`, or the `.next` directory was deleted. It is not fixed by changing the browser URL; build first, then start.
 
 ---
 
