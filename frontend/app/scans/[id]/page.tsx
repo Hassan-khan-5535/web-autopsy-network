@@ -71,12 +71,12 @@ export default function ScanResultPage() {
         if (!mounted) return;
         setScan(scanData);
 
-        if (scanData.state === "COMPLETED") {
+        if (scanData.state === "COMPLETED" || scanData.state === "PARTIAL_FAILED") {
           const diagnosisData = scanData.diagnosis ?? await getScanDiagnosis(id).catch(() => null);
           if (mounted) setDiagnosis(diagnosisData);
         }
 
-        if (scanData.state === "COMPLETED" || scanData.state === "FAILED") {
+        if (["COMPLETED", "FAILED", "PARTIAL_FAILED", "CANCELLED"].includes(scanData.state)) {
           const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, securityData, performanceData, accessData, contentData] = await Promise.all([
             getScanPages(id).catch(() => []),
             getScanTechnologies(id).catch(() => []),
@@ -141,7 +141,7 @@ export default function ScanResultPage() {
     );
   }
 
-  const isFailed = scan.state === "FAILED";
+  const isFailed = scan.state === "FAILED" || scan.state === "PARTIAL_FAILED";
   const isCompleted = scan.state === "COMPLETED";
 
   const isDemo = id === "demo-scan-autopsy" || id.startsWith("demo");
@@ -194,7 +194,7 @@ export default function ScanResultPage() {
           </Link>
         </header>
 
-        {!isCompleted && !isFailed && <ScanProgress scanId={scan.id} state={scan.state} />}
+        {!isDemo && <ScanProgress scanId={scan.id} state={scan.state} />}
 
         {isFailed && (
           <section className="bg-red-500/5 border border-red-500/10 rounded-2xl p-6">
