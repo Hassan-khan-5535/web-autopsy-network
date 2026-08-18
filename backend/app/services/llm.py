@@ -51,3 +51,20 @@ class LLMClient:
             raise LLMError(f"LLM returned invalid JSON: {e}")
         except Exception as e:
             raise LLMError(f"Unexpected LLM Error: {e}")
+
+
+def validate_evidence_citations(text: str, valid_citation_ids: set[str]) -> tuple[str, bool]:
+    import re
+    citation_regex = re.compile(r"\[(obs_\w+|inf_\w+|ev_\w+|\w+)\]")
+    found_citations = citation_regex.findall(text)
+    if not found_citations:
+        return text, True
+
+    all_valid = True
+    for citation_id in found_citations:
+        if citation_id not in valid_citation_ids:
+            all_valid = False
+            text = text.replace(f"[{citation_id}]", "[UNGROUNDED_CLAIM_REJECTED]")
+
+    return text, all_valid
+

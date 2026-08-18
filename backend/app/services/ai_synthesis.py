@@ -12,6 +12,12 @@ from app.services.llm import LLMClient, LLMError
 logger = structlog.get_logger(__name__)
 
 
+def wrap_untrusted_content(content: str) -> str:
+    """Wrap untrusted HTML/text scraped from target pages in XML delimiters for prompt injection isolation."""
+    escaped = content.replace("</untrusted_scanned_content>", "[ESCAPED_TAG]")
+    return f"<untrusted_scanned_content>\n{escaped}\n</untrusted_scanned_content>"
+
+
 class AIDoctorEngine:
     def __init__(self, db: Session, scan_id: UUID):
         self.db = db
