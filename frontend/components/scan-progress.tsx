@@ -34,22 +34,53 @@ export function ScanProgress({ scanId, state }: { scanId: string; state: string 
 
   useEffect(() => {
     let active = true;
-    getScanProgress(scanId).then((data) => active && setProgress(data)).catch((err: unknown) => active && setError(err instanceof Error ? err.message : "Progress unavailable"));
-    const source = new EventSource(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}/v1/scans/${scanId}/progress/stream`);
+    let polling = false;
+    let source: EventSource | null = null;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    const terminalStates = ["COMPLETED", "FAILED", "PARTIAL_FAILED", "CANCELLED"];
+
+    const stop = () => {
+      source?.close();
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = null;
+    };
+
+    const applyProgress = (next: ScanProgressResponse) => {
+      if (!active) return;
+      setProgress(next);
+      setError(null);
+      if (terminalStates.includes(next.state)) stop();
+    };
+
+    const poll = async () => {
+      try {
+        applyProgress(await getScanProgress(scanId));
+      } catch (err: unknown) {
+        if (active) setError(err instanceof Error ? err.message : "Progress unavailable");
+      }
+    };
+
+    const startPolling = () => {
+      if (!active || polling) return;
+      polling = true;
+      source?.close();
+      setError("Live progress stream unavailable; checking progress automatically.");
+      void poll();
+      pollTimer = setInterval(() => { void poll(); }, 3000);
+    };
+
+    void poll();
+    source = new EventSource(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}/v1/scans/${scanId}/progress/stream`);
     source.addEventListener("progress", (event) => {
       if (!active) return;
       try {
-        const next = JSON.parse((event as MessageEvent).data) as ScanProgressResponse;
-        setProgress(next);
-        if (["COMPLETED", "FAILED", "PARTIAL_FAILED", "CANCELLED"].includes(next.state)) source.close();
+        applyProgress(JSON.parse((event as MessageEvent).data) as ScanProgressResponse);
       } catch {
-        setError("Progress stream returned invalid data");
+        startPolling();
       }
     });
-    source.onerror = () => {
-      if (active) setError("Progress stream unavailable; the scan can still be checked with refresh.");
-    };
-    return () => { active = false; source.close(); };
+    source.onerror = startPolling;
+    return () => { active = false; stop(); };
   }, [scanId]);
 
   const taskCounts = useMemo(() => {

@@ -384,9 +384,11 @@ class TaskRunner:
         if task.task_type == "performance":
             return {"findings": len(PerformanceEngine(db, scan.id).analyze())}
         if task.task_type == "accessibility":
-            return {"findings": len(AccessibilityEngine(db, scan.id).analyze())}
+            AccessibilityEngine(db, scan.id).analyze()
+            return {"status": "completed"}
         if task.task_type == "content":
-            return {"findings": len(ContentEngine(db, scan.id).analyze())}
+            ContentEngine(db, scan.id).analyze()
+            return {"status": "completed"}
         if task.task_type == "diagnosis":
             diagnosis = CauseOfDeathEngine(db, scan.id).compute(allow_in_progress=True)
             narrative = CauseOfDeathNarrative(db).generate(diagnosis)
