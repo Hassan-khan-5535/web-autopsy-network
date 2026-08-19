@@ -364,6 +364,71 @@ export type EvidenceResponse = {
   };
 };
 
+export type AttackSurfaceGraphNode = {
+  id: string;
+  entity_type: string;
+  label: string;
+  classification: string;
+  confidence: number;
+  attributes: Record<string, unknown>;
+  provenance: Array<Record<string, unknown>>;
+  first_seen_at: string;
+  last_seen_at: string;
+};
+
+export type AttackSurfaceGraphEdge = {
+  id: string;
+  source_node_id: string;
+  target_node_id: string;
+  relationship_type: string;
+  classification: string;
+  confidence: number;
+  attributes: Record<string, unknown>;
+  provenance: Array<Record<string, unknown>>;
+  first_seen_at: string;
+  last_seen_at: string;
+};
+
+export type AttackSurfaceGraphUpdate = {
+  id: string;
+  source_event: string;
+  correlation_version: string;
+  inserted_node_count: number;
+  refreshed_node_count: number;
+  inserted_edge_count: number;
+  refreshed_edge_count: number;
+  summary: Record<string, unknown>;
+  created_at: string;
+};
+
+export type AttackSurfaceGraphResponse = {
+  scan_id: string;
+  correlation_version: string;
+  nodes: AttackSurfaceGraphNode[];
+  edges: AttackSurfaceGraphEdge[];
+  updates: AttackSurfaceGraphUpdate[];
+  summary: {
+    node_count: number;
+    edge_count: number;
+    entity_counts: Record<string, number>;
+    relationship_counts: Record<string, number>;
+    priority_path_count: number;
+  };
+  priority_paths: Array<{
+    finding: AttackSurfaceGraphNode;
+    affected_asset: AttackSurfaceGraphNode;
+    relationship: AttackSurfaceGraphEdge;
+    disclaimer: string;
+  }>;
+  safety_contract: {
+    prioritization_only: boolean;
+    autonomous_exploitation_supported: boolean;
+    network_requests_performed: boolean;
+    secret_values_excluded: boolean;
+    inferred_relationships_are_not_proof: boolean;
+  };
+};
+
 export type CVEIntelligenceResponse = {
   scan_id: string;
   rule_version: string;
@@ -518,6 +583,7 @@ import {
   DEMO_SECURITY,
   DEMO_PERFORMANCE,
   DEMO_PAGES,
+  DEMO_ATTACK_SURFACE_GRAPH,
 } from "./demo-data";
 
 export async function getAssessmentAuthorization(id: string): Promise<AssessmentAuthorization> {
@@ -661,6 +727,20 @@ export async function getScanEvidenceReviews(id: string): Promise<EvidenceRespon
     throw new Error(`Failed to fetch evidence reviews for scan ${id}`);
   }
   return response.json() as Promise<EvidenceResponse>;
+}
+
+export async function getScanAttackSurfaceGraph(id: string): Promise<AttackSurfaceGraphResponse> {
+  if (id === DEMO_SCAN_ID || id.startsWith("demo")) {
+    return DEMO_ATTACK_SURFACE_GRAPH;
+  }
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/attack-surface-graph`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Attack Surface Graph for scan ${id}`);
+  }
+  return response.json() as Promise<AttackSurfaceGraphResponse>;
 }
 
 export async function getScanCVEIntelligence(id: string): Promise<CVEIntelligenceResponse> {

@@ -111,6 +111,15 @@ class Scan(Base):
     recon_parameters: Mapped[list["ReconParameter"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan"
     )
+    attack_surface_graph_nodes: Mapped[list["AttackSurfaceGraphNode"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
+    attack_surface_graph_edges: Mapped[list["AttackSurfaceGraphEdge"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
+    attack_surface_graph_updates: Mapped[list["AttackSurfaceGraphUpdate"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     pause_requested: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -593,6 +602,67 @@ class EvidenceReview(Base):
     provenance: Mapped[list] = mapped_column(JSON)
     redacted: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class AttackSurfaceGraphNode(Base):
+    __tablename__ = "attack_surface_graph_nodes"
+    __table_args__ = (UniqueConstraint("scan_id", "entity_type", "natural_key", name="uq_attack_surface_graph_nodes_scan_entity_key"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
+    entity_type: Mapped[str] = mapped_column(String(64), index=True)
+    natural_key: Mapped[str] = mapped_column(String(255), index=True)
+    label: Mapped[str] = mapped_column(String(2048))
+    classification: Mapped[str] = mapped_column(String(30), default="OBSERVED", index=True)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    attributes: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
+    provenance: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    scan: Mapped["Scan"] = relationship(back_populates="attack_surface_graph_nodes")
+
+
+class AttackSurfaceGraphEdge(Base):
+    __tablename__ = "attack_surface_graph_edges"
+    __table_args__ = (UniqueConstraint("scan_id", "relationship_type", "source_node_id", "target_node_id", name="uq_attack_surface_graph_edges_scan_relationship"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
+    source_node_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("attack_surface_graph_nodes.id", ondelete="CASCADE"), index=True)
+    target_node_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("attack_surface_graph_nodes.id", ondelete="CASCADE"), index=True)
+    relationship_type: Mapped[str] = mapped_column(String(80), index=True)
+    classification: Mapped[str] = mapped_column(String(30), default="OBSERVED", index=True)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    attributes: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
+    provenance: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    scan: Mapped["Scan"] = relationship(back_populates="attack_surface_graph_edges")
+    source_node: Mapped["AttackSurfaceGraphNode"] = relationship(foreign_keys=[source_node_id])
+    target_node: Mapped["AttackSurfaceGraphNode"] = relationship(foreign_keys=[target_node_id])
+
+
+class AttackSurfaceGraphUpdate(Base):
+    __tablename__ = "attack_surface_graph_updates"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
+    source_event: Mapped[str] = mapped_column(String(120), index=True)
+    correlation_version: Mapped[str] = mapped_column(String(50), index=True)
+    inserted_node_count: Mapped[int] = mapped_column(Integer, default=0)
+    refreshed_node_count: Mapped[int] = mapped_column(Integer, default=0)
+    inserted_edge_count: Mapped[int] = mapped_column(Integer, default=0)
+    refreshed_edge_count: Mapped[int] = mapped_column(Integer, default=0)
+    summary: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+    scan: Mapped["Scan"] = relationship(back_populates="attack_surface_graph_updates")
 
 
 class ApiEndpoint(Base):

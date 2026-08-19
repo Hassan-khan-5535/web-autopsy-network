@@ -8,6 +8,9 @@ from app.models.scan import (
     AIInterpretation,
     AgentEvent,
     AgentTask,
+    AttackSurfaceGraphEdge,
+    AttackSurfaceGraphNode,
+    AttackSurfaceGraphUpdate,
     ApiEndpoint,
     ContentFinding,
     CVEFeedRun,
@@ -68,5 +71,7 @@ __all__ = [
     "AIInterpretation",
     "AgentTask",
     "AgentEvent",
+    "AttackSurfaceGraphNode",
+    "AttackSurfaceGraphEdge",
+    "AttackSurfaceGraphUpdate",
 ]
-
