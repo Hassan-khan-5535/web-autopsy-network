@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from collections import Counter
 from datetime import UTC, datetime
 from typing import Literal
 from urllib.parse import urlsplit
@@ -26,6 +27,7 @@ from app.models.scan import (
     ContentFinding,
     CauseOfDeathDiagnosis,
     Dependency,
+    HTTPObservation,
     HTTPResponse,
     Observation,
     Page,
@@ -458,6 +460,25 @@ def get_scan_evidence(scan_id: UUID, db: Session = Depends(get_db)):
         }
         for observation in observations
     ]
+    http_observations = (
+        db.query(HTTPObservation)
+        .filter(HTTPObservation.scan_id == scan_id)
+        .order_by(HTTPObservation.created_at, HTTPObservation.id)
+        .all()
+    )
+    result.extend(
+        {
+            "id": str(item.id),
+            "category": "HTTP_AGENT",
+            "subject": item.subject,
+            "observation": f"{item.observation_type}: {json.dumps(item.value or {}, sort_keys=True)}",
+            "classification": item.classification,
+            "created_at": item.created_at.isoformat(),
+            "page_id": str(item.page_id) if item.page_id else None,
+            "evidence": [item.source],
+        }
+        for item in http_observations
+    )
     findings = (
         db.query(SecurityFinding)
         .filter(SecurityFinding.scan_id == scan_id)
@@ -1172,5 +1193,45 @@ def get_scan_recon(scan_id: UUID, db: Session = Depends(get_db)):
                 item.classification in {"LOGIN_PATH", "ADMIN_PATH", "SENSITIVE_PATH"}
                 for item in assets + endpoints
             ),
+        },
+    }
+
+
+@router.get("/{scan_id}/http-observations")
+def get_scan_http_observations(scan_id: UUID, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    observations = (
+        db.query(HTTPObservation)
+        .filter(HTTPObservation.scan_id == scan_id)
+        .order_by(HTTPObservation.created_at, HTTPObservation.observation_type, HTTPObservation.subject)
+        .all()
+    )
+    return {
+        "scan_id": str(scan_id),
+        "rule_version": "phase3-http-v1",
+        "observations": [
+            {
+                "id": str(item.id),
+                "page_id": str(item.page_id) if item.page_id else None,
+                "http_response_id": str(item.http_response_id) if item.http_response_id else None,
+                "observation_type": item.observation_type,
+                "subject": item.subject,
+                "source": item.source,
+                "classification": item.classification,
+                "confidence": item.confidence,
+                "value": item.value or {},
+                "redacted": item.redacted,
+                "truncated": item.truncated,
+                "created_at": item.created_at.isoformat(),
+            }
+            for item in observations
+        ],
+        "summary": {
+            "observation_count": len(observations),
+            "types": dict(sorted(Counter(item.observation_type for item in observations).items())),
+            "redacted_count": sum(bool(item.redacted) for item in observations),
+            "truncated_count": sum(bool(item.truncated) for item in observations),
         },
     }

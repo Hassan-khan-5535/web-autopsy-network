@@ -561,6 +561,33 @@ export type ReconResponse = {
   };
 };
 
+export type HTTPObservation = {
+  id: string;
+  page_id: string | null;
+  http_response_id: string | null;
+  observation_type: string;
+  subject: string;
+  source: string;
+  classification: string;
+  confidence: number;
+  value: Record<string, unknown>;
+  redacted: boolean;
+  truncated: boolean;
+  created_at: string;
+};
+
+export type HTTPObservationResponse = {
+  scan_id: string;
+  rule_version: string;
+  observations: HTTPObservation[];
+  summary: {
+    observation_count: number;
+    types: Record<string, number>;
+    redacted_count: number;
+    truncated_count: number;
+  };
+};
+
 export async function getScanArchitecture(id: string): Promise<SiteArchitecture> {
   const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/architecture`, {
     headers: { Accept: "application/json" },
@@ -611,6 +638,19 @@ export async function getScanRecon(id: string): Promise<ReconResponse> {
   }
 
   return response.json() as Promise<ReconResponse>;
+}
+
+export async function getScanHTTPObservations(id: string): Promise<HTTPObservationResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/http-observations`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch HTTP observations for scan ${id}`);
+  }
+
+  return response.json() as Promise<HTTPObservationResponse>;
 }
 
 export type PageRenderedResponse = {

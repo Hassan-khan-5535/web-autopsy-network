@@ -81,6 +81,9 @@ class Scan(Base):
     content_findings: Mapped[list["ContentFinding"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan"
     )
+    http_observations: Mapped[list["HTTPObservation"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
     ai_interpretations: Mapped[list["AIInterpretation"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan"
     )
@@ -304,14 +307,40 @@ class HTTPResponse(Base):
     content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     timings_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     raw_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    body_truncated: Mapped[bool] = mapped_column(Boolean, default=False)
     rendered_body: Mapped[str | None] = mapped_column(Text, nullable=True)
     timing_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    redirect_chain: Mapped[list | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     page: Mapped["Page"] = relationship(back_populates="http_responses")
     headers: Mapped[list["Header"]] = relationship(
         back_populates="http_response", cascade="all, delete-orphan"
     )
+
+
+class HTTPObservation(Base):
+    __tablename__ = "http_observations"
+    __table_args__ = (UniqueConstraint("scan_id", "dedupe_key", name="uq_http_observations_scan_dedupe"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
+    page_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pages.id", ondelete="SET NULL"), nullable=True, index=True)
+    http_response_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("http_responses.id", ondelete="SET NULL"), nullable=True, index=True)
+    observation_type: Mapped[str] = mapped_column(String(50), index=True)
+    subject: Mapped[str] = mapped_column(String(2048), index=True)
+    source: Mapped[str] = mapped_column(String(2048))
+    classification: Mapped[str] = mapped_column(String(30), default="OBSERVED", index=True)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    value: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
+    redacted: Mapped[bool] = mapped_column(Boolean, default=False)
+    truncated: Mapped[bool] = mapped_column(Boolean, default=False)
+    dedupe_key: Mapped[str] = mapped_column(String(64), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+    scan: Mapped["Scan"] = relationship(back_populates="http_observations")
+    page: Mapped[Optional["Page"]] = relationship()
+    http_response: Mapped[Optional["HTTPResponse"]] = relationship()
 
 
 class Header(Base):

@@ -31,6 +31,7 @@ class FetchResult:
     headers: list[tuple[str, str]]
     body: str
     redirects: list[tuple[str, str]]
+    body_truncated: bool = False
     error: str | None = None
 
 
@@ -344,10 +345,12 @@ class CrawlerService:
                     continue
                 content_type = response.headers.get("content-type")
                 body = response.text if content_type and "html" in content_type.lower() else ""
+                body_truncated = False
                 if len(body.encode("utf-8", errors="ignore")) > self.MAX_BODY_BYTES:
                     body = body.encode("utf-8", errors="ignore")[: self.MAX_BODY_BYTES].decode(
                         "utf-8", errors="ignore"
                     )
+                    body_truncated = True
                 final_url = AdmissionService.normalize_url(str(response.url))
                 if not self._in_scope(final_url):
                     raise AdmissionError("Response final URL is outside the allowed crawl scope.")
@@ -360,6 +363,7 @@ class CrawlerService:
                     headers=list(response.headers.multi_items()),
                     body=body,
                     redirects=redirects,
+                    body_truncated=body_truncated,
                 )
             raise AdmissionError(f"Exceeded maximum redirects ({self.MAX_REDIRECTS})")
         except (AdmissionError, httpx.RequestError, UnicodeError) as exc:
@@ -392,6 +396,8 @@ class CrawlerService:
             content_type=result.content_type,
             timings_ms=result.elapsed_ms,
             raw_body=result.body or None,
+            body_truncated=result.body_truncated,
+            redirect_chain=[[source_url, target_url] for source_url, target_url in result.redirects],
         )
         self.db.add(response)
         self.db.flush()

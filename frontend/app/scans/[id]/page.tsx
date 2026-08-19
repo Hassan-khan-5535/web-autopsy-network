@@ -12,6 +12,7 @@ import {
   getScanDependencies,
   getScanApiEndpoints,
   getScanRecon,
+  getScanHTTPObservations,
   getScanSecurity,
   getScanPerformance,
   getScanPageRendered,
@@ -28,6 +29,7 @@ import {
   type DependencyItem,
   type ApiEndpointItem,
   type ReconResponse,
+  type HTTPObservationResponse,
   type PageRenderedResponse,
   type SecurityFinding,
   type PerformanceResponse,
@@ -53,6 +55,7 @@ export default function ScanResultPage() {
   const [dependencies, setDependencies] = useState<DependencyItem[]>([]);
   const [apiEndpoints, setApiEndpoints] = useState<ApiEndpointItem[]>([]);
   const [recon, setRecon] = useState<ReconResponse | null>(null);
+  const [httpObservations, setHttpObservations] = useState<HTTPObservationResponse | null>(null);
   const [securityFindings, setSecurityFindings] = useState<SecurityFinding[]>([]);
   const [performance, setPerformance] = useState<PerformanceResponse | null>(null);
   const [accessibilityFindings, setAccessibilityFindings] = useState<AccessibilityFinding[]>([]);
@@ -87,7 +90,7 @@ export default function ScanResultPage() {
         }
 
         if (["COMPLETED", "FAILED", "PARTIAL_FAILED", "CANCELLED"].includes(scanData.state)) {
-          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, reconData, securityData, performanceData, accessData, contentData] = await Promise.all([
+          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, reconData, httpData, securityData, performanceData, accessData, contentData] = await Promise.all([
             getScanPages(id).catch(() => []),
             getScanTechnologies(id).catch(() => []),
             getScanEvidence(id).catch(() => []),
@@ -95,6 +98,7 @@ export default function ScanResultPage() {
             getScanDependencies(id).catch(() => []),
             getScanApiEndpoints(id).catch(() => []),
             getScanRecon(id).catch(() => null),
+            getScanHTTPObservations(id).catch(() => null),
             getScanSecurity(id).catch(() => []),
             getScanPerformance(id).catch(() => null),
             getScanAccessibility(id).catch(() => []),
@@ -109,6 +113,7 @@ export default function ScanResultPage() {
             setDependencies(depsData);
             setApiEndpoints(apiData);
             setRecon(reconData);
+            setHttpObservations(httpData);
             setSecurityFindings(securityData);
             setPerformance(performanceData);
             setAccessibilityFindings(accessData);
@@ -234,7 +239,7 @@ export default function ScanResultPage() {
               <span className="mr-2 text-xs font-mono uppercase tracking-wider text-emerald-100/45">Report sections</span>
               {[
                 ["cause-of-death", "Cause of Death"], ["ai-doctor", "AI Doctor"], ["history", "History"], ["dependencies", "Dependencies"],
-                ["architecture", "Architecture"], ["recon", "Recon Agent"], ["api-intelligence", "API Intelligence"], ["technology-dna", "Technology DNA"], ["performance", "Performance"],
+                ["architecture", "Architecture"], ["http-agent", "HTTP Agent"], ["recon", "Recon Agent"], ["api-intelligence", "API Intelligence"], ["technology-dna", "Technology DNA"], ["performance", "Performance"],
                 ["security", "Security"], ["accessibility", "Accessibility"], ["content-seo", "Content & SEO"], ["raw-evidence", "Raw Evidence"],
               ].map(([anchor, label]) => <a key={anchor} href={`#${anchor}`} className="rounded-full border border-emerald-500/20 px-3 py-1.5 text-xs text-emerald-300 hover:border-emerald-400/50 hover:bg-emerald-500/10">{label}</a>)}
             </div>
@@ -343,6 +348,23 @@ export default function ScanResultPage() {
                 </div>
               </div>
             )}
+          </section>
+        )}
+
+        {/* Extension 3 normalized HTTP Agent catalog */}
+        {(isCompleted || isFailed) && httpObservations && (
+          <section id="http-agent" className="space-y-5 bg-[#0b1714] border border-blue-900/30 rounded-2xl p-6">
+            <div className="flex flex-wrap items-end justify-between gap-4 border-b border-blue-900/20 pb-4">
+              <div>
+                <h2 className="text-xl font-semibold text-blue-300">HTTP Agent</h2>
+                <p className="mt-1 text-sm text-emerald-100/50">Central redacted observations from persisted HTTP behavior; no additional target requests were issued.</p>
+              </div>
+              <div className="flex gap-2 text-xs font-mono"><span className="rounded border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-blue-300">{httpObservations.rule_version}</span><span className="rounded border border-emerald-500/20 px-2.5 py-1 text-emerald-300">{httpObservations.summary.observation_count} observations</span></div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><div className="rounded-xl border border-blue-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Types</p><p className="mt-1 text-2xl font-semibold text-blue-200">{Object.keys(httpObservations.summary.types).length}</p></div><div className="rounded-xl border border-blue-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Redacted</p><p className="mt-1 text-2xl font-semibold text-blue-200">{httpObservations.summary.redacted_count}</p></div><div className="rounded-xl border border-blue-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Truncated</p><p className="mt-1 text-2xl font-semibold text-blue-200">{httpObservations.summary.truncated_count}</p></div><div className="rounded-xl border border-blue-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">TLS detail</p><p className="mt-1 text-sm font-semibold text-blue-200">Transport scheme only</p></div></div>
+            <div className="flex flex-wrap gap-2 text-xs font-mono">{Object.entries(httpObservations.summary.types).map(([type, count]) => <span key={type} className="rounded-full border border-blue-500/20 px-3 py-1 text-blue-200/80">{type}: {count}</span>)}</div>
+            {httpObservations.observations.length > 0 && <div className="overflow-x-auto rounded-xl border border-blue-900/30 bg-[#050b09]"><table className="w-full text-left text-xs font-mono"><thead className="bg-blue-950/40 text-blue-300/70"><tr><th className="px-4 py-3">TYPE</th><th className="px-4 py-3">SUBJECT</th><th className="px-4 py-3">VALUE</th><th className="px-4 py-3">FLAGS</th></tr></thead><tbody className="divide-y divide-blue-900/20">{httpObservations.observations.slice(0, 60).map((item) => <tr key={item.id} className="hover:bg-blue-900/10"><td className="px-4 py-3 text-blue-300">{item.observation_type}</td><td className="max-w-[300px] truncate px-4 py-3 text-emerald-100/70" title={item.subject}>{item.subject}</td><td className="max-w-[520px] truncate px-4 py-3 text-emerald-100/55" title={JSON.stringify(item.value)}>{JSON.stringify(item.value)}</td><td className="px-4 py-3 text-amber-200/80">{item.redacted ? "redacted" : "observed"}{item.truncated ? " · bounded" : ""}</td></tr>)}</tbody></table></div>}
+            <p className="text-xs text-emerald-100/45">Header, cookie, URL-query, and redirect values are redacted or normalized before persistence. CORS is response-header observation only; TLS records HTTPS transport but does not perform a second certificate or cipher handshake.</p>
           </section>
         )}
 
