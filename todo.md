@@ -110,3 +110,4 @@
 - [x] Apply only targeted evidence-backed production fixes for verified defects, races, duplicate behavior, false-positive handling, or operational gaps.
 - [x] Expand regression coverage and execute complete compatibility, migration, API, report, benchmark, backend, and frontend validation.
 - [x] Publish a complete production-review document covering agents, rules, data models, APIs, configuration, deployment steps, limitations, findings, and remediation; then create and push a professional GitHub release commit.
+- [x] Refresh the root README with a professional overview of Extensions 10–19, secure setup, verification, architecture, API/documentation references, and production operational limits.
