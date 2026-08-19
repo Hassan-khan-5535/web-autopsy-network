@@ -30,6 +30,7 @@ import {
   getScanContent,
   getScanDiagnosis,
   getAssessmentAuthorization,
+  getSecurityReport,
   type AssessmentAuthorization,
   type CrawledPage,
   type TechnologyDetection,
@@ -56,6 +57,7 @@ import {
   type AccessibilityFinding,
   type ContentFinding,
   type CauseOfDeathDiagnosis,
+  type SecurityReportResponse,
 } from "@/lib/api";
 import DependencyGraph from "@/components/DependencyGraph";
 import { AIDoctor } from "@/components/ai-doctor";
@@ -66,6 +68,7 @@ import { AttackSurfaceGraph } from "@/components/attack-surface-graph";
 import { RiskPrioritization } from "@/components/risk-prioritization";
 import { PostureTimeline } from "@/components/posture-timeline";
 import { RecurringSchedule } from "@/components/recurring-schedule";
+import { SecurityReport } from "@/components/security-report";
 
 export default function ScanResultPage() {
   const params = useParams();
@@ -96,6 +99,7 @@ export default function ScanResultPage() {
   const [contentFindings, setContentFindings] = useState<ContentFinding[]>([]);
   const [diagnosis, setDiagnosis] = useState<CauseOfDeathDiagnosis | null>(null);
   const [assessmentAuthorization, setAssessmentAuthorization] = useState<AssessmentAuthorization | null>(null);
+  const [securityReport, setSecurityReport] = useState<SecurityReportResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -122,7 +126,7 @@ export default function ScanResultPage() {
         }
 
         if (["COMPLETED", "FAILED", "PARTIAL_FAILED", "CANCELLED"].includes(scanData.state)) {
-          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, reconData, httpData, securityData, configurationData, apiAgentData, vulnerabilityData, secretsData, cveIntelligenceData, evidenceReviewsData, attackSurfaceGraphData, riskPrioritizationData, postureTimelineData, recurringScheduleData, performanceData, accessData, contentData] = await Promise.all([
+          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, reconData, httpData, securityData, configurationData, apiAgentData, vulnerabilityData, secretsData, cveIntelligenceData, evidenceReviewsData, attackSurfaceGraphData, riskPrioritizationData, postureTimelineData, recurringScheduleData, performanceData, accessData, contentData, reportData] = await Promise.all([
             getScanPages(id).catch(() => []),
             getScanTechnologies(id).catch(() => []),
             getScanEvidence(id).catch(() => []),
@@ -145,6 +149,7 @@ export default function ScanResultPage() {
             getScanPerformance(id).catch(() => null),
             getScanAccessibility(id).catch(() => []),
             getScanContent(id).catch(() => []),
+            getSecurityReport(id).catch(() => null),
           ]);
 
           if (mounted) {
@@ -170,6 +175,7 @@ export default function ScanResultPage() {
             setPerformance(performanceData);
             setAccessibilityFindings(accessData);
             setContentFindings(contentData);
+            setSecurityReport(reportData);
           }
         }
       } catch (err: unknown) {
@@ -272,7 +278,7 @@ export default function ScanResultPage() {
             <div className="flex flex-wrap items-center gap-2">
               <span className="mr-2 text-xs font-mono uppercase tracking-wider text-emerald-100/45">Report sections</span>
               {[
-                ["cause-of-death", "Cause of Death"], ["ai-doctor", "AI Doctor"], ["history", "History"], ["posture-timeline", "Posture Timeline"], ["recurring-schedule", "Recurring Schedule"], ["dependencies", "Dependencies"],
+                ["security-posture-report", "Security Report"], ["cause-of-death", "Cause of Death"], ["ai-doctor", "AI Doctor"], ["history", "History"], ["posture-timeline", "Posture Timeline"], ["recurring-schedule", "Recurring Schedule"], ["dependencies", "Dependencies"],
                 ["architecture", "Architecture"], ["http-agent", "HTTP Agent"], ["recon", "Recon Agent"], ["api-intelligence", "API Intelligence"], ["api-agent", "API Agent"], ["vulnerability-agent", "Vulnerability Agent"], ["secrets", "Secrets & Sensitive Data"], ["cve-intelligence", "CVE Intelligence"], ["evidence-agent", "Evidence Agent"], ["risk-prioritization", "Risk Prioritization"], ["attack-surface-graph", "Attack Surface Graph"], ["technology-dna", "Technology DNA"], ["performance", "Performance"],
                 ["configuration", "Configuration"], ["security", "Security"], ["accessibility", "Accessibility"], ["content-seo", "Content & SEO"], ["raw-evidence", "Raw Evidence"],
               ].map(([anchor, label]) => <a key={anchor} href={`#${anchor}`} className="rounded-full border border-emerald-500/20 px-3 py-1.5 text-xs text-emerald-300 hover:border-emerald-400/50 hover:bg-emerald-500/10">{label}</a>)}
@@ -286,6 +292,8 @@ export default function ScanResultPage() {
             <p className="text-red-200/70 text-sm font-mono whitespace-pre-wrap">{scan.error_reason}</p>
           </section>
         )}
+
+        {securityReport && <SecurityReport report={securityReport} />}
 
         {/* Phase 12 Cause of Death */}
         {isCompleted && diagnosis && <CauseOfDeath diagnosis={diagnosis} />}

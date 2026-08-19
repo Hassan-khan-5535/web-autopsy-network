@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import time
 from collections import Counter
@@ -68,6 +69,7 @@ from app.services.evidence import EvidenceAgent
 from app.services.configuration import CONFIGURATION_RULES, RULE_VERSION as CONFIGURATION_RULE_VERSION
 from app.services.correlation import CorrelationAgent
 from app.services.risk import RiskAgent
+from app.services.reporting import SecurityReportService
 from app.services.content import ContentEngine
 from app.services.continuous import PostureTimelineService, RecurringScheduleError, RecurringScheduleService, as_utc
 from app.services.diff import DiffEngine, DiffValidationError
@@ -512,6 +514,35 @@ def get_scan_diagnosis(scan_id: UUID, db: Session = Depends(get_db)):
     diagnosis = CauseOfDeathEngine(db, scan_id).compute()
     narrative = CauseOfDeathNarrative(db).generate(diagnosis)
     return CauseOfDeathEngine(db, scan_id).persist(narrative=narrative)
+
+
+@router.get("/{scan_id}/report")
+def get_security_report(scan_id: UUID, db: Session = Depends(get_db)):
+    try:
+        return SecurityReportService(db).build(scan_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{scan_id}/report/export/{format_name}")
+def export_security_report(scan_id: UUID, format_name: Literal["pdf", "json", "sarif"], db: Session = Depends(get_db)):
+    service = SecurityReportService(db)
+    try:
+        if format_name == "pdf":
+            payload = service.pdf(scan_id)
+            media_type = "application/pdf"
+            filename = f"web-autopsy-report-{scan_id}.pdf"
+        elif format_name == "sarif":
+            payload = json.dumps(service.sarif(scan_id), indent=2, sort_keys=True).encode("utf-8")
+            media_type = "application/sarif+json"
+            filename = f"web-autopsy-report-{scan_id}.sarif.json"
+        else:
+            payload = json.dumps(service.build(scan_id), indent=2, sort_keys=True).encode("utf-8")
+            media_type = "application/json"
+            filename = f"web-autopsy-report-{scan_id}.json"
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return StreamingResponse(io.BytesIO(payload), media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @router.get("/{scan_id}", response_model=ScanResponse)

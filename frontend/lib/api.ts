@@ -1479,3 +1479,55 @@ export async function cancelScan(id: string): Promise<ScanProgressResponse> {
   }
   return response.json() as Promise<ScanProgressResponse>;
 }
+
+export type SecurityReportReference = { label: string; url: string };
+export type SecurityReportFinding = {
+  id: string;
+  rule_id: string;
+  category: string;
+  severity: string;
+  confidence: number;
+  confidence_band: string;
+  classification: string;
+  subject: string;
+  affected_url: string | null;
+  affected_parameter: string | null;
+  statement: string;
+  evidence: unknown[];
+  evidence_state: string;
+  evidence_quality: string;
+  risk_score: number;
+  risk_band: string;
+  eligible_for_prioritization: boolean;
+  remediation: string;
+  references: SecurityReportReference[];
+  limitations: string | null;
+};
+export type SecurityPostureReport = {
+  overall_risk_score: number;
+  risk_band: string;
+  summary: Record<string, unknown>;
+  posture_version: string | null;
+};
+export type SecurityReportResponse = {
+  report_version: string;
+  generated_at: string;
+  scan: { id: string; target_url: string; state: string; assessment_profile: string | null; recon_mode: string; created_at: string | null; finished_at: string | null };
+  executive_summary: { overall_risk_score: number; risk_band: string; scan_state: string; finding_count: number; prioritized_finding_count: number; severity_counts: Record<string, number>; summary: string; limitations: string[] };
+  technical_findings: SecurityReportFinding[];
+  exploitation_breakpoints: Array<{ entry_point: string; rule_id: string; severity: string; risk_score: number; why_it_matters: string; evidence_state: string; safety_note: string }>;
+  security_posture: SecurityPostureReport;
+  trend_comparison: Record<string, unknown>;
+  attack_surface_summary: { asset_count: number; endpoint_count: number; graph_node_count: number; graph_edge_count: number; entities_by_type: Record<string, number>; relationships_by_type: Record<string, number> };
+  safe_screenshot_summary: { captured_screenshot_count: number; status: string; note: string };
+};
+
+export async function getSecurityReport(id: string): Promise<SecurityReportResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/report`, { headers: { Accept: "application/json" }, cache: "no-store" });
+  if (!response.ok) throw new Error(`Failed to fetch security report for scan ${id}`);
+  return response.json() as Promise<SecurityReportResponse>;
+}
+
+export function getSecurityReportExportUrl(id: string, format: "pdf" | "json" | "sarif") {
+  return `${apiBaseUrl}/v1/scans/${id}/report/export/${format}`;
+}

@@ -74,3 +74,10 @@
 - [x] Expose multi-agent orchestration state, dependency decisions, event history, and resource-budget usage in the persisted report flow.
 - [x] Add focused Extension 13 orchestration tests and run full regression/build verification.
 - [ ] Create and push the professional Extension 13 GitHub release commit.
+- [x] Assess existing report data, evidence provenance, screenshots, risk/posture trends, and current report UI/export boundaries for Extension 14.
+- [x] Define the Extension 14 unified report contract, executive and technical finding sections, safe high-level exploitation breakpoint rules, and export safety requirements.
+- [x] Implement evidence-backed executive summary, technical findings, remediation, references, posture/risk, trend, and attack-surface report generation.
+- [x] Add safe PDF, JSON, and SARIF report exports that preserve redaction and existing persisted-report behavior.
+- [x] Add the reporting and export controls to the persisted report UI, including safe breakpoint visibility without exploit instructions.
+- [x] Add focused Extension 14 tests and run backend/frontend and real-authorized export verification.
+- [ ] Create and push the professional Extension 14 GitHub release commit.
