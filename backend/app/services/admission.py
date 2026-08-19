@@ -50,7 +50,10 @@ class AdmissionService:
 
         path = parsed.path or "/"
         if path != "/":
+            had_trailing_slash = path.endswith("/")
             path = path.rstrip("/") or "/"
+            if had_trailing_slash:
+                path += "/"
 
         # Query sorting is safe for the crawler's identity because it only affects
         # deduplication; the original URL remains observable in page/link evidence.

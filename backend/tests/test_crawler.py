@@ -183,3 +183,9 @@ def test_admission_normalization_removes_fragments_and_sorts_query_parameters() 
         AdmissionService.normalize_url("HTTPS://Example.COM/a/?z=2&a=1#section")
         == "https://example.com/a?a=1&z=2"
     )
+
+
+def test_normalize_url_preserves_meaningful_trailing_slash() -> None:
+    assert AdmissionService.normalize_url("https://www.python.org/jobs") == "https://www.python.org/jobs"
+    assert AdmissionService.normalize_url("https://www.python.org/jobs/") == "https://www.python.org/jobs/"
+    assert AdmissionService.normalize_url("https://www.python.org/psf-landing/") == "https://www.python.org/psf-landing/"
