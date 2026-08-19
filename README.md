@@ -8,6 +8,8 @@
 |---|---|
 | Live frontend | [Open the running Web Autopsy Network UI](https://3001-iuz98nix5x3egg8bbruc3-2761d934.us2.manus.computer) |
 | Repository | [atifkhani397/web-autopsy-network](https://github.com/atifkhani397/web-autopsy-network) |
+| Extension 9 live verification record | [`docs/extension9-live-verification.md`](docs/extension9-live-verification.md) |
+| Extension 9 design | [`docs/extension9-evidence-agent-design.md`](docs/extension9-evidence-agent-design.md) |
 | Extension 8 live verification record | [`docs/extension8-live-verification.md`](docs/extension8-live-verification.md) |
 | Extension 8 design | [`docs/extension8-cve-intelligence-design.md`](docs/extension8-cve-intelligence-design.md) |
 | Extension 8 feed research notes | [`docs/extension8-feed-research-notes.md`](docs/extension8-feed-research-notes.md) |
@@ -21,9 +23,9 @@
 
 ## Platform status
 
-Extensions 1 through 8 are implemented. Extension 8, the **CVE & Technology Intelligence Agent**, is included in the `main` branch and has been verified with a fresh real bounded scan of `https://www.python.org/`. The verification scan completed at 100%, and its `cve_intelligence` task reached `SUCCEEDED` after the technology dependency completed.
+Extensions 1 through 9 are implemented. Extension 9, the **Evidence Agent**, is included in the `main` branch and has been verified with a fresh real bounded scan of `https://www.python.org/`. The verification scan completed at 100%, and its `evidence` task reached `SUCCEEDED` after all candidate-producing analysis tasks completed.
 
-The latest completed release before this extension was `bb69f54`; the Extension 8 implementation is pending its final release commit after validation.
+The latest completed release before this extension was `ede4ae1`; the Extension 9 implementation is pending its final release commit after validation.
 
 ## Implemented capabilities
 
@@ -37,6 +39,7 @@ The latest completed release before this extension was `bb69f54`; the Extension 
 | Extension 6 | Modular Vulnerability Agent with detection-only OWASP-style indicators for authentication/session, authorization, injection, reflected/stored/DOM XSS, CSRF, IDOR/BOLA, sensitive data, API weaknesses, misconfiguration, and information disclosure | Complete |
 | Extension 7 | Secrets & Sensitive Data Agent with provider signatures, PEM-key detection, contextual and entropy tiers, sensitive-identifier checks, source-map/configuration correlation, aggressive false-positive suppression, and redaction-first persistence/UI | Complete |
 | Extension 8 | CVE & Technology Intelligence Agent with vendor/product/version normalization, NVD/CISA provenance, affected-version matching, CVSS/CWE metadata, freshness/stale states, deduplication, and separate detection/applicability confidence | Complete |
+| Extension 9 | Independent Evidence Agent with multi-observation aggregation, prerequisite validation, persisted-response reproducibility, redaction, evidence quality, confidence, candidate/validated/rejected/inconclusive states, and full provenance | Complete |
 
 The API Agent combines the existing API Intelligence catalog, normalized Recon endpoints and parameters, captured OpenAPI/Swagger documents, and persisted HTTP response evidence. It does not probe undocumented routes, send method-variation requests, authenticate, submit forms, or mutate target data. Its report endpoint is:
 
@@ -113,6 +116,14 @@ GET /v1/scans/{scan_id}/cve-intelligence
 
 The agent normalizes vendor, product, version evidence, CPE affected ranges, CVE/CWE/CVSS metadata, CISA KEV enrichment, source provenance, feed retrieval timestamps, stale thresholds, and deduplication keys. A family-only technology detection is `version_insufficient`, never `matched`; CVE applicability confidence remains separate from technology detection confidence. Feed metadata is stored in `cve_feed_runs`, normalized records in `cve_intelligence`, and per-scan states in `technology_cve_matches`.
 
+Extension 9 provides an independent false-positive reduction report:
+
+```text
+GET /v1/scans/{scan_id}/evidence-agent
+```
+
+The Evidence Agent collects persisted candidate findings, HTTP observations, and shared observations; validates prerequisites; compares corroboration across source agents; and performs only persisted-response consistency checks with `network_request_issued: false`. It assigns `strong`, `moderate`, `weak`, or `none` evidence quality and classifies each review as `candidate`, `validated`, `rejected`, or `inconclusive`. Target, endpoint/asset, source agent, timestamp, rule ID, observation ID, and safe metadata are preserved as redacted provenance. A scanner signature alone is never proof.
+
 The Configuration Agent rules are:
 
 | Rule ID | Detection area |
@@ -140,11 +151,11 @@ The current task graph is:
 ```text
 admission → collection →
   [technology, structure, api_intelligence, network_intelligence,
-   http_agent, configuration, api_agent, security, vulnerability, secrets, cve_intelligence, content, recon]
+   http_agent, configuration, api_agent, security, vulnerability, secrets, cve_intelligence, evidence, content, recon]
   → performance → accessibility → diagnosis → synthesis
 ```
 
-The Configuration Agent waits for both `collection` and `http_agent`. The API Agent waits for `collection`, `api_intelligence`, `http_agent`, and, when enabled, `recon`. The Vulnerability Agent waits for `collection`, `security`, `configuration`, `api_agent`, and `http_agent`. The Secrets Agent waits for `collection` and `http_agent`. The CVE Intelligence Agent waits for `technology` and performs bounded public-feed retrieval only when explicit version evidence exists. These agents consume persisted evidence and do not perform a separate unbounded target-request pass. Their read-only report endpoints are:
+The Configuration Agent waits for both `collection` and `http_agent`. The API Agent waits for `collection`, `api_intelligence`, `http_agent`, and, when enabled, `recon`. The Vulnerability Agent waits for `collection`, `security`, `configuration`, `api_agent`, and `http_agent`. The Secrets Agent waits for `collection` and `http_agent`. The CVE Intelligence Agent waits for `technology` and performs bounded public-feed retrieval only when explicit version evidence exists. The Evidence Agent waits for all candidate-producing analysis tasks, including optional `recon`, before performing independent review. These agents consume persisted evidence and do not perform a separate unbounded target-request pass. Their read-only report endpoints are:
 
 ```text
 GET /v1/scans/{scan_id}/configuration
@@ -152,6 +163,7 @@ GET /v1/scans/{scan_id}/api-agent
 GET /v1/scans/{scan_id}/vulnerability-agent
 GET /v1/scans/{scan_id}/secrets
 GET /v1/scans/{scan_id}/cve-intelligence
+GET /v1/scans/{scan_id}/evidence-agent
 ```
 
 ## What the platform observes
@@ -184,7 +196,7 @@ Those limitations are intentional. Any future active checks must preserve explic
 | Evidence model | Shared observations, normalized assets/endpoints/parameters, `HTTPObservation`, and `SecurityFinding` records |
 | Optional AI | Citation-grounded synthesis may be enabled through deployment configuration; deterministic assessment and configuration rules do not require an LLM |
 
-Extensions 5, 6, and 7 reuse the existing `SecurityFinding` table, while Extension 8 adds the backward-compatible Alembic revision `20260819_extension8` for `cve_feed_runs`, `cve_intelligence`, and `technology_cve_matches`. Legacy inventory, security, and assessment endpoints remain backward-compatible. The active database is at Alembic head `20260819_extension8`.
+Extensions 5, 6, and 7 reuse the existing `SecurityFinding` table, Extension 8 adds `20260819_extension8` for `cve_feed_runs`, `cve_intelligence`, and `technology_cve_matches`, and Extension 9 adds `20260819_extension9` for `evidence_reviews`. Legacy inventory, raw evidence, security, and assessment endpoints remain backward-compatible. The active database is at Alembic head `20260819_extension9`.
 
 ## Manual setup without Docker
 
@@ -314,10 +326,11 @@ curl "http://127.0.0.1:8000/v1/scans/${SCAN_ID}/progress"
 curl "http://127.0.0.1:8000/v1/scans/${SCAN_ID}/http-observations"
 curl "http://127.0.0.1:8000/v1/scans/${SCAN_ID}/configuration"
 curl "http://127.0.0.1:8000/v1/scans/${SCAN_ID}/cve-intelligence"
+curl "http://127.0.0.1:8000/v1/scans/${SCAN_ID}/evidence-agent"
 curl "http://127.0.0.1:8000/v1/scans/${SCAN_ID}/diagnosis"
 ```
 
-The frontend report exposes Configuration, Security, HTTP Agent, Recon Agent, API Intelligence, API Agent, Vulnerability Agent, Secrets & Sensitive Data, CVE Intelligence, performance, accessibility, content, evidence, diagnosis, and synthesis sections when the corresponding data is available.
+The frontend report exposes Configuration, Security, HTTP Agent, Recon Agent, API Intelligence, API Agent, Vulnerability Agent, Secrets & Sensitive Data, CVE Intelligence, Evidence Agent, performance, accessibility, content, raw evidence, diagnosis, and synthesis sections when the corresponding data is available.
 
 ## Testing and release verification
 
@@ -330,9 +343,9 @@ PYTHONPATH=backend backend/venv/bin/python -m pytest backend/tests -q
 (cd backend && DATABASE_URL=sqlite:///web-autopsy-demo.db PYTHONPATH=. ../backend/venv/bin/alembic current)
 ```
 
-The Extension 4 release was validated with **83 backend tests passing**, Extension 5 raised the full backend regression total to **87 tests passing**, Extension 6 raised it to **92 tests passing**, Extension 7 raised it to **97 tests passing**, and Extension 8 raised it to **102 tests passing**. The combined release passed Python compilation, frontend linting, TypeScript checking, production build, and Alembic validation at `20260819_extension8 (head)`. The official-feed smoke test ingested real NVD and CISA KEV responses, deduplicated records, preserved provenance, and matched a CVE only when isolated explicit WordPress 6.0 evidence satisfied an affected-version range. A definitive bounded Python.org Extension 8 scan completed with `requests_used: 7`, `state: COMPLETED`, `status: completed`, `cve_intelligence: SUCCEEDED`, 24/24 terminal tasks, one version-insufficient family-only state, zero matched CVEs, and no false applicability claim.
+The Extension 4 release was validated with **83 backend tests passing**, Extension 5 raised the full backend regression total to **87 tests passing**, Extension 6 raised it to **92 tests passing**, Extension 7 raised it to **97 tests passing**, Extension 8 raised it to **102 tests passing**, and Extension 9 raised it to **106 tests passing**. The combined release passed Python compilation, frontend linting, TypeScript checking, production build, and Alembic validation at `20260819_extension9 (head)`. A definitive bounded Python.org Extension 9 scan completed with `requests_used: 7`, `state: COMPLETED`, `status: completed`, `evidence: SUCCEEDED`, 25/25 terminal tasks, 52 redacted Evidence Agent reviews, 52 validated states, zero rejected/inconclusive states, and an explicit `signature_alone_is_proof: false` contract.
 
-The Extension 4 live verification details are recorded in [`docs/extension4-live-verification.md`](docs/extension4-live-verification.md). The Extension 5 live verification details are recorded in [`docs/extension5-live-verification.md`](docs/extension5-live-verification.md). The Extension 6 live verification details are recorded in [`docs/extension6-live-verification.md`](docs/extension6-live-verification.md). The Extension 7 live verification details are recorded in [`docs/extension7-live-verification.md`](docs/extension7-live-verification.md). The Extension 8 live verification details are recorded in [`docs/extension8-live-verification.md`](docs/extension8-live-verification.md). The Extension 8 feed research is recorded in [`docs/extension8-feed-research-notes.md`](docs/extension8-feed-research-notes.md). The API Agent design is documented in [`docs/extension5-api-agent-integration-design.md`](docs/extension5-api-agent-integration-design.md), the Vulnerability Agent design is documented in [`docs/extension6-vulnerability-agent-integration-design.md`](docs/extension6-vulnerability-agent-integration-design.md), the Secrets Agent design is documented in [`docs/extension7-secrets-agent-integration-design.md`](docs/extension7-secrets-agent-integration-design.md), the CVE Intelligence design is documented in [`docs/extension8-cve-intelligence-design.md`](docs/extension8-cve-intelligence-design.md), and the Configuration Agent design is documented in [`docs/configuration-agent-integration-design.md`](docs/configuration-agent-integration-design.md).
+The Extension 4 live verification details are recorded in [`docs/extension4-live-verification.md`](docs/extension4-live-verification.md). The Extension 5 live verification details are recorded in [`docs/extension5-live-verification.md`](docs/extension5-live-verification.md). The Extension 6 live verification details are recorded in [`docs/extension6-live-verification.md`](docs/extension6-live-verification.md). The Extension 7 live verification details are recorded in [`docs/extension7-live-verification.md`](docs/extension7-live-verification.md). The Extension 8 live verification details are recorded in [`docs/extension8-live-verification.md`](docs/extension8-live-verification.md). The Extension 8 feed research is recorded in [`docs/extension8-feed-research-notes.md`](docs/extension8-feed-research-notes.md). The Extension 9 live verification details are recorded in [`docs/extension9-live-verification.md`](docs/extension9-live-verification.md), and its design is documented in [`docs/extension9-evidence-agent-design.md`](docs/extension9-evidence-agent-design.md). The API Agent design is documented in [`docs/extension5-api-agent-integration-design.md`](docs/extension5-api-agent-integration-design.md), the Vulnerability Agent design is documented in [`docs/extension6-vulnerability-agent-integration-design.md`](docs/extension6-vulnerability-agent-integration-design.md), the Secrets Agent design is documented in [`docs/extension7-secrets-agent-integration-design.md`](docs/extension7-secrets-agent-integration-design.md), the CVE Intelligence design is documented in [`docs/extension8-cve-intelligence-design.md`](docs/extension8-cve-intelligence-design.md), and the Configuration Agent design is documented in [`docs/configuration-agent-integration-design.md`](docs/configuration-agent-integration-design.md).
 
 ## Repository documentation
 
@@ -349,6 +362,8 @@ The Extension 4 live verification details are recorded in [`docs/extension4-live
 | [`docs/extension8-live-verification.md`](docs/extension8-live-verification.md) | Extension 8 CVE Intelligence real-target and feed verification record |
 | [`docs/extension8-cve-intelligence-design.md`](docs/extension8-cve-intelligence-design.md) | Extension 8 normalized feed, matching, and confidence architecture |
 | [`docs/extension8-feed-research-notes.md`](docs/extension8-feed-research-notes.md) | Official NVD, CISA KEV, and OSV feed research notes |
+| [`docs/extension9-live-verification.md`](docs/extension9-live-verification.md) | Extension 9 Evidence Agent real-target verification record |
+| [`docs/extension9-evidence-agent-design.md`](docs/extension9-evidence-agent-design.md) | Extension 9 evidence-quality, provenance, and safety design |
 | [`PHASE11_IMPLEMENTATION.md`](PHASE11_IMPLEMENTATION.md) | Historical implementation notes for the existing platform |
 | [`PHASE12_IMPLEMENTATION.md`](PHASE12_IMPLEMENTATION.md) | Historical implementation notes for the existing platform |
 | [`PHASE13_IMPLEMENTATION.md`](PHASE13_IMPLEMENTATION.md) | Historical implementation notes for the existing platform |

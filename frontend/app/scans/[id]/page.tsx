@@ -19,6 +19,7 @@ import {
   getScanVulnerabilityAgent,
   getScanSecrets,
   getScanCVEIntelligence,
+  getScanEvidenceReviews,
   getScanPerformance,
   getScanPageRendered,
   getScanAccessibility,
@@ -42,6 +43,7 @@ import {
   type VulnerabilityResponse,
   type SecretsResponse,
   type CVEIntelligenceResponse,
+  type EvidenceResponse,
   type PerformanceResponse,
   type AccessibilityFinding,
   type ContentFinding,
@@ -72,6 +74,7 @@ export default function ScanResultPage() {
   const [vulnerability, setVulnerability] = useState<VulnerabilityResponse | null>(null);
   const [secrets, setSecrets] = useState<SecretsResponse | null>(null);
   const [cveIntelligence, setCveIntelligence] = useState<CVEIntelligenceResponse | null>(null);
+  const [evidenceReviews, setEvidenceReviews] = useState<EvidenceResponse | null>(null);
   const [performance, setPerformance] = useState<PerformanceResponse | null>(null);
   const [accessibilityFindings, setAccessibilityFindings] = useState<AccessibilityFinding[]>([]);
   const [contentFindings, setContentFindings] = useState<ContentFinding[]>([]);
@@ -105,7 +108,7 @@ export default function ScanResultPage() {
         }
 
         if (["COMPLETED", "FAILED", "PARTIAL_FAILED", "CANCELLED"].includes(scanData.state)) {
-          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, reconData, httpData, securityData, configurationData, apiAgentData, vulnerabilityData, secretsData, cveIntelligenceData, performanceData, accessData, contentData] = await Promise.all([
+          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, reconData, httpData, securityData, configurationData, apiAgentData, vulnerabilityData, secretsData, cveIntelligenceData, evidenceReviewsData, performanceData, accessData, contentData] = await Promise.all([
             getScanPages(id).catch(() => []),
             getScanTechnologies(id).catch(() => []),
             getScanEvidence(id).catch(() => []),
@@ -120,6 +123,7 @@ export default function ScanResultPage() {
             getScanVulnerabilityAgent(id).catch(() => null),
             getScanSecrets(id).catch(() => null),
             getScanCVEIntelligence(id).catch(() => null),
+            getScanEvidenceReviews(id).catch(() => null),
             getScanPerformance(id).catch(() => null),
             getScanAccessibility(id).catch(() => []),
             getScanContent(id).catch(() => []),
@@ -140,6 +144,7 @@ export default function ScanResultPage() {
             setVulnerability(vulnerabilityData);
             setSecrets(secretsData);
             setCveIntelligence(cveIntelligenceData);
+            setEvidenceReviews(evidenceReviewsData);
             setPerformance(performanceData);
             setAccessibilityFindings(accessData);
             setContentFindings(contentData);
@@ -264,7 +269,7 @@ export default function ScanResultPage() {
               <span className="mr-2 text-xs font-mono uppercase tracking-wider text-emerald-100/45">Report sections</span>
               {[
                 ["cause-of-death", "Cause of Death"], ["ai-doctor", "AI Doctor"], ["history", "History"], ["dependencies", "Dependencies"],
-                ["architecture", "Architecture"], ["http-agent", "HTTP Agent"], ["recon", "Recon Agent"], ["api-intelligence", "API Intelligence"], ["api-agent", "API Agent"], ["vulnerability-agent", "Vulnerability Agent"], ["secrets", "Secrets & Sensitive Data"], ["cve-intelligence", "CVE Intelligence"], ["technology-dna", "Technology DNA"], ["performance", "Performance"],
+                ["architecture", "Architecture"], ["http-agent", "HTTP Agent"], ["recon", "Recon Agent"], ["api-intelligence", "API Intelligence"], ["api-agent", "API Agent"], ["vulnerability-agent", "Vulnerability Agent"], ["secrets", "Secrets & Sensitive Data"], ["cve-intelligence", "CVE Intelligence"], ["evidence-agent", "Evidence Agent"], ["technology-dna", "Technology DNA"], ["performance", "Performance"],
                 ["configuration", "Configuration"], ["security", "Security"], ["accessibility", "Accessibility"], ["content-seo", "Content & SEO"], ["raw-evidence", "Raw Evidence"],
               ].map(([anchor, label]) => <a key={anchor} href={`#${anchor}`} className="rounded-full border border-emerald-500/20 px-3 py-1.5 text-xs text-emerald-300 hover:border-emerald-400/50 hover:bg-emerald-500/10">{label}</a>)}
             </div>
@@ -542,6 +547,16 @@ export default function ScanResultPage() {
             <div className="rounded-xl border border-cyan-900/30 bg-[#050b09] p-4 text-xs text-emerald-100/65"><p className="font-semibold text-cyan-200">Confidence separation</p><p className="mt-1">Detection confidence, version-evidence confidence, and CVE-applicability confidence are stored separately. Family-only detections remain `version_insufficient` and cannot produce a matched CVE finding.</p></div>
             {cveIntelligence.matches.length > 0 ? <div className="space-y-3">{cveIntelligence.matches.map((match) => <details key={match.id} className="rounded-xl border border-cyan-900/30 bg-[#050b09] p-4"><summary className="cursor-pointer list-none"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-cyan-200">{match.product}{match.detected_version ? ` ${match.detected_version}` : ""}{match.cve_id ? ` · ${match.cve_id}` : ""}</p><p className="mt-1 text-xs font-mono text-emerald-100/50">{match.vendor || "vendor unknown"} · {match.applicability_state} · detected {Math.round(match.detection_confidence)}% · applicability {Math.round(match.applicability_confidence)}%</p></div>{match.kev_listed && <span className="rounded-full border border-orange-500/30 px-3 py-1 text-xs font-mono text-orange-300">CISA KEV</span>}</div></summary><div className="mt-4 grid gap-3 border-t border-cyan-900/20 pt-4 text-xs text-emerald-100/65 md:grid-cols-2"><div><p className="font-mono uppercase tracking-wider text-emerald-100/40">Match reason</p><p className="mt-1">{match.match_reason}</p><p className="mt-3 font-mono uppercase tracking-wider text-emerald-100/40">Version evidence</p><p className="mt-1">{match.detected_version ? `${match.detected_version} from ${match.version_source || "stored evidence"} (${Math.round(match.version_evidence_confidence)}%)` : "No explicit version evidence; applicability withheld."}</p><p className="mt-3 font-mono uppercase tracking-wider text-emerald-100/40">Feed provenance</p><p className="mt-1">{match.source_url || "No CVE feed record"} · {match.feed_retrieved_at || "not retrieved"}{match.feed_is_stale ? " · STALE" : ""}</p></div><div><p className="font-mono uppercase tracking-wider text-emerald-100/40">CVE metadata</p><p className="mt-1">CVSS {match.cvss_score ?? "—"}{match.cvss_vector ? ` · ${match.cvss_vector}` : ""} · CWE {match.cwe.length ? match.cwe.join(", ") : "—"}</p><p className="mt-3 text-emerald-100/60">{match.description || "No CVE record matched this product/version."}</p></div></div></details>)}</div> : <div className="rounded-xl border border-emerald-900/30 bg-[#050b09] p-5 text-sm text-emerald-100/65">No normalized technology/CVE matches were persisted for this scan. The report does not infer applicability from family-only technology detection.</div>}
             <details className="rounded-xl border border-cyan-900/20 bg-[#050b09] p-4"><summary className="cursor-pointer text-sm font-semibold text-cyan-200">Feed provenance and freshness</summary><div className="mt-3 space-y-3">{cveIntelligence.feed_runs.map((feed) => <div key={feed.id} className="border-t border-cyan-900/20 pt-3 text-xs"><div className="flex flex-wrap justify-between gap-2"><p className="font-mono text-cyan-300">{feed.source_name} · {feed.status}</p><span className={feed.is_stale ? "text-orange-300" : "text-emerald-300"}>{feed.is_stale ? "STALE" : "fresh at retrieval"}</span></div><p className="mt-1 text-emerald-100/55">{feed.record_count} records · retrieved {feed.retrieved_at} · stale threshold {feed.stale_after_seconds}s</p>{feed.error && <p className="mt-1 text-orange-300">{feed.error}</p>}</div>)}</div></details>
+          </section>
+        )}
+
+        {/* Extension 9 Evidence Agent review */}
+        {(isCompleted || isFailed) && evidenceReviews && (
+          <section id="evidence-agent" className="space-y-5 rounded-2xl border border-violet-900/30 bg-[#0d0b17] p-6">
+            <div className="flex flex-wrap items-end justify-between gap-4 border-b border-violet-900/20 pb-4"><div><h2 className="text-xl font-semibold text-violet-300">Evidence Agent</h2><p className="mt-1 text-sm text-emerald-100/50">Independent false-positive reduction over persisted observations. A scanner signature alone is never treated as proof.</p></div><div className="flex gap-2 text-xs font-mono"><span className="rounded border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-violet-300">{evidenceReviews.rule_version}</span><span className="rounded border border-emerald-500/20 px-2.5 py-1 text-emerald-300">{evidenceReviews.summary.candidate_count} reviewed</span></div></div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><div className="rounded-xl border border-violet-900/30 bg-[#07050b] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Candidates</p><p className="mt-1 text-2xl font-semibold text-violet-200">{evidenceReviews.summary.candidate_count}</p></div><div className="rounded-xl border border-emerald-900/30 bg-[#07050b] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Validated</p><p className="mt-1 text-2xl font-semibold text-emerald-300">{evidenceReviews.summary.validated_count}</p></div><div className="rounded-xl border border-amber-900/30 bg-[#07050b] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Inconclusive</p><p className="mt-1 text-2xl font-semibold text-amber-300">{evidenceReviews.summary.inconclusive_count}</p></div><div className="rounded-xl border border-red-900/30 bg-[#07050b] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Rejected</p><p className="mt-1 text-2xl font-semibold text-red-300">{evidenceReviews.summary.rejected_count}</p></div><div className="rounded-xl border border-slate-800 bg-[#07050b] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Strong quality</p><p className="mt-1 text-2xl font-semibold text-slate-200">{evidenceReviews.summary.quality_counts.strong ?? 0}</p></div></div>
+            <div className="rounded-xl border border-violet-900/30 bg-[#07050b] p-4 text-xs text-emerald-100/65"><p className="font-semibold text-violet-200">Provenance and safety contract</p><p className="mt-1">Required provenance: {evidenceReviews.provenance_contract.required_fields.join(", ")}. Secret values are redacted: {String(evidenceReviews.provenance_contract.secret_values_redacted)}. Safe metadata is included when available: {String(evidenceReviews.provenance_contract.safe_request_metadata_included_when_available)}. Signature alone is proof: {String(evidenceReviews.provenance_contract.signature_alone_is_proof)}.</p></div>
+            {evidenceReviews.reviews.length > 0 ? <div className="space-y-3">{evidenceReviews.reviews.map((review) => <details key={review.id} className="rounded-xl border border-violet-900/30 bg-[#07050b] p-4"><summary className="cursor-pointer list-none"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-violet-200">{review.rule_id} · {review.source_agent}</p><p className="mt-1 text-xs font-mono text-emerald-100/50">{review.finding_state} · {review.evidence_quality} · confidence {Math.round(review.confidence)}% · {review.reproducibility_state}</p></div><span className="rounded-full border border-violet-500/30 px-3 py-1 text-xs font-mono text-violet-300">{review.redacted ? "REDACTED" : "CHECK"}</span></div></summary><div className="mt-4 grid gap-3 border-t border-violet-900/20 pt-4 text-xs text-emerald-100/65 md:grid-cols-2"><div><p className="font-mono uppercase tracking-wider text-emerald-100/40">Target</p><p className="mt-1 break-all">{review.target}</p><p className="mt-3 font-mono uppercase tracking-wider text-emerald-100/40">Endpoint or asset</p><p className="mt-1 break-all">{review.endpoint_or_asset}</p><p className="mt-3 font-mono uppercase tracking-wider text-emerald-100/40">Prerequisites</p><p className="mt-1">{review.prerequisites_valid ? "valid" : "not satisfied"}</p></div><div><p className="font-mono uppercase tracking-wider text-emerald-100/40">Observation count</p><p className="mt-1">{review.observations.length}</p><p className="mt-3 font-mono uppercase tracking-wider text-emerald-100/40">Safe request metadata</p><pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap text-[11px] text-emerald-100/55">{JSON.stringify(review.safe_request_metadata ?? { network_request_issued: false }, null, 2)}</pre><p className="mt-3 font-mono uppercase tracking-wider text-emerald-100/40">Provenance records</p><p className="mt-1">{review.provenance.length} redacted record(s)</p></div></div></details>)}</div> : <div className="rounded-xl border border-emerald-900/30 bg-[#07050b] p-5 text-sm text-emerald-100/65">No candidate findings were available for independent Evidence Agent review. This is an empty candidate set, not a security guarantee.</div>}
           </section>
         )}
 

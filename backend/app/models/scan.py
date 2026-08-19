@@ -571,6 +571,30 @@ class SecurityFinding(Base):
     page: Mapped[Optional["Page"]] = relationship()
 
 
+class EvidenceReview(Base):
+    __tablename__ = "evidence_reviews"
+    __table_args__ = (UniqueConstraint("scan_id", "candidate_key", name="uq_evidence_reviews_scan_candidate"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
+    security_finding_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("security_findings.id", ondelete="SET NULL"), nullable=True, index=True)
+    candidate_key: Mapped[str] = mapped_column(String(255), index=True)
+    target: Mapped[str] = mapped_column(String(2048))
+    endpoint_or_asset: Mapped[str] = mapped_column(String(2048))
+    source_agent: Mapped[str] = mapped_column(String(100), index=True)
+    rule_id: Mapped[str] = mapped_column(String(100), index=True)
+    finding_state: Mapped[str] = mapped_column(String(30), index=True)
+    evidence_quality: Mapped[str] = mapped_column(String(30), index=True)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    prerequisites_valid: Mapped[bool] = mapped_column(Boolean, default=False)
+    reproducibility_state: Mapped[str] = mapped_column(String(30), default="not_run")
+    observations: Mapped[list] = mapped_column(JSON)
+    safe_request_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    provenance: Mapped[list] = mapped_column(JSON)
+    redacted: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
 class ApiEndpoint(Base):
     __tablename__ = "api_endpoints"
 

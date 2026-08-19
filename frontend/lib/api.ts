@@ -296,6 +296,47 @@ export type CVEFeedRun = {
   error: string | null;
 };
 
+export type EvidenceReview = {
+  id: string;
+  security_finding_id: string | null;
+  candidate_key: string;
+  target: string;
+  endpoint_or_asset: string;
+  source_agent: string;
+  rule_id: string;
+  finding_state: "candidate" | "validated" | "rejected" | "inconclusive";
+  evidence_quality: "strong" | "moderate" | "weak" | "none";
+  confidence: number;
+  prerequisites_valid: boolean;
+  reproducibility_state: "not_run" | "reproduced_from_persisted_response" | "not_reproducible";
+  observations: Array<Record<string, unknown>>;
+  safe_request_metadata: Record<string, unknown> | null;
+  provenance: Array<Record<string, unknown>>;
+  redacted: boolean;
+  created_at: string;
+};
+
+export type EvidenceResponse = {
+  scan_id: string;
+  rule_version: string;
+  reviews: EvidenceReview[];
+  summary: {
+    candidate_count: number;
+    state_counts: Record<string, number>;
+    quality_counts: Record<string, number>;
+    reproducibility_counts: Record<string, number>;
+    validated_count: number;
+    inconclusive_count: number;
+    rejected_count: number;
+  };
+  provenance_contract: {
+    required_fields: string[];
+    safe_request_metadata_included_when_available: boolean;
+    secret_values_redacted: boolean;
+    signature_alone_is_proof: boolean;
+  };
+};
+
 export type CVEIntelligenceResponse = {
   scan_id: string;
   rule_version: string;
@@ -582,6 +623,17 @@ export async function getScanAPIAgent(id: string): Promise<APIAgentResponse> {
   }
 
   return response.json() as Promise<APIAgentResponse>;
+}
+
+export async function getScanEvidenceReviews(id: string): Promise<EvidenceResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/evidence-agent`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch evidence reviews for scan ${id}`);
+  }
+  return response.json() as Promise<EvidenceResponse>;
 }
 
 export async function getScanCVEIntelligence(id: string): Promise<CVEIntelligenceResponse> {
