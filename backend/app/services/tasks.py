@@ -18,6 +18,7 @@ from app.services.admission import AdmissionService
 from app.services.ai_synthesis import AISynthesisEngine
 from app.services.api_intelligence import ApiIntelligenceAgent
 from app.services.browser_client import BrowserWorkerClient
+from app.services.configuration import ConfigurationAgent
 from app.services.content import ContentEngine
 from app.services.crawler import CrawlerService
 from app.services.diagnosis import CauseOfDeathEngine, CauseOfDeathNarrative
@@ -42,6 +43,7 @@ TASK_DEFINITIONS = {
     "api_intelligence": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection"]},
     "network_intelligence": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection"]},
     "http_agent": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection"]},
+    "configuration": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection", "http_agent"]},
     "recon": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection"]},
     "security": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection"]},
     "content": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection"]},
@@ -146,17 +148,17 @@ class TaskGraphCoordinator:
                 db.flush()
                 cls._event(db, scan_id, task, "TASK_QUEUED", {"task_type": "browser_analysis", "page_id": str(page.id)})
             page_tasks.append(page_key)
-        analysis_types = ["technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "security", "content"]
+        analysis_types = ["technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "configuration", "security", "content"]
         if scan.recon_mode in {"passive_only", "active_safe"}:
             analysis_types.append("recon")
         for task_type in analysis_types:
             dependencies = ["collection"]
-            if task_type == "security":
+            if task_type in {"configuration", "security"}:
                 dependencies = ["collection", "http_agent"]
             cls._upsert_task(db, scan_id, task_type, dependencies=dependencies)
         cls._upsert_task(db, scan_id, "performance", dependencies=page_tasks or ["collection"])
         cls._upsert_task(db, scan_id, "accessibility", dependencies=page_tasks or ["collection"])
-        analysis_keys = ["technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "security", "performance", "accessibility", "content"]
+        analysis_keys = ["technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "configuration", "security", "performance", "accessibility", "content"]
         if scan.recon_mode in {"passive_only", "active_safe"}:
             analysis_keys.append("recon")
         cls._upsert_task(db, scan_id, "diagnosis", dependencies=analysis_keys)
@@ -464,6 +466,8 @@ class TaskRunner:
             return {"findings": len(NetworkIntelligenceAgent(db, scan.id).analyze())}
         if task.task_type == "http_agent":
             return {"observations": len(HTTPAgent(db, scan.id).analyze())}
+        if task.task_type == "configuration":
+            return {"findings": len(ConfigurationAgent(db, scan.id).analyze())}
         if task.task_type == "recon":
             return ReconAgent(db, scan.id).run()
         if task.task_type == "security":

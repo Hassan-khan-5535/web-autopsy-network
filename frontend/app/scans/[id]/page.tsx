@@ -14,6 +14,7 @@ import {
   getScanRecon,
   getScanHTTPObservations,
   getScanSecurity,
+  getScanConfiguration,
   getScanPerformance,
   getScanPageRendered,
   getScanAccessibility,
@@ -32,6 +33,7 @@ import {
   type HTTPObservationResponse,
   type PageRenderedResponse,
   type SecurityFinding,
+  type ConfigurationResponse,
   type PerformanceResponse,
   type AccessibilityFinding,
   type ContentFinding,
@@ -57,6 +59,7 @@ export default function ScanResultPage() {
   const [recon, setRecon] = useState<ReconResponse | null>(null);
   const [httpObservations, setHttpObservations] = useState<HTTPObservationResponse | null>(null);
   const [securityFindings, setSecurityFindings] = useState<SecurityFinding[]>([]);
+  const [configuration, setConfiguration] = useState<ConfigurationResponse | null>(null);
   const [performance, setPerformance] = useState<PerformanceResponse | null>(null);
   const [accessibilityFindings, setAccessibilityFindings] = useState<AccessibilityFinding[]>([]);
   const [contentFindings, setContentFindings] = useState<ContentFinding[]>([]);
@@ -90,7 +93,7 @@ export default function ScanResultPage() {
         }
 
         if (["COMPLETED", "FAILED", "PARTIAL_FAILED", "CANCELLED"].includes(scanData.state)) {
-          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, reconData, httpData, securityData, performanceData, accessData, contentData] = await Promise.all([
+          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, reconData, httpData, securityData, configurationData, performanceData, accessData, contentData] = await Promise.all([
             getScanPages(id).catch(() => []),
             getScanTechnologies(id).catch(() => []),
             getScanEvidence(id).catch(() => []),
@@ -100,6 +103,7 @@ export default function ScanResultPage() {
             getScanRecon(id).catch(() => null),
             getScanHTTPObservations(id).catch(() => null),
             getScanSecurity(id).catch(() => []),
+            getScanConfiguration(id).catch(() => null),
             getScanPerformance(id).catch(() => null),
             getScanAccessibility(id).catch(() => []),
             getScanContent(id).catch(() => []),
@@ -115,6 +119,7 @@ export default function ScanResultPage() {
             setRecon(reconData);
             setHttpObservations(httpData);
             setSecurityFindings(securityData);
+            setConfiguration(configurationData);
             setPerformance(performanceData);
             setAccessibilityFindings(accessData);
             setContentFindings(contentData);
@@ -240,7 +245,7 @@ export default function ScanResultPage() {
               {[
                 ["cause-of-death", "Cause of Death"], ["ai-doctor", "AI Doctor"], ["history", "History"], ["dependencies", "Dependencies"],
                 ["architecture", "Architecture"], ["http-agent", "HTTP Agent"], ["recon", "Recon Agent"], ["api-intelligence", "API Intelligence"], ["technology-dna", "Technology DNA"], ["performance", "Performance"],
-                ["security", "Security"], ["accessibility", "Accessibility"], ["content-seo", "Content & SEO"], ["raw-evidence", "Raw Evidence"],
+                ["configuration", "Configuration"], ["security", "Security"], ["accessibility", "Accessibility"], ["content-seo", "Content & SEO"], ["raw-evidence", "Raw Evidence"],
               ].map(([anchor, label]) => <a key={anchor} href={`#${anchor}`} className="rounded-full border border-emerald-500/20 px-3 py-1.5 text-xs text-emerald-300 hover:border-emerald-400/50 hover:bg-emerald-500/10">{label}</a>)}
             </div>
           </nav>
@@ -385,6 +390,22 @@ export default function ScanResultPage() {
             {recon.endpoints.length > 0 && <div className="overflow-x-auto rounded-xl border border-cyan-900/30 bg-[#050b09]"><table className="w-full text-left text-xs font-mono"><thead className="bg-cyan-950/40 text-cyan-300/70"><tr><th className="px-4 py-3">KIND</th><th className="px-4 py-3">METHOD</th><th className="px-4 py-3">URL / PATH</th><th className="px-4 py-3">CLASSIFICATION</th><th className="px-4 py-3">STATUS</th></tr></thead><tbody className="divide-y divide-cyan-900/20">{recon.endpoints.slice(0, 40).map((endpoint) => <tr key={endpoint.id} className="hover:bg-cyan-900/10"><td className="px-4 py-3 text-cyan-300">{endpoint.endpoint_kind}</td><td className="px-4 py-3 text-emerald-300">{endpoint.http_method}</td><td className="max-w-[400px] truncate px-4 py-3 text-emerald-100/80" title={endpoint.url_or_path}>{endpoint.url_or_path}</td><td className="px-4 py-3 text-amber-200/80">{endpoint.classification}</td><td className="px-4 py-3 text-emerald-100/55">{endpoint.status_code ?? "—"}</td></tr>)}</tbody></table></div>}
             {recon.parameters.length > 0 && <p className="text-xs text-emerald-100/55">Parameters: {recon.parameters.slice(0, 24).map((parameter) => `${parameter.name} (${parameter.location})`).join(", ")}{recon.parameters.length > 24 ? " …" : ""}</p>}
             <p className="text-xs text-emerald-100/45">Cloud asset candidates are pattern-based observations only; they do not prove public read access. CT and DNS results are passive public-source observations, and active-safe requests are limited to scope-checked GET discovery.</p>
+          </section>
+        )}
+
+        {/* Extension 4 Configuration Agent catalog */}
+        {(isCompleted || isFailed) && configuration && (
+          <section id="configuration" className="space-y-5 bg-[#0b1714] border border-amber-900/30 rounded-2xl p-6">
+            <div className="flex flex-wrap items-end justify-between gap-4 border-b border-amber-900/20 pb-4">
+              <div>
+                <h2 className="text-xl font-semibold text-amber-300">Configuration Agent</h2>
+                <p className="mt-1 text-sm text-emerald-100/50">High-confidence server and application misconfiguration rules over persisted HTTP evidence.</p>
+              </div>
+              <div className="flex gap-2 text-xs font-mono"><span className="rounded border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-amber-300">{configuration.rule_version}</span><span className="rounded border border-emerald-500/20 px-2.5 py-1 text-emerald-300">{configuration.summary.finding_count} findings · {configuration.summary.rule_count} rules</span></div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3"><div className="rounded-xl border border-red-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">High</p><p className="mt-1 text-2xl font-semibold text-red-300">{configuration.summary.high_count}</p></div><div className="rounded-xl border border-amber-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Medium</p><p className="mt-1 text-2xl font-semibold text-amber-300">{configuration.summary.medium_count}</p></div><div className="rounded-xl border border-emerald-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Low</p><p className="mt-1 text-2xl font-semibold text-emerald-300">{configuration.summary.low_count}</p></div></div>
+            {configuration.findings.length > 0 ? <div className="space-y-3">{configuration.findings.map((finding) => { const rule = configuration.rules.find((item) => item.rule_id === finding.rule_id); return <details key={finding.id} className="rounded-xl border border-amber-900/30 bg-[#050b09] p-4"><summary className="cursor-pointer list-none"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-amber-200">{finding.statement}</p><p className="mt-1 text-xs font-mono text-emerald-100/50">{finding.rule_id} · {finding.subject}</p></div><span className="rounded-full border border-amber-500/20 px-3 py-1 text-xs font-mono text-amber-300">{finding.severity} · {finding.confidence ?? "—"}%</span></div></summary><div className="mt-4 grid gap-3 border-t border-amber-900/20 pt-4 text-xs text-emerald-100/65 md:grid-cols-2"><div><p className="font-mono uppercase tracking-wider text-emerald-100/40">Evidence</p><p className="mt-1">{finding.evidence?.map((item) => typeof item === "string" ? item : item.observation).join(" · ") || "Evidence recorded"}</p><p className="mt-3 font-mono uppercase tracking-wider text-emerald-100/40">Limitations</p><p className="mt-1">{finding.limitations || "Passive evidence only"}</p></div><div><p className="font-mono uppercase tracking-wider text-emerald-100/40">Remediation</p><p className="mt-1">{rule?.remediation_guidance || "Review the rule guidance."}</p><p className="mt-3 font-mono uppercase tracking-wider text-emerald-100/40">References</p><p className="mt-1">{rule ? [...rule.cwe, ...rule.owasp].join(", ") : "—"}</p></div></div></details>; })}</div> : <div className="rounded-xl border border-emerald-900/30 bg-[#050b09] p-5 text-sm text-emerald-100/65">No Configuration Agent rules met their prerequisites with the persisted evidence. This is not a guarantee that the target is secure.</div>}
+            <details className="rounded-xl border border-amber-900/20 bg-[#050b09] p-4"><summary className="cursor-pointer text-sm font-semibold text-amber-200">View independently testable rule catalog</summary><div className="mt-3 space-y-3">{configuration.rules.map((rule) => <div key={rule.rule_id} className="border-t border-amber-900/20 pt-3 text-xs"><p className="font-mono text-amber-300">{rule.rule_id} · {rule.title} · default {rule.severity} / {rule.confidence}%</p><p className="mt-1 text-emerald-100/60">{rule.detection_logic}</p><p className="mt-1 text-emerald-100/50">Prerequisites: {rule.prerequisites} Remediation: {rule.remediation_guidance}</p></div>)}</div></details>
           </section>
         )}
 

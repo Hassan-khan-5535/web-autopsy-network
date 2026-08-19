@@ -20,7 +20,7 @@ class HTTPAgent:
     MAX_VALUE_BYTES = 8 * 1024
     MAX_TEXT_BYTES = 512
     SECRET_NAME_RE = re.compile(
-        r"(?:authorization|proxy-authorization|cookie|set-cookie|token|secret|password|passwd|api[-_]?key|csrf|session|credential)",
+        r"(?:authorization|proxy-authorization|cookie|set-cookie|token|secret|password|passwd|api[-_]?key|csrf|session)",
         re.IGNORECASE,
     )
     SECURITY_POLICY_HEADERS = (

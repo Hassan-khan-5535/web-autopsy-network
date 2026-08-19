@@ -182,7 +182,7 @@ export type SecurityEvidence = {
 
 export type SecurityFinding = {
   id: string;
-  category: "security" | "SECURITY";
+  category: "security" | "SECURITY" | "configuration";
   subject: string;
   statement: string;
   classification: "OBSERVED" | "INFERRED";
@@ -195,6 +195,34 @@ export type SecurityFinding = {
   page_id?: string | null;
   evidence?: SecurityEvidence[] | string[];
   created_at?: string;
+};
+
+export type ConfigurationRule = {
+  rule_id: string;
+  title: string;
+  prerequisites: string;
+  detection_logic: string;
+  evidence_requirements: string;
+  severity: string;
+  confidence: number;
+  remediation_guidance: string;
+  cwe: string[];
+  owasp: string[];
+  rule_version: string;
+};
+
+export type ConfigurationResponse = {
+  scan_id: string;
+  rule_version: string;
+  rules: ConfigurationRule[];
+  findings: SecurityFinding[];
+  summary: {
+    rule_count: number;
+    finding_count: number;
+    high_count: number;
+    medium_count: number;
+    low_count: number;
+  };
 };
 
 export type PerformanceEvidence = {
@@ -389,6 +417,19 @@ export async function getScanSecurity(id: string): Promise<SecurityFinding[]> {
   }
 
   return response.json() as Promise<SecurityFinding[]>;
+}
+
+export async function getScanConfiguration(id: string): Promise<ConfigurationResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/configuration`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch configuration findings for scan ${id}`);
+  }
+
+  return response.json() as Promise<ConfigurationResponse>;
 }
 
 export async function getScanPerformance(id: string): Promise<PerformanceResponse> {

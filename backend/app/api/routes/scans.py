@@ -59,6 +59,7 @@ from app.services.assessment import (
 )
 from app.services.ai_synthesis import AIDoctorEngine, AISynthesisEngine
 from app.services.api_intelligence import ApiIntelligenceAgent
+from app.services.configuration import CONFIGURATION_RULES, RULE_VERSION as CONFIGURATION_RULE_VERSION
 from app.services.content import ContentEngine
 from app.services.diff import DiffEngine, DiffValidationError
 from app.services.diff_ai import DiffExplanationEngine
@@ -1233,5 +1234,51 @@ def get_scan_http_observations(scan_id: UUID, db: Session = Depends(get_db)):
             "types": dict(sorted(Counter(item.observation_type for item in observations).items())),
             "redacted_count": sum(bool(item.redacted) for item in observations),
             "truncated_count": sum(bool(item.truncated) for item in observations),
+        },
+    }
+
+
+@router.get("/{scan_id}/configuration")
+def get_scan_configuration(scan_id: UUID, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    findings = (
+        db.query(SecurityFinding)
+        .filter(
+            SecurityFinding.scan_id == scan_id,
+            SecurityFinding.category == "configuration",
+        )
+        .order_by(SecurityFinding.severity, SecurityFinding.rule_id, SecurityFinding.created_at)
+        .all()
+    )
+    return {
+        "scan_id": str(scan_id),
+        "rule_version": CONFIGURATION_RULE_VERSION,
+        "rules": [CONFIGURATION_RULES[rule_id].as_dict() for rule_id in sorted(CONFIGURATION_RULES)],
+        "findings": [
+            {
+                "id": str(finding.id),
+                "page_id": str(finding.page_id) if finding.page_id else None,
+                "subject": finding.subject,
+                "statement": finding.statement,
+                "classification": finding.classification,
+                "confidence": finding.confidence,
+                "confidence_band": finding.confidence_band,
+                "severity": finding.severity,
+                "rule_id": finding.rule_id,
+                "rule_version": finding.rule_version,
+                "evidence": finding.evidence,
+                "limitations": finding.limitations,
+                "created_at": finding.created_at.isoformat(),
+            }
+            for finding in findings
+        ],
+        "summary": {
+            "rule_count": len(CONFIGURATION_RULES),
+            "finding_count": len(findings),
+            "high_count": sum(1 for finding in findings if finding.severity == "high"),
+            "medium_count": sum(1 for finding in findings if finding.severity == "medium"),
+            "low_count": sum(1 for finding in findings if finding.severity == "low"),
         },
     }

@@ -13,6 +13,7 @@ const LABELS: Record<string, string> = {
   api_intelligence: "API intelligence",
   network_intelligence: "Dependency intelligence",
   http_agent: "HTTP behavior analysis",
+  configuration: "Configuration analysis",
   recon: "Recon Agent",
   security: "Security analysis",
   performance: "Performance analysis",
