@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.models.scan import Header, HTTPResponse, Observation, Page, PageLink, Resource, Scan
 from app.services.admission import AdmissionError, AdmissionService
+from app.services.scanner_security import ScannerSecurityError, bounded_headers, bounded_html_body, revalidate_egress, redact_sensitive_text
 
 
 @dataclass
@@ -86,6 +87,9 @@ class CrawlerService:
         )
         self.robots: dict[str, RobotFileParser | None] = {}
         self.robots_errors: set[str] = set()
+        self.timeout = httpx.Timeout(settings.scanner_read_timeout_seconds, connect=settings.scanner_connect_timeout_seconds)
+        self.max_redirects = min(self.MAX_REDIRECTS, settings.scanner_max_redirects)
+        self.max_body_bytes = min(self.MAX_BODY_BYTES, settings.scanner_max_response_bytes)
 
     def crawl(self) -> None:
         self.scan.state = "COLLECTING"
@@ -321,52 +325,51 @@ class CrawlerService:
         redirects: list[tuple[str, str]] = []
         started_at = time.perf_counter()
         try:
-            for _ in range(self.MAX_REDIRECTS + 1):
+            for _ in range(self.max_redirects + 1):
+                current_url = revalidate_egress(
+                    current_url, assessment_profile=self.assessment_profile if self.assessment_profile in {"safe", "normal", "aggressive"} else None,
+                    explicit_allowlist=bool(self.allowed_domains),
+                )
                 with httpx.Client(
-                    timeout=self.TIMEOUT,
+                    timeout=self.timeout,
                     follow_redirects=False,
                     headers={
                         "User-Agent": self.USER_AGENT,
                         "Accept": "text/html,application/xhtml+xml",
                         **self.auth_headers,
                     },
-                ) as request_client:
-                    response = request_client.get(current_url)
-                if 300 <= response.status_code < 400 and response.headers.get("location"):
-                    redirect_url = urljoin(current_url, response.headers["location"])
-                    redirect_url, _ = self._validate_and_resolve(redirect_url)
-                    if not self._is_same_domain(domain_root, redirect_url) or not self._in_scope(redirect_url):
-                        raise AdmissionError("Redirect leaves the allowed crawl scope and was not fetched.")
-                    if not self._try_consume_request(redirect_url):
-                        raise AdmissionError("Maximum request budget reached.")
-                    self.rate_limiter.wait(urlsplit(redirect_url).hostname or "")
-                    redirects.append((current_url, redirect_url))
-                    current_url = redirect_url
-                    continue
-                content_type = response.headers.get("content-type")
-                body = response.text if content_type and "html" in content_type.lower() else ""
-                body_truncated = False
-                if len(body.encode("utf-8", errors="ignore")) > self.MAX_BODY_BYTES:
-                    body = body.encode("utf-8", errors="ignore")[: self.MAX_BODY_BYTES].decode(
-                        "utf-8", errors="ignore"
+                ) as request_client, request_client.stream("GET", current_url) as response:
+                    headers = bounded_headers(response, get_settings().scanner_max_response_header_bytes)
+                    if 300 <= response.status_code < 400 and response.headers.get("location"):
+                        redirect_url = urljoin(current_url, response.headers["location"])
+                        redirect_url = revalidate_egress(
+                            redirect_url, assessment_profile=self.assessment_profile if self.assessment_profile in {"safe", "normal", "aggressive"} else None,
+                            explicit_allowlist=bool(self.allowed_domains),
+                        )
+                        if not self._is_same_domain(domain_root, redirect_url) or not self._in_scope(redirect_url):
+                            raise AdmissionError("Redirect leaves the allowed crawl scope and was not fetched.")
+                        if not self._try_consume_request(redirect_url):
+                            raise AdmissionError("Maximum request budget reached.")
+                        self.rate_limiter.wait(urlsplit(redirect_url).hostname or "")
+                        redirects.append((current_url, redirect_url))
+                        current_url = redirect_url
+                        continue
+                    content_type = response.headers.get("content-type")
+                    body, body_truncated = bounded_html_body(response, self.max_body_bytes)
+                    final_url = AdmissionService.normalize_url(str(response.url))
+                    final_url = revalidate_egress(
+                        final_url, assessment_profile=self.assessment_profile if self.assessment_profile in {"safe", "normal", "aggressive"} else None,
+                        explicit_allowlist=bool(self.allowed_domains),
                     )
-                    body_truncated = True
-                final_url = AdmissionService.normalize_url(str(response.url))
-                if not self._in_scope(final_url):
-                    raise AdmissionError("Response final URL is outside the allowed crawl scope.")
-                return FetchResult(
-                    requested_url=requested_url,
-                    final_url=final_url,
-                    status_code=response.status_code,
-                    content_type=content_type,
-                    elapsed_ms=(time.perf_counter() - started_at) * 1000,
-                    headers=list(response.headers.multi_items()),
-                    body=body,
-                    redirects=redirects,
-                    body_truncated=body_truncated,
-                )
-            raise AdmissionError(f"Exceeded maximum redirects ({self.MAX_REDIRECTS})")
-        except (AdmissionError, httpx.RequestError, UnicodeError) as exc:
+                    if not self._in_scope(final_url):
+                        raise AdmissionError("Response final URL is outside the allowed crawl scope.")
+                    return FetchResult(
+                        requested_url=requested_url, final_url=final_url, status_code=response.status_code,
+                        content_type=content_type, elapsed_ms=(time.perf_counter() - started_at) * 1000,
+                        headers=headers, body=body, redirects=redirects, body_truncated=body_truncated,
+                    )
+            raise AdmissionError(f"Exceeded maximum redirects ({self.max_redirects})")
+        except (AdmissionError, ScannerSecurityError, httpx.RequestError, UnicodeError) as exc:
             return FetchResult(
                 requested_url=requested_url,
                 final_url=current_url,
@@ -450,7 +453,7 @@ class CrawlerService:
         }
         counts: dict[str, int] = {}
         for tag_name, attr_name in selectors.items():
-            elements = soup.find_all(tag_name)
+            elements = soup.find_all(tag_name, limit=get_settings().scanner_max_html_elements)
             counts[tag_name] = len(elements)
             for element in elements:
                 raw_value = element.get(attr_name)
@@ -467,7 +470,7 @@ class CrawlerService:
                     )
                 )
 
-        for anchor in soup.find_all("a", href=True):
+        for anchor in soup.find_all("a", href=True, limit=get_settings().scanner_max_html_elements):
             raw_target = str(anchor["href"])
             target = urljoin(base_url, raw_target)
             try:
@@ -489,7 +492,7 @@ class CrawlerService:
                 scan_id=self.scan.id,
                 category=category,
                 subject=subject,
-                observation=observation,
+                observation=redact_sensitive_text(observation),
                 classification="OBSERVED",
             )
         )

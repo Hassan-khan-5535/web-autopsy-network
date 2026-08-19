@@ -70,6 +70,23 @@ class Settings(BaseSettings):
     update_package_scanner_version: str = "0.16.0"
     update_package_require_signature: bool = True
 
+    # Extension 17: scanner egress, content, browser-worker, and data-isolation limits.
+    scanner_allowed_egress_ports: str = "80,443"
+    scanner_connect_timeout_seconds: float = 5.0
+    scanner_read_timeout_seconds: float = 10.0
+    scanner_max_response_bytes: int = 2 * 1024 * 1024
+    scanner_max_response_header_bytes: int = 64 * 1024
+    scanner_max_redirects: int = 5
+    scanner_max_html_elements: int = 10000
+    browser_worker_allowed_hosts: str = "browser-worker,localhost,127.0.0.1,::1"
+    browser_worker_timeout_ms: int = 15000
+    browser_worker_max_cpu_seconds: int = 20
+    browser_worker_max_memory_mb: int = 512
+    browser_worker_max_rendered_bytes: int = 2 * 1024 * 1024
+    browser_worker_max_network_events: int = 250
+    browser_worker_max_console_events: int = 250
+    browser_worker_forward_credentials: bool = False
+
     llm_api_key: str | None = None
     llm_api_base: str | None = None
     llm_model: str = "gpt-4o-mini"

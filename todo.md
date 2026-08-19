@@ -93,3 +93,9 @@
 - [x] Integrate active update-package metadata and disabled-rule handling with technology, configuration, secret, CVE, vulnerability, and remediation component metadata; active package components resolve locally while built-in rule sources remain the offline fallback.
 - [x] Add update lifecycle visibility, focused Extension 16 regression coverage, and full verification.
 - [ ] Create and push the professional Extension 16 GitHub release commit.
+- [x] Assess current SSRF, DNS, redirect, fetch, browser-worker, decompression, response-size, queue-resource, command, credential, storage, and cross-scan isolation boundaries.
+- [x] Define the Extension 17 fail-closed network egress, browser/process isolation, resource budget, filesystem, credential, and scan-state security contract.
+- [x] Implement hardened admission, redirect/DNS revalidation, bounded fetch/content handling, browser resource budgets, command/file safety, credential redaction, and scan/page isolation.
+- [x] Harden browser-worker boundaries and add dedicated Extension 17 security regression tests for SSRF, rebinding, redirects, hostile content, resource exhaustion, leakage, and unsafe-file boundaries.
+- [x] Run full backend/frontend verification and persisted-report compatibility review.
+- [ ] Create and push the professional Extension 17 GitHub release commit.

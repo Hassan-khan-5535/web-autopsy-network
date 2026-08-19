@@ -146,6 +146,16 @@ class AdmissionService:
         return canonical_url, sorted(addresses)[0]
 
     @staticmethod
+    def revalidate_before_connect(
+        url: str, *, assessment_profile: str | None = None, explicit_allowlist: bool = False
+    ) -> str:
+        """Repeat DNS and SSRF validation at the network-use boundary."""
+        canonical, _ = AdmissionService.validate_and_resolve(
+            url, assessment_profile=assessment_profile, explicit_allowlist=explicit_allowlist
+        )
+        return canonical
+
+    @staticmethod
     def registrable_domain(hostname: str) -> str:
         labels = hostname.lower().rstrip(".").split(".")
         return ".".join(labels[-2:]) if len(labels) >= 2 else hostname.lower()

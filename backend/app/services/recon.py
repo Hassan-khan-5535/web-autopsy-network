@@ -25,6 +25,7 @@ from app.models.scan import (
     Scan,
 )
 from app.services.admission import AdmissionError, AdmissionService
+from app.services.scanner_security import ScannerSecurityError, bounded_body, bounded_headers, revalidate_egress, redact_sensitive_text
 from app.services.assessment import (
     credentials_headers,
     get_authorization,
@@ -361,6 +362,15 @@ class ReconAgent:
         normalized = self._normalize_target_url(url)
         if not normalized or not self._consume_target_request(normalized):
             return None
+        try:
+            normalized = revalidate_egress(
+                normalized,
+                assessment_profile=self.profile if self.profile in {"safe", "normal", "aggressive"} else None,
+                explicit_allowlist=bool(self.allowed_domains),
+            )
+        except (AdmissionError, ScannerSecurityError) as exc:
+            self._observe("RECON_SCOPE", normalized, f"Active-safe candidate blocked at egress boundary: {redact_sensitive_text(exc)}")
+            return None
         if source != "robots" and urlsplit(normalized).path != "/robots.txt" and not self.crawler._robots_allowed(normalized):
             self._observe("RECON_SCOPE", normalized, "Active-safe candidate skipped because robots.txt disallowed the request.")
             return None
@@ -376,18 +386,19 @@ class ReconAgent:
             if wait_for:
                 time.sleep(wait_for)
             self._active_last_request[hostname] = time.monotonic()
+            timeout = httpx.Timeout(self.settings.scanner_read_timeout_seconds, connect=self.settings.scanner_connect_timeout_seconds)
             with httpx.Client(
-                timeout=self.settings.recon_passive_timeout_seconds,
+                timeout=timeout,
                 follow_redirects=False,
                 headers={"User-Agent": self.USER_AGENT, "Accept": "text/html,application/xml,application/json,*/*", **self.auth_headers},
-            ) as client:
-                response = client.get(normalized)
-            content_type = response.headers.get("content-type")
-            body = response.content[: self.settings.recon_active_safe_max_body_bytes]
+            ) as client, client.stream("GET", normalized) as response:
+                bounded_headers(response, self.settings.scanner_max_response_header_bytes)
+                body, _ = bounded_body(response, min(self.settings.recon_active_safe_max_body_bytes, self.settings.scanner_max_response_bytes))
+                content_type = response.headers.get("content-type")
             text = body.decode(response.encoding or "utf-8", errors="replace")
             return {"status_code": response.status_code, "content_type": content_type, "text": text, "source": source}
-        except (httpx.HTTPError, UnicodeError) as exc:
-            self._observe("RECON_SOURCE", normalized, f"Active-safe request failed without retrying outside scope: {exc}")
+        except (httpx.HTTPError, UnicodeError, ScannerSecurityError) as exc:
+            self._observe("RECON_SOURCE", normalized, f"Active-safe request failed without retrying outside scope: {redact_sensitive_text(exc)}")
             return {"status_code": None, "content_type": None, "text": "", "source": source, "error": str(exc)}
 
     def _public_get(self, url: str, params: dict[str, str]) -> Any:
