@@ -58,6 +58,7 @@ export type ScanResponse = {
   id: string;
   website_id: string;
   state: string;
+  status?: "queued" | "running" | "paused" | "completed" | "failed" | "cancelled";
   requested_url: string;
   error_reason: string | null;
   max_depth: number;
@@ -65,14 +66,72 @@ export type ScanResponse = {
   max_concurrency?: number;
   request_delay_ms?: number;
   same_domain_mode?: string;
+  assessment_profile?: string | null;
+  max_requests?: number | null;
   created_at?: string;
   updated_at?: string;
   diagnosis?: CauseOfDeathDiagnosis | null;
 };
 
+export type ScanAuthentication =
+  | { type: "cookie"; name: string; value: string }
+  | { type: "header"; name: string; value: string }
+  | { type: "basic"; username: string; password: string };
+
 export type ScanOptions = {
   max_depth?: number;
   max_pages?: number;
+  assessment_profile?: "safe" | "normal" | "aggressive";
+  allowed_paths?: string[];
+  excluded_paths?: string[];
+  allowed_domains?: string[];
+  max_requests?: number;
+  max_concurrency?: number;
+  rate_limit_per_host_ms?: number;
+  robots_override?: boolean;
+  authentication?: ScanAuthentication;
+  test_account_ref?: string;
+  expires_at?: string;
+};
+
+export type AssessmentAuthorization = {
+  id: string | null;
+  scan_id: string;
+  authorization_type: string;
+  actor_id: string;
+  target_url: string;
+  allowed_paths: string[];
+  excluded_paths: string[];
+  allowed_domains: string[];
+  assessment_profile: string;
+  robots_override: boolean;
+  max_depth: number;
+  max_pages: number;
+  max_requests: number;
+  max_concurrency: number;
+  rate_limit_per_host_ms: number;
+  test_account_ref: string | null;
+  authentication_type: string;
+  authentication_configured: boolean;
+  secret_fingerprint: string | null;
+  consent_hash: string | null;
+  authorized_at: string | null;
+  expires_at: string | null;
+  policy_version: string;
+  scope_json: Record<string, unknown>;
+};
+
+export type AssessmentAuditEvent = {
+  id: string;
+  scan_id: string;
+  authorization_id: string | null;
+  sequence_number: number;
+  event_type: string;
+  actor_id: string;
+  payload: Record<string, unknown>;
+  previous_hash: string;
+  event_hash: string;
+  created_at: string | null;
 };
 
 export type ObservationResponse = {
@@ -222,6 +281,36 @@ import {
   DEMO_PERFORMANCE,
   DEMO_PAGES,
 } from "./demo-data";
+
+export async function getAssessmentAuthorization(id: string): Promise<AssessmentAuthorization> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/assessment/authorization`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Failed to fetch assessment authorization for scan ${id}`);
+  return response.json() as Promise<AssessmentAuthorization>;
+}
+
+export async function getAssessmentAudit(id: string): Promise<AssessmentAuditEvent[]> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/assessment/audit`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Failed to fetch assessment audit for scan ${id}`);
+  return response.json() as Promise<AssessmentAuditEvent[]>;
+}
+
+export async function pauseScan(id: string): Promise<ScanProgressResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/pause`, { method: "POST", cache: "no-store" });
+  if (!response.ok) throw new Error(`Pause request failed with ${response.status}`);
+  return response.json() as Promise<ScanProgressResponse>;
+}
+
+export async function resumeScan(id: string): Promise<ScanProgressResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/resume`, { method: "POST", cache: "no-store" });
+  if (!response.ok) throw new Error(`Resume request failed with ${response.status}`);
+  return response.json() as Promise<ScanProgressResponse>;
+}
 
 export async function getScanDiagnosis(id: string): Promise<CauseOfDeathDiagnosis> {
   if (id === DEMO_SCAN_ID || id.startsWith("demo")) {
@@ -640,6 +729,7 @@ export type ScanTaskProgress = {
 export type ScanProgressResponse = {
   scan_id: string;
   state: string;
+  status?: "queued" | "running" | "paused" | "completed" | "failed" | "cancelled";
   cancel_requested: boolean;
   percent: number;
   completed_tasks: number;

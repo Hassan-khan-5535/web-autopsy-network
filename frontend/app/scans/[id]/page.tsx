@@ -17,6 +17,8 @@ import {
   getScanAccessibility,
   getScanContent,
   getScanDiagnosis,
+  getAssessmentAuthorization,
+  type AssessmentAuthorization,
   type CrawledPage,
   type TechnologyDetection,
   type ObservationResponse,
@@ -53,6 +55,7 @@ export default function ScanResultPage() {
   const [accessibilityFindings, setAccessibilityFindings] = useState<AccessibilityFinding[]>([]);
   const [contentFindings, setContentFindings] = useState<ContentFinding[]>([]);
   const [diagnosis, setDiagnosis] = useState<CauseOfDeathDiagnosis | null>(null);
+  const [assessmentAuthorization, setAssessmentAuthorization] = useState<AssessmentAuthorization | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,6 +73,10 @@ export default function ScanResultPage() {
         const scanData = await getScan(id);
         if (!mounted) return;
         setScan(scanData);
+        if (!id.startsWith("demo")) {
+          const authorizationData = await getAssessmentAuthorization(id).catch(() => null);
+          if (mounted) setAssessmentAuthorization(authorizationData);
+        }
 
         if (scanData.state === "COMPLETED" || scanData.state === "PARTIAL_FAILED") {
           const diagnosisData = scanData.diagnosis ?? await getScanDiagnosis(id).catch(() => null);
@@ -193,6 +200,26 @@ export default function ScanResultPage() {
             New Scan &rarr;
           </Link>
         </header>
+
+        {assessmentAuthorization && (
+          <section className="rounded-2xl border border-emerald-500/20 bg-[#0b1714] p-6" aria-label="Assessment authorization">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-mono uppercase tracking-wider text-emerald-100/45">Scope &amp; consent record</p>
+                <h2 className="mt-1 text-xl font-semibold text-emerald-100">{assessmentAuthorization.assessment_profile}</h2>
+                <p className="mt-1 text-sm text-emerald-100/55">Authorized by {assessmentAuthorization.actor_id} on {assessmentAuthorization.authorized_at ? new Date(assessmentAuthorization.authorized_at).toLocaleString() : "—"}</p>
+              </div>
+              <div className="rounded-lg border border-emerald-500/20 px-3 py-2 text-right"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Consent hash</p><p className="mt-1 font-mono text-sm text-emerald-300">{assessmentAuthorization.consent_hash ? assessmentAuthorization.consent_hash.slice(0, 8) : "legacy"}</p></div>
+            </div>
+            <div className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+              <div><p className="text-xs text-emerald-100/40">Allowed domains</p><p className="mt-1 text-emerald-100/75">{assessmentAuthorization.allowed_domains.join(", ") || "Target hostname"}</p></div>
+              <div><p className="text-xs text-emerald-100/40">Allowed paths</p><p className="mt-1 text-emerald-100/75">{assessmentAuthorization.allowed_paths.join(", ") || "All paths"}</p></div>
+              <div><p className="text-xs text-emerald-100/40">Excluded paths</p><p className="mt-1 text-emerald-100/75">{assessmentAuthorization.excluded_paths.join(", ") || "None"}</p></div>
+              <div><p className="text-xs text-emerald-100/40">Limits</p><p className="mt-1 text-emerald-100/75">{assessmentAuthorization.max_requests} requests · {assessmentAuthorization.max_concurrency} workers · {assessmentAuthorization.rate_limit_per_host_ms}ms/host</p></div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2 text-xs text-emerald-100/55"><span className="rounded-full border border-emerald-500/20 px-3 py-1">robots: {assessmentAuthorization.robots_override ? "override authorized" : "respected"}</span><span className="rounded-full border border-emerald-500/20 px-3 py-1">authentication: {assessmentAuthorization.authentication_configured ? `${assessmentAuthorization.authentication_type} configured` : "not configured"}</span><span className="rounded-full border border-emerald-500/20 px-3 py-1">policy {assessmentAuthorization.policy_version}</span></div>
+          </section>
+        )}
 
         {!isDemo && <ScanProgress scanId={scan.id} state={scan.state} />}
 

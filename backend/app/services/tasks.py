@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.models.scan import AgentEvent, AgentTask, Scan, Website
 from app.services.accessibility import AccessibilityEngine
+from app.services.assessment import append_audit_event
 from app.services.admission import AdmissionService
 from app.services.ai_synthesis import AISynthesisEngine
 from app.services.api_intelligence import ApiIntelligenceAgent
@@ -29,6 +30,7 @@ from app.services.technology import TechnologyDetectionService
 
 TERMINAL_TASK_STATES = {"SUCCEEDED", "FAILED", "CANCELLED"}
 ACTIVE_SCAN_STATES = {"QUEUED", "VALIDATING", "COLLECTING", "ANALYZING", "SYNTHESIZING", "CANCELLING"}
+PAUSABLE_SCAN_STATES = {"QUEUED", "COLLECTING", "ANALYZING", "SYNTHESIZING"}
 
 TASK_DEFINITIONS = {
     "admission": {"queue": "crawl", "max_retries": 0, "dependencies": []},
@@ -87,6 +89,7 @@ class TaskGraphCoordinator:
         if not scan:
             return
         scan.state = "QUEUED"
+        scan.pause_requested = False
         scan.queued_at = scan.queued_at or utc_now()
         cls._upsert_task(db, scan_id, "admission")
         cls._upsert_task(db, scan_id, "collection", dependencies=["admission"])
@@ -152,7 +155,7 @@ class TaskGraphCoordinator:
     @classmethod
     def dispatch_ready(cls, db: Session, scan_id: UUID) -> None:
         scan = db.query(Scan).filter(Scan.id == scan_id).first()
-        if not scan or scan.cancel_requested:
+        if not scan or scan.cancel_requested or scan.pause_requested or scan.state == "PAUSED":
             return
         now = utc_now()
         tasks = db.query(AgentTask).filter(AgentTask.scan_id == scan_id, AgentTask.status.in_(["QUEUED", "RETRYING"])).order_by(AgentTask.created_at, AgentTask.task_key).all()
@@ -206,22 +209,84 @@ class TaskGraphCoordinator:
         cls.release_queued_scans(db)
 
     @classmethod
+    def pause_scan(cls, db: Session, scan_id: UUID, actor_id: str) -> Scan | None:
+        scan = db.query(Scan).filter(Scan.id == scan_id).first()
+        if not scan:
+            return None
+        if scan.state not in PAUSABLE_SCAN_STATES or scan.cancel_requested:
+            return scan
+        scan.pause_requested = True
+        scan.state = "PAUSED"
+        for task in db.query(AgentTask).filter(
+            AgentTask.scan_id == scan_id,
+            AgentTask.status.in_(["QUEUED", "DISPATCHED", "RETRYING"]),
+        ).all():
+            task.status = "PAUSED"
+            task.updated_at = utc_now()
+            cls._event(db, scan_id, task, "TASK_PAUSED", {})
+        append_audit_event(
+            db,
+            scan_id=scan_id,
+            event_type="SCAN_PAUSED",
+            actor_id=actor_id,
+            payload={"state": scan.state},
+        )
+        db.commit()
+        return scan
+
+    @classmethod
+    def resume_scan(cls, db: Session, scan_id: UUID, actor_id: str) -> Scan | None:
+        scan = db.query(Scan).filter(Scan.id == scan_id).first()
+        if not scan:
+            return None
+        if scan.state != "PAUSED":
+            return scan
+        scan.pause_requested = False
+        scan.state = "QUEUED" if not scan.pages else "ANALYZING"
+        for task in db.query(AgentTask).filter(
+            AgentTask.scan_id == scan_id,
+            AgentTask.status == "PAUSED",
+        ).all():
+            task.status = "QUEUED"
+            task.available_at = utc_now()
+            task.updated_at = utc_now()
+            cls._event(db, scan_id, task, "TASK_RESUMED", {})
+        append_audit_event(
+            db,
+            scan_id=scan_id,
+            event_type="SCAN_RESUMED",
+            actor_id=actor_id,
+            payload={"state": scan.state},
+        )
+        db.commit()
+        cls.release_queued_scans(db)
+        return scan
+
+    @classmethod
     def cancel_scan(cls, db: Session, scan_id: UUID) -> Scan | None:
         scan = db.query(Scan).filter(Scan.id == scan_id).first()
         if not scan:
             return None
         scan.cancel_requested = True
+        scan.pause_requested = False
         running_tasks = db.query(AgentTask).filter(AgentTask.scan_id == scan_id, AgentTask.status == "RUNNING").count()
         if running_tasks:
             scan.state = "CANCELLING"
         else:
             scan.state = "CANCELLED"
             scan.finished_at = utc_now()
-        for task in db.query(AgentTask).filter(AgentTask.scan_id == scan_id, AgentTask.status.in_(["QUEUED", "DISPATCHED", "RETRYING"])).all():
+        for task in db.query(AgentTask).filter(AgentTask.scan_id == scan_id, AgentTask.status.in_(["QUEUED", "DISPATCHED", "RETRYING", "PAUSED"])).all():
             task.status = "CANCELLED"
             task.finished_at = utc_now()
             cls._event(db, scan_id, task, "TASK_CANCELLED", {})
         cls._event(db, scan_id, None, "SCAN_CANCEL_REQUESTED", {})
+        append_audit_event(
+            db,
+            scan_id=scan_id,
+            event_type="SCAN_CANCEL_REQUESTED",
+            actor_id="system",
+            payload={"state": scan.state},
+        )
         db.commit()
         return scan
 
@@ -303,6 +368,12 @@ class TaskRunner:
                 task.finished_at = utc_now()
                 db.commit()
                 TaskGraphCoordinator.after_terminal(db, task.scan_id)
+                return
+            if scan.pause_requested or scan.state == "PAUSED":
+                task.status = "PAUSED"
+                task.updated_at = utc_now()
+                TaskGraphCoordinator._event(db, task.scan_id, task, "TASK_PAUSED", {})
+                db.commit()
                 return
             task.status = "RUNNING"
             task.attempt += 1

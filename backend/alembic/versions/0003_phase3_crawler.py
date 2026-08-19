@@ -44,14 +44,24 @@ def upgrade() -> None:
         op.f("ix_pages_discovered_from_page_id"), "pages", ["discovered_from_page_id"], unique=False
     )
     op.create_index(op.f("ix_pages_status_code"), "pages", ["status_code"], unique=False)
-    op.create_foreign_key(
-        "fk_pages_discovered_from_page_id_pages",
-        "pages",
-        "pages",
-        ["discovered_from_page_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    if op.get_bind().dialect.name == "sqlite":
+        with op.batch_alter_table("pages", recreate="always") as batch_op:
+            batch_op.create_foreign_key(
+                "fk_pages_discovered_from_page_id_pages",
+                "pages",
+                ["discovered_from_page_id"],
+                ["id"],
+                ondelete="SET NULL",
+            )
+    else:
+        op.create_foreign_key(
+            "fk_pages_discovered_from_page_id_pages",
+            "pages",
+            "pages",
+            ["discovered_from_page_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
 
     op.create_table(
         "page_links",
@@ -74,7 +84,11 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_page_links_source_page_id"), table_name="page_links")
     op.drop_table("page_links")
 
-    op.drop_constraint("fk_pages_discovered_from_page_id_pages", "pages", type_="foreignkey")
+    if op.get_bind().dialect.name == "sqlite":
+        with op.batch_alter_table("pages", recreate="always") as batch_op:
+            batch_op.drop_constraint("fk_pages_discovered_from_page_id_pages", type_="foreignkey")
+    else:
+        op.drop_constraint("fk_pages_discovered_from_page_id_pages", "pages", type_="foreignkey")
     op.drop_index(op.f("ix_pages_status_code"), table_name="pages")
     op.drop_index(op.f("ix_pages_discovered_from_page_id"), table_name="pages")
     op.drop_column("pages", "title")

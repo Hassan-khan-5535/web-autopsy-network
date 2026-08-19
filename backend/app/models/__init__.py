@@ -3,6 +3,8 @@
 from app.models.base import Base
 from app.models.scan import (
     AccessibilityFinding,
+    AssessmentAuditEvent,
+    AssessmentAuthorization,
     AIInterpretation,
     AgentEvent,
     AgentTask,
@@ -43,6 +45,8 @@ __all__ = [
     "SecurityFinding",
     "PerformanceMetric",
     "AccessibilityFinding",
+    "AssessmentAuthorization",
+    "AssessmentAuditEvent",
     "ContentFinding",
     "CauseOfDeathDiagnosis",
     "AIInterpretation",

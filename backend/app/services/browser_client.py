@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.models.scan import HTTPResponse, Observation, Resource
 
 from app.services.admission import validate_admission_url
+from app.services.assessment import credentials_headers, get_credentials
 
 logger = logging.getLogger("web_autopsy.browser_client")
 
@@ -35,7 +36,11 @@ class BrowserWorkerClient:
         try:
             response = httpx.post(
                 f"{self.settings.browser_worker_url}/render",
-                json={"url": url, "timeout_ms": 20000},
+                json={
+                    "url": url,
+                    "timeout_ms": 20000,
+                    "headers": credentials_headers(get_credentials(self.db, scan_id)),
+                },
                 timeout=25.0,
             )
             if response.status_code != 200:

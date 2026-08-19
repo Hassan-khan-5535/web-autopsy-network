@@ -622,7 +622,7 @@ class SecurityAnalysisService:
                     subject="Open redirect candidate",
                     statement=(
                         f"A {element.name} on {page.canonical_url} contains redirect-like parameter(s) {', '.join(matches)}. "
-                        "The destination was not followed or validated, so this is not a confirmed open redirect."
+                        "The destination was not followed or validated, so this is not confirmed as an open redirect and is not proof of exploitability."
                     ),
                     classification="INFERRED",
                     confidence=55,

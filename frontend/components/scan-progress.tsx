@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { cancelScan, getScanProgress, type ScanProgressResponse } from "@/lib/api";
+import { cancelScan, getScanProgress, pauseScan, resumeScan, type ScanProgressResponse } from "@/lib/api";
 
 const LABELS: Record<string, string> = {
   admission: "Admission & SSRF validation",
@@ -71,6 +71,7 @@ export function ScanProgress({ scanId, state }: { scanId: string; state: string 
   const [progress, setProgress] = useState<ScanProgressResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [pausing, setPausing] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -169,6 +170,17 @@ export function ScanProgress({ scanId, state }: { scanId: string; state: string 
     try { setProgress(await cancelScan(scanId)); } catch (err: unknown) { setError(err instanceof Error ? err.message : "Cancellation failed"); } finally { setCancelling(false); }
   }
 
+  async function handlePauseResume() {
+    setPausing(true);
+    try {
+      setProgress(await (progress?.state === "PAUSED" ? resumeScan(scanId) : pauseScan(scanId)));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Pause/resume request failed");
+    } finally {
+      setPausing(false);
+    }
+  }
+
   const isTerminal = timing.isTerminal;
   const liveState = progress?.state ?? state;
   const activePhaseIndex = phaseIndex(liveState);
@@ -182,17 +194,17 @@ export function ScanProgress({ scanId, state }: { scanId: string; state: string 
           <h2 className="mt-2 text-xl font-semibold text-cyan-200">{isTerminal ? "Scan Summary" : "Live Scan Progress"}</h2>
           <p className="mt-1 text-sm text-emerald-100/50">Task state is persisted and streamed from the worker graph; downstream tasks wait for their declared dependencies.</p>
         </div>
-        {progress && !isTerminal && <button type="button" onClick={handleCancel} disabled={cancelling || progress.cancel_requested} className="rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-200 hover:bg-red-500/20 disabled:opacity-40">{cancelling ? "Cancelling…" : progress.cancel_requested ? "Cancellation requested" : "Cancel scan"}</button>}
+        {progress && !isTerminal && <div className="flex flex-wrap gap-2"><button type="button" onClick={handlePauseResume} disabled={pausing || progress.cancel_requested} className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-500/20 disabled:opacity-40">{pausing ? "Updating…" : progress.state === "PAUSED" ? "Resume scan" : "Pause scan"}</button><button type="button" onClick={handleCancel} disabled={cancelling || progress.cancel_requested} className="rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-200 hover:bg-red-500/20 disabled:opacity-40">{cancelling ? "Cancelling…" : progress.cancel_requested ? "Cancellation requested" : "Cancel scan"}</button></div>}
       </div>
       <div className="mt-6 rounded-xl border border-cyan-500/15 bg-black/20 p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-[10px] font-mono uppercase tracking-[0.22em] text-cyan-300/60">Current phase</p>
-            <p className="mt-1 text-lg font-semibold text-cyan-100">{liveState === "QUEUED" ? "Queued" : PHASES[activePhaseIndex].label}</p>
+            <p className="mt-1 text-lg font-semibold text-cyan-100">{liveState === "PAUSED" ? "Paused" : liveState === "QUEUED" ? "Queued" : PHASES[activePhaseIndex].label}</p>
           </div>
           <span className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-xs font-mono text-cyan-200">{liveState}</span>
         </div>
-        <p className="mt-1 text-xs text-emerald-100/50">{liveState === "QUEUED" ? "Waiting for a worker slot to begin admission and collection." : PHASES[activePhaseIndex].description}</p>
+        <p className="mt-1 text-xs text-emerald-100/50">{liveState === "PAUSED" ? "The scan is paused. Queued work will remain suspended until resumed." : liveState === "QUEUED" ? "Waiting for a worker slot to begin admission and collection." : PHASES[activePhaseIndex].description}</p>
         <div className="mt-4 grid gap-2 sm:grid-cols-4">
           {PHASES.map((phase, index) => {
             const complete = isTerminal ? index <= 3 : index < activePhaseIndex;

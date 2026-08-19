@@ -10,6 +10,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+JSON_TYPE = sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgresql")
+
 revision: str = "0002_phase2_schema"
 down_revision: Union[str, Sequence[str], None] = "0001_phase1_baseline"
 branch_labels: Union[str, Sequence[str], None] = None
@@ -95,7 +97,7 @@ def upgrade() -> None:
         sa.Column('page_id', sa.UUID(as_uuid=True), nullable=False),
         sa.Column('url', sa.String(length=2048), nullable=True),
         sa.Column('type', sa.String(length=50), nullable=False),
-        sa.Column('attributes', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column('attributes', JSON_TYPE, nullable=True),
         sa.ForeignKeyConstraint(['page_id'], ['pages.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
     )

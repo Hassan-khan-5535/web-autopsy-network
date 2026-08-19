@@ -15,22 +15,44 @@ logger = logging.getLogger("browser_worker")
 app = FastAPI(title="Web Autopsy Browser Worker", version="0.6.0")
 
 PRIVATE_NETWORKS = [
-    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("0.0.0.0/8"),
     ipaddress.ip_network("10.0.0.0/8"),
-    ipaddress.ip_network("172.16.0.0/12"),
-    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("127.0.0.0/8"),
     ipaddress.ip_network("169.254.0.0/16"),
-    ipaddress.ip_network("0.0.0.0/32"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.0.0.0/24"),
+    ipaddress.ip_network("192.0.2.0/24"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("198.18.0.0/15"),
+    ipaddress.ip_network("198.51.100.0/24"),
+    ipaddress.ip_network("203.0.113.0/24"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("240.0.0.0/4"),
+    ipaddress.ip_network("::/128"),
     ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("::ffff:0:0/96"),
+    ipaddress.ip_network("2001:2::/48"),
+    ipaddress.ip_network("2001:10::/28"),
+    ipaddress.ip_network("2001:db8::/32"),
     ipaddress.ip_network("fc00::/7"),
     ipaddress.ip_network("fe80::/10"),
+    ipaddress.ip_network("ff00::/8"),
 ]
 
 
 def is_private_ip(ip_str: str) -> bool:
     try:
         ip = ipaddress.ip_address(ip_str)
-        return any(ip in net for net in PRIVATE_NETWORKS)
+        return (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+            or any(ip in net for net in PRIVATE_NETWORKS)
+        )
     except ValueError:
         return True
 
@@ -58,6 +80,7 @@ def is_url_allowed(url: str) -> bool:
 class RenderRequest(BaseModel):
     url: str
     timeout_ms: int = Field(default=20000, ge=1000, le=60000)
+    headers: dict[str, str] = Field(default_factory=dict)
 
 
 class NetworkRequestItem(BaseModel):
@@ -108,7 +131,8 @@ async def render_page(req: RenderRequest):
             context = await browser.new_context(
                 accept_downloads=False,
                 permissions=[],
-                ignore_https_errors=False
+                ignore_https_errors=False,
+                extra_http_headers=req.headers,
             )
 
             page = await context.new_page()

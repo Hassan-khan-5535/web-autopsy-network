@@ -44,6 +44,8 @@ class Scan(Base):
     max_concurrency: Mapped[int] = mapped_column(Integer, default=2)
     request_delay_ms: Mapped[int] = mapped_column(Integer, default=1000)
     same_domain_mode: Mapped[str] = mapped_column(String(30), default="hostname")
+    assessment_profile: Mapped[str | None] = mapped_column(String(30), nullable=True, default="legacy_passive", index=True)
+    max_requests: Mapped[int | None] = mapped_column(Integer, nullable=True, default=30)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, index=True
     )
@@ -89,10 +91,74 @@ class Scan(Base):
     agent_events: Mapped[list["AgentEvent"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan"
     )
+    assessment_authorization: Mapped[Optional["AssessmentAuthorization"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan", uselist=False
+    )
+    assessment_audit_events: Mapped[list["AssessmentAuditEvent"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan", order_by="AssessmentAuditEvent.sequence_number"
+    )
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    pause_requested: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+
+class AssessmentAuthorization(Base):
+    __tablename__ = "assessment_authorizations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scans.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    authorization_type: Mapped[str] = mapped_column(String(50), default="acknowledged")
+    actor_id: Mapped[str] = mapped_column(String(255), default="anonymous")
+    target_url: Mapped[str] = mapped_column(String(2048))
+    allowed_paths: Mapped[list] = mapped_column(JSON, default=list)
+    excluded_paths: Mapped[list] = mapped_column(JSON, default=list)
+    allowed_domains: Mapped[list] = mapped_column(JSON, default=list)
+    assessment_profile: Mapped[str] = mapped_column(String(30), default="legacy_passive")
+    robots_override: Mapped[bool] = mapped_column(Boolean, default=False)
+    max_depth: Mapped[int] = mapped_column(Integer, default=2)
+    max_pages: Mapped[int] = mapped_column(Integer, default=30)
+    max_requests: Mapped[int] = mapped_column(Integer, default=30)
+    max_concurrency: Mapped[int] = mapped_column(Integer, default=2)
+    rate_limit_per_host_ms: Mapped[int] = mapped_column(Integer, default=1000)
+    test_account_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    auth_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    auth_secret_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    consent_hash: Mapped[str] = mapped_column(String(64))
+    authorized_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    policy_version: Mapped[str] = mapped_column(String(50), default="assessment-v1")
+    scope_json: Mapped[dict] = mapped_column(JSON, default=dict)
+
+    scan: Mapped["Scan"] = relationship(back_populates="assessment_authorization")
+    audit_events: Mapped[list["AssessmentAuditEvent"]] = relationship(
+        back_populates="authorization", cascade="all, delete-orphan", order_by="AssessmentAuditEvent.sequence_number"
+    )
+
+
+class AssessmentAuditEvent(Base):
+    __tablename__ = "assessment_audit_events"
+    __table_args__ = (UniqueConstraint("scan_id", "sequence_number", name="uq_assessment_audit_scan_sequence"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scans.id", ondelete="CASCADE"), index=True
+    )
+    authorization_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("assessment_authorizations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    sequence_number: Mapped[int] = mapped_column(Integer)
+    event_type: Mapped[str] = mapped_column(String(80), index=True)
+    actor_id: Mapped[str] = mapped_column(String(255), default="system")
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    previous_hash: Mapped[str] = mapped_column(String(64))
+    event_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+    scan: Mapped["Scan"] = relationship(back_populates="assessment_audit_events")
+    authorization: Mapped[Optional["AssessmentAuthorization"]] = relationship(back_populates="audit_events")
 
 
 class Page(Base):

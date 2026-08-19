@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import time
+from datetime import UTC, datetime
+from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -14,6 +17,8 @@ from app.api.deps import get_db
 from app.core.config import get_settings
 from app.models.scan import (
     AccessibilityFinding,
+    AssessmentAuditEvent,
+    AssessmentAuthorization,
     AIInterpretation,
     AgentEvent,
     AgentTask,
@@ -34,6 +39,19 @@ from app.models.scan import (
 )
 from app.services.accessibility import AccessibilityEngine
 from app.services.admission import AdmissionError, AdmissionService
+from app.services.assessment import (
+    AssessmentPolicyError,
+    append_audit_event,
+    authorization_public,
+    consent_hash,
+    encrypt_secret,
+    normalize_authentication,
+    normalize_domains,
+    normalize_paths,
+    hostname_allowed,
+    path_allowed,
+    profile_policy,
+)
 from app.services.ai_synthesis import AIDoctorEngine, AISynthesisEngine
 from app.services.api_intelligence import ApiIntelligenceAgent
 from app.services.content import ContentEngine
@@ -50,11 +68,30 @@ from app.services.technology import TechnologyDetectionService
 router = APIRouter()
 
 
+class AuthenticationConfig(BaseModel):
+    type: Literal["cookie", "header", "basic"]
+    name: str | None = None
+    value: str | None = None
+    username: str | None = None
+    password: str | None = None
+
+
 class ScanCreate(BaseModel):
     url: str
     authorization_acknowledged: bool
     max_depth: int | None = Field(default=None, ge=0)
     max_pages: int | None = Field(default=None, ge=1)
+    assessment_profile: Literal["safe", "normal", "aggressive"] = "safe"
+    allowed_paths: list[str] = Field(default_factory=list)
+    excluded_paths: list[str] = Field(default_factory=list)
+    allowed_domains: list[str] = Field(default_factory=list)
+    max_requests: int | None = Field(default=None, ge=1)
+    max_concurrency: int | None = Field(default=None, ge=1)
+    rate_limit_per_host_ms: int | None = Field(default=None, ge=100)
+    robots_override: bool = False
+    authentication: AuthenticationConfig | None = None
+    test_account_ref: str | None = Field(default=None, max_length=255)
+    expires_at: datetime | None = None
 
 
 class ScanCompareRequest(BaseModel):
@@ -66,10 +103,16 @@ class ScanResponse(BaseModel):
     id: UUID
     website_id: UUID
     state: str
+    status: str | None = None
     requested_url: str
     error_reason: str | None
     max_depth: int
     max_pages: int
+    max_concurrency: int | None = None
+    request_delay_ms: int | None = None
+    same_domain_mode: str | None = None
+    assessment_profile: str | None = None
+    max_requests: int | None = None
     diagnosis: dict[str, object] | None = None
 
 
@@ -93,10 +136,23 @@ def _scan_response(scan: Scan) -> dict[str, object]:
         "id": scan.id,
         "website_id": scan.website_id,
         "state": scan.state,
+        "status": (
+            "queued" if scan.state == "QUEUED" else
+            "paused" if scan.state == "PAUSED" else
+            "completed" if scan.state == "COMPLETED" else
+            "cancelled" if scan.state == "CANCELLED" else
+            "failed" if scan.state in {"FAILED", "PARTIAL_FAILED"} else
+            "running"
+        ),
         "requested_url": scan.requested_url,
         "error_reason": scan.error_reason,
         "max_depth": scan.max_depth,
         "max_pages": scan.max_pages,
+        "max_concurrency": scan.max_concurrency,
+        "request_delay_ms": scan.request_delay_ms,
+        "same_domain_mode": scan.same_domain_mode,
+        "assessment_profile": scan.assessment_profile or "legacy_passive",
+        "max_requests": scan.max_requests or scan.max_pages,
         "diagnosis": _diagnosis_response(scan),
     }
 
@@ -113,25 +169,54 @@ def compare_scans(req: ScanCompareRequest, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=ScanResponse, status_code=202)
-def create_scan(scan_req: ScanCreate, db: Session = Depends(get_db)):
+def create_scan(
+    scan_req: ScanCreate,
+    db: Session = Depends(get_db),
+    actor_id: str | None = Header(default=None, alias="X-Actor-ID"),
+):
     if not scan_req.authorization_acknowledged:
         raise HTTPException(status_code=422, detail="Authorization must be acknowledged.")
 
     settings = get_settings()
-    parsed = urlsplit(scan_req.url)
-    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
-        raise HTTPException(status_code=422, detail="URL must use http/https and contain a hostname.")
-    canonical_url = scan_req.url.strip()
-    hostname = parsed.hostname
+    actor_value = actor_id.strip() if isinstance(actor_id, str) and actor_id.strip() else "anonymous"
+    try:
+        canonical_url = AdmissionService.normalize_url(scan_req.url)
+        parsed = urlsplit(canonical_url)
+        hostname = (parsed.hostname or "").lower().rstrip(".")
+        allowed_domains = normalize_domains(scan_req.allowed_domains) or [hostname]
+        allowed_paths = normalize_paths(scan_req.allowed_paths)
+        excluded_paths = normalize_paths(scan_req.excluded_paths)
+        if not hostname_allowed(hostname, allowed_domains):
+            raise AssessmentPolicyError("The target hostname must be included in allowed_domains.")
+        if scan_req.assessment_profile == "aggressive" and not scan_req.allowed_domains:
+            raise AssessmentPolicyError("Aggressive assessment requires explicit allowed-domain confirmation.")
+        if not path_allowed(canonical_url, allowed_paths, excluded_paths):
+            raise AssessmentPolicyError("The target URL is outside the allowed/excluded path scope.")
+        policy = profile_policy(
+            scan_req.assessment_profile,
+            max_depth=scan_req.max_depth,
+            max_requests=scan_req.max_requests,
+            max_concurrency=scan_req.max_concurrency,
+            rate_limit_per_host_ms=scan_req.rate_limit_per_host_ms,
+        )
+        if scan_req.robots_override and scan_req.assessment_profile not in {
+            item.strip() for item in settings.assessment_robots_override_profiles.split(",") if item.strip()
+        }:
+            raise AssessmentPolicyError(
+                "robots_override is not permitted for this assessment profile by deployment policy."
+            )
+        auth_type, auth_payload = normalize_authentication(
+            scan_req.authentication.model_dump(exclude_none=True) if scan_req.authentication else None
+        )
+    except (AdmissionError, AssessmentPolicyError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    max_depth = min(
-        scan_req.max_depth if scan_req.max_depth is not None else settings.crawl_default_max_depth,
-        settings.crawl_max_depth_cap,
-    )
     max_pages = min(
-        scan_req.max_pages if scan_req.max_pages is not None else settings.crawl_default_max_pages,
-        settings.crawl_max_pages_cap,
+        scan_req.max_pages if scan_req.max_pages is not None else policy["max_requests"],
+        policy["max_requests"],
     )
+    if scan_req.assessment_profile == "safe":
+        max_pages = min(max_pages, settings.assessment_safe_max_requests)
 
     website = (
         db.query(Website)
@@ -141,20 +226,88 @@ def create_scan(scan_req: ScanCreate, db: Session = Depends(get_db)):
     if not website:
         website = Website(tenant_id="default", canonical_origin=hostname)
         db.add(website)
-        db.commit()
-        db.refresh(website)
+        db.flush()
 
     scan = Scan(
         website_id=website.id,
         state="QUEUED",
         requested_url=canonical_url,
-        max_depth=max_depth,
+        max_depth=policy["max_depth"],
         max_pages=max_pages,
-        max_concurrency=min(settings.crawl_default_concurrency, settings.crawl_max_concurrency_cap),
-        request_delay_ms=max(settings.crawl_default_delay_ms, settings.crawl_min_delay_ms),
+        max_concurrency=policy["max_concurrency"],
+        request_delay_ms=policy["rate_limit_per_host_ms"],
         same_domain_mode=settings.crawl_same_domain_mode,
+        assessment_profile=scan_req.assessment_profile,
+        max_requests=policy["max_requests"],
     )
     db.add(scan)
+    db.flush()
+
+    authorized_at = datetime.now(UTC)
+    auth_fingerprint = hashlib.sha256(
+        json.dumps(auth_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()[:16] if auth_payload else None
+    scope_json = {
+        "target_url": canonical_url,
+        "allowed_domains": allowed_domains,
+        "allowed_paths": allowed_paths,
+        "excluded_paths": excluded_paths,
+        "assessment_profile": scan_req.assessment_profile,
+        "robots_override": scan_req.robots_override,
+        "authentication_type": auth_type,
+        "authentication_secret_fingerprint": auth_fingerprint,
+        "max_depth": policy["max_depth"],
+        "max_requests": policy["max_requests"],
+        "max_concurrency": policy["max_concurrency"],
+        "rate_limit_per_host_ms": policy["rate_limit_per_host_ms"],
+    }
+    consent_payload = {
+        **scope_json,
+        "actor_id": actor_value,
+        "test_account_ref": scan_req.test_account_ref,
+        "authorized_at": authorized_at.isoformat(),
+        "expires_at": scan_req.expires_at.isoformat() if scan_req.expires_at else None,
+        "policy_version": settings.assessment_policy_version,
+    }
+    authorization = AssessmentAuthorization(
+        scan_id=scan.id,
+        authorization_type="acknowledged" if auth_type == "none" else f"acknowledged_with_{auth_type}",
+        actor_id=actor_value,
+        target_url=canonical_url,
+        allowed_paths=allowed_paths,
+        excluded_paths=excluded_paths,
+        allowed_domains=allowed_domains,
+        assessment_profile=scan_req.assessment_profile,
+        robots_override=scan_req.robots_override,
+        max_depth=policy["max_depth"],
+        max_pages=max_pages,
+        max_requests=policy["max_requests"],
+        max_concurrency=policy["max_concurrency"],
+        rate_limit_per_host_ms=policy["rate_limit_per_host_ms"],
+        test_account_ref=scan_req.test_account_ref,
+        auth_secret_encrypted=encrypt_secret(auth_payload) if auth_payload else None,
+        auth_secret_fingerprint=auth_fingerprint,
+        consent_hash=consent_hash(consent_payload),
+        authorized_at=authorized_at,
+        expires_at=scan_req.expires_at,
+        policy_version=settings.assessment_policy_version,
+        scope_json=scope_json,
+    )
+    db.add(authorization)
+    db.flush()
+    append_audit_event(
+        db,
+        scan_id=scan.id,
+        authorization_id=authorization.id,
+        event_type="AUTHORIZATION_RECORDED",
+        actor_id=actor_value,
+        payload={
+            "target_url": canonical_url,
+            "assessment_profile": scan_req.assessment_profile,
+            "scope": scope_json,
+            "consent_hash": authorization.consent_hash,
+        },
+    )
     db.commit()
     db.refresh(scan)
 
@@ -162,6 +315,7 @@ def create_scan(scan_req: ScanCreate, db: Session = Depends(get_db)):
     TaskGraphCoordinator.initialize_scan(db, scan.id)
     db.refresh(scan)
     return _scan_response(scan)
+
 
 
 def _progress_payload(scan_id: UUID, db: Session) -> dict[str, object]:
@@ -182,6 +336,14 @@ def _progress_payload(scan_id: UUID, db: Session) -> dict[str, object]:
     return {
         "scan_id": str(scan_id),
         "state": scan.state,
+        "status": (
+            "queued" if scan.state == "QUEUED" else
+            "paused" if scan.state == "PAUSED" else
+            "completed" if scan.state == "COMPLETED" else
+            "cancelled" if scan.state == "CANCELLED" else
+            "failed" if scan.state in {"FAILED", "PARTIAL_FAILED"} else
+            "running"
+        ),
         "cancel_requested": scan.cancel_requested,
         "percent": percent,
         "completed_tasks": completed,
@@ -822,3 +984,85 @@ def get_page_rendered(scan_id: UUID, page_id: UUID, db: Session = Depends(get_db
             if o.category == "BROWSER_CONSOLE"
         ],
     }
+
+
+@router.get("/{scan_id}/assessment/authorization")
+def get_assessment_authorization(scan_id: UUID, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    authorization = db.query(AssessmentAuthorization).filter(AssessmentAuthorization.scan_id == scan_id).first()
+    if authorization:
+        return authorization_public(authorization)
+    hostname = (urlsplit(scan.requested_url).hostname or "").lower().rstrip(".")
+    return {
+        "id": None,
+        "scan_id": str(scan.id),
+        "authorization_type": "legacy_passive",
+        "actor_id": "legacy",
+        "target_url": scan.requested_url,
+        "allowed_paths": [],
+        "excluded_paths": [],
+        "allowed_domains": [hostname] if hostname else [],
+        "assessment_profile": "legacy_passive",
+        "robots_override": False,
+        "max_depth": scan.max_depth,
+        "max_pages": scan.max_pages,
+        "max_requests": scan.max_requests or scan.max_pages,
+        "max_concurrency": scan.max_concurrency,
+        "rate_limit_per_host_ms": scan.request_delay_ms,
+        "test_account_ref": None,
+        "authentication_type": "none",
+        "authentication_configured": False,
+        "secret_fingerprint": None,
+        "consent_hash": None,
+        "authorized_at": scan.created_at.isoformat() if scan.created_at else None,
+        "expires_at": None,
+        "policy_version": "legacy",
+        "scope_json": {"legacy": True},
+    }
+
+
+@router.get("/{scan_id}/assessment/audit")
+def get_assessment_audit(scan_id: UUID, db: Session = Depends(get_db)):
+    if not db.query(Scan).filter(Scan.id == scan_id).first():
+        raise HTTPException(status_code=404, detail="Scan not found")
+    events = (
+        db.query(AssessmentAuditEvent)
+        .filter(AssessmentAuditEvent.scan_id == scan_id)
+        .order_by(AssessmentAuditEvent.sequence_number.asc())
+        .all()
+    )
+    return [
+        {
+            "id": str(event.id),
+            "scan_id": str(event.scan_id),
+            "authorization_id": str(event.authorization_id) if event.authorization_id else None,
+            "sequence_number": event.sequence_number,
+            "event_type": event.event_type,
+            "actor_id": event.actor_id,
+            "payload": event.payload or {},
+            "previous_hash": event.previous_hash,
+            "event_hash": event.event_hash,
+            "created_at": event.created_at.isoformat() if event.created_at else None,
+        }
+        for event in events
+    ]
+
+
+@router.post("/{scan_id}/pause")
+def pause_scan(scan_id: UUID, db: Session = Depends(get_db), actor_id: str | None = Header(default=None, alias="X-Actor-ID")):
+    from app.services.tasks import TaskGraphCoordinator
+    scan = TaskGraphCoordinator.pause_scan(db, scan_id, actor_id or "anonymous")
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return _progress_payload(scan_id, db)
+
+
+@router.post("/{scan_id}/resume")
+def resume_scan(scan_id: UUID, db: Session = Depends(get_db), actor_id: str | None = Header(default=None, alias="X-Actor-ID")):
+    from app.services.tasks import TaskGraphCoordinator
+    scan = TaskGraphCoordinator.resume_scan(db, scan_id, actor_id or "anonymous")
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return _progress_payload(scan_id, db)

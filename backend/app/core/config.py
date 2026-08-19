@@ -24,6 +24,25 @@ class Settings(BaseSettings):
     crawl_min_delay_ms: int = 100
     crawl_same_domain_mode: str = "hostname"
 
+    # Extension 1: bounded assessment policy. Safe defaults are intentionally conservative.
+    assessment_policy_version: str = "assessment-v1"
+    assessment_encryption_key: str | None = None
+    assessment_allow_private_targets: bool = False
+    assessment_private_target_allowlist: str = ""
+    assessment_robots_override_profiles: str = "aggressive"
+    assessment_safe_max_depth: int = 2
+    assessment_safe_max_requests: int = 30
+    assessment_safe_max_concurrency: int = 2
+    assessment_safe_min_rate_limit_ms: int = 1000
+    assessment_normal_max_depth: int = 3
+    assessment_normal_max_requests: int = 50
+    assessment_normal_max_concurrency: int = 3
+    assessment_normal_min_rate_limit_ms: int = 500
+    assessment_aggressive_max_depth: int = 5
+    assessment_aggressive_max_requests: int = 100
+    assessment_aggressive_max_concurrency: int = 4
+    assessment_aggressive_min_rate_limit_ms: int = 250
+
     queue_backend_url: str = "redis://localhost:6379/0"
     queue_mode: str = "auto"
     max_concurrent_scans: int = 5

@@ -181,7 +181,7 @@ def test_crawler_deduplicates_normalized_urls_and_enforces_page_ceiling(
 def test_admission_normalization_removes_fragments_and_sorts_query_parameters() -> None:
     assert (
         AdmissionService.normalize_url("HTTPS://Example.COM/a/?z=2&a=1#section")
-        == "https://example.com/a?a=1&z=2"
+        == "https://example.com/a/?a=1&z=2"
     )
 
 

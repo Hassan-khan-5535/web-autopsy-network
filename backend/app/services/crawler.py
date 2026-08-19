@@ -6,6 +6,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from threading import Lock
 from typing import Any
+
+from app.services.assessment import credentials_headers, get_authorization, get_credentials, hostname_allowed, path_allowed
 from urllib.parse import urljoin, urlsplit
 from urllib.robotparser import RobotFileParser
 from uuid import UUID
@@ -36,15 +38,16 @@ class RequestRateLimiter:
     def __init__(self, delay_ms: int) -> None:
         self.delay_seconds = max(delay_ms, 0) / 1000
         self._lock = Lock()
-        self._last_request_at = 0.0
+        self._last_request_at: dict[str, float] = {}
 
-    def wait(self) -> None:
+    def wait(self, hostname: str) -> None:
+        host = hostname.lower().rstrip(".")
         with self._lock:
             now = time.monotonic()
-            remaining = self.delay_seconds - (now - self._last_request_at)
+            remaining = self.delay_seconds - (now - self._last_request_at.get(host, 0.0))
             if remaining > 0:
                 time.sleep(remaining)
-            self._last_request_at = time.monotonic()
+            self._last_request_at[host] = time.monotonic()
 
 
 class CrawlerService:
@@ -61,7 +64,25 @@ class CrawlerService:
         self.scan = scan
         self.seed_url = seed_url
         self.same_domain_mode = scan.same_domain_mode or settings.crawl_same_domain_mode
-        self.rate_limiter = RequestRateLimiter(scan.request_delay_ms)
+        self.authorization = get_authorization(db, scan.id)
+        self.assessment_profile = (self.authorization.assessment_profile if self.authorization else None) or scan.assessment_profile or "legacy_passive"
+        self.allowed_domains = list(self.authorization.allowed_domains or []) if self.authorization else []
+        self.allowed_paths = list(self.authorization.allowed_paths or []) if self.authorization else []
+        self.excluded_paths = list(self.authorization.excluded_paths or []) if self.authorization else []
+        self.max_requests = int((self.authorization.max_requests if self.authorization else None) or scan.max_requests or scan.max_pages)
+        self.request_count = 0
+        self.request_count_lock = Lock()
+        self.auth_headers = credentials_headers(get_credentials(db, scan.id))
+        self.rate_limiter = RequestRateLimiter(
+            self.authorization.rate_limit_per_host_ms if self.authorization else scan.request_delay_ms
+        )
+        settings = get_settings()
+        allowed_override_profiles = {item.strip() for item in settings.assessment_robots_override_profiles.split(",") if item.strip()}
+        self.robots_override = bool(
+            self.authorization
+            and self.authorization.robots_override
+            and self.assessment_profile in allowed_override_profiles
+        )
         self.robots: dict[str, RobotFileParser | None] = {}
         self.robots_errors: set[str] = set()
 
@@ -70,8 +91,10 @@ class CrawlerService:
         self.db.commit()
 
         try:
-            seed_url, _ = AdmissionService.validate_and_resolve(self.seed_url)
+            seed_url, _ = self._validate_and_resolve(self.seed_url)
             domain_root = seed_url
+            if not self._in_scope(seed_url):
+                raise AdmissionError("Seed URL is outside the recorded assessment scope.")
             queue: deque[tuple[str, int, UUID | None]] = deque([(seed_url, 0, None)])
             visited: set[str] = {seed_url}
             scheduled_pages = 0
@@ -86,11 +109,11 @@ class CrawlerService:
                     candidate_url, depth, parent_page_id = queue.popleft()
                     if depth > self.scan.max_depth:
                         continue
-                    if not self._is_same_domain(domain_root, candidate_url):
+                    if not self._in_scope(candidate_url):
                         self._observe(
                             "CRAWL_POLICY",
                             candidate_url,
-                            "External-domain URL was recorded but not fetched.",
+                            "URL was outside the recorded allowed-domain/path scope and was not fetched.",
                         )
                         continue
                     if not self._robots_allowed(candidate_url):
@@ -148,7 +171,7 @@ class CrawlerService:
                                 # the server-enforced fetched-page ceiling.
                                 continue
                             try:
-                                admitted_url, _ = AdmissionService.validate_and_resolve(target_url)
+                                admitted_url, _ = self._validate_and_resolve(target_url)
                             except AdmissionError as exc:
                                 self._observe(
                                     "CRAWL_ADMISSION",
@@ -156,11 +179,11 @@ class CrawlerService:
                                     f"Discovered URL blocked before fetch: {exc}",
                                 )
                                 continue
-                            if not self._is_same_domain(domain_root, admitted_url):
+                            if not self._in_scope(admitted_url):
                                 self._observe(
                                     "CRAWL_POLICY",
                                     admitted_url,
-                                    "External-domain URL was recorded but not fetched.",
+                                    "Discovered URL was outside the recorded allowed-domain/path scope and was not fetched.",
                                 )
                                 continue
                             queue.append((admitted_url, next_depth, page.id))
@@ -176,7 +199,7 @@ class CrawlerService:
             self._observe(
                 "CRAWL_SUMMARY",
                 self.seed_url,
-                f"Fetched {scheduled_pages} page(s) with max depth {self.scan.max_depth}.",
+                f"Fetched {scheduled_pages} page(s), consumed {self.request_count} request slot(s), with max depth {self.scan.max_depth}.",
             )
             self.scan.state = "COMPLETED"
             self.db.commit()
@@ -185,10 +208,44 @@ class CrawlerService:
             self.scan.error_reason = str(exc)
             self.db.commit()
 
+    def _validate_and_resolve(self, url: str) -> tuple[str, str]:
+        kwargs = {
+            "assessment_profile": self.assessment_profile if self.assessment_profile in {"safe", "normal", "aggressive"} else None,
+            "explicit_allowlist": bool(self.allowed_domains),
+        }
+        try:
+            return AdmissionService.validate_and_resolve(url, **kwargs)
+        except TypeError as exc:
+            if "unexpected keyword argument" not in str(exc):
+                raise
+            return AdmissionService.validate_and_resolve(url)
+
     def _is_same_domain(self, domain_root: str, candidate_url: str) -> bool:
         return AdmissionService.same_domain(domain_root, candidate_url, self.same_domain_mode)
 
+    def _in_scope(self, url: str) -> bool:
+        if self.allowed_domains:
+            hostname = (urlsplit(url).hostname or "").lower().rstrip(".")
+            if not hostname_allowed(hostname, self.allowed_domains):
+                return False
+        return path_allowed(url, self.allowed_paths, self.excluded_paths)
+
+    def _try_consume_request(self, url: str) -> bool:
+        with self.request_count_lock:
+            if self.request_count >= self.max_requests:
+                self._observe(
+                    "CRAWL_LIMIT",
+                    url,
+                    f"Maximum request budget reached: {self.max_requests}.",
+                )
+                return False
+            self.request_count += 1
+            return True
+
     def _robots_allowed(self, url: str) -> bool:
+        if self.robots_override:
+            self._observe("ROBOTS", url, "robots.txt override was explicitly authorized by deployment policy.")
+            return True
         parsed = urlsplit(url)
         hostname = (parsed.hostname or "").lower()
         if hostname in self.robots:
@@ -197,19 +254,24 @@ class CrawlerService:
 
         robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
         try:
-            admitted_robots_url, _ = AdmissionService.validate_and_resolve(robots_url)
-            self.rate_limiter.wait()
+            admitted_robots_url, _ = self._validate_and_resolve(robots_url)
+            if not self._try_consume_request(admitted_robots_url):
+                return False
+            self.rate_limiter.wait(hostname)
             with httpx.Client(
                 timeout=self.TIMEOUT,
                 follow_redirects=False,
-                headers={"User-Agent": self.USER_AGENT},
+                headers={"User-Agent": self.USER_AGENT, **self.auth_headers},
             ) as client:
                 response = client.get(admitted_robots_url)
                 if 300 <= response.status_code < 400 and response.headers.get("location"):
                     redirect_url = urljoin(admitted_robots_url, response.headers["location"])
-                    redirect_url, _ = AdmissionService.validate_and_resolve(redirect_url)
+                    redirect_url, _ = self._validate_and_resolve(redirect_url)
                     if not self._is_same_domain(url, redirect_url):
                         raise AdmissionError("robots.txt redirect leaves the crawl domain")
+                    if not self._try_consume_request(redirect_url):
+                        return False
+                    self.rate_limiter.wait(hostname)
                     response = client.get(redirect_url)
             parser = RobotFileParser()
             parser.set_url(admitted_robots_url)
@@ -238,49 +300,64 @@ class CrawlerService:
             return True
 
     def _fetch_page(self, requested_url: str, domain_root: str) -> FetchResult:
-        self.rate_limiter.wait()
+        if not self._try_consume_request(requested_url):
+            return FetchResult(
+                requested_url=requested_url,
+                final_url=requested_url,
+                status_code=None,
+                content_type=None,
+                elapsed_ms=0.0,
+                headers=[],
+                body="",
+                redirects=[],
+                error=f"Maximum request budget reached: {self.max_requests}",
+            )
+        self.rate_limiter.wait(urlsplit(requested_url).hostname or "")
         current_url = requested_url
         redirects: list[tuple[str, str]] = []
         started_at = time.perf_counter()
-
         try:
-            with httpx.Client(
-                timeout=self.TIMEOUT,
-                follow_redirects=False,
-                headers={
-                    "User-Agent": self.USER_AGENT,
-                    "Accept": "text/html,application/xhtml+xml",
-                },
-            ) as client:
-                for _ in range(self.MAX_REDIRECTS + 1):
-                    response = client.get(current_url)
-                    if 300 <= response.status_code < 400 and response.headers.get("location"):
-                        redirect_url = urljoin(current_url, response.headers["location"])
-                        redirect_url, _ = AdmissionService.validate_and_resolve(redirect_url)
-                        if not self._is_same_domain(domain_root, redirect_url):
-                            raise AdmissionError(
-                                "Redirect leaves the crawl domain and was not fetched."
-                            )
-                        redirects.append((current_url, redirect_url))
-                        current_url = redirect_url
-                        continue
-
-                    content_type = response.headers.get("content-type")
-                    body = response.text if content_type and "html" in content_type.lower() else ""
-                    if len(body.encode("utf-8", errors="ignore")) > self.MAX_BODY_BYTES:
-                        body = body.encode("utf-8", errors="ignore")[: self.MAX_BODY_BYTES].decode(
-                            "utf-8", errors="ignore"
-                        )
-                    return FetchResult(
-                        requested_url=requested_url,
-                        final_url=AdmissionService.normalize_url(str(response.url)),
-                        status_code=response.status_code,
-                        content_type=content_type,
-                        elapsed_ms=(time.perf_counter() - started_at) * 1000,
-                        headers=list(response.headers.multi_items()),
-                        body=body,
-                        redirects=redirects,
+            for _ in range(self.MAX_REDIRECTS + 1):
+                with httpx.Client(
+                    timeout=self.TIMEOUT,
+                    follow_redirects=False,
+                    headers={
+                        "User-Agent": self.USER_AGENT,
+                        "Accept": "text/html,application/xhtml+xml",
+                        **self.auth_headers,
+                    },
+                ) as request_client:
+                    response = request_client.get(current_url)
+                if 300 <= response.status_code < 400 and response.headers.get("location"):
+                    redirect_url = urljoin(current_url, response.headers["location"])
+                    redirect_url, _ = self._validate_and_resolve(redirect_url)
+                    if not self._is_same_domain(domain_root, redirect_url) or not self._in_scope(redirect_url):
+                        raise AdmissionError("Redirect leaves the allowed crawl scope and was not fetched.")
+                    if not self._try_consume_request(redirect_url):
+                        raise AdmissionError("Maximum request budget reached.")
+                    self.rate_limiter.wait(urlsplit(redirect_url).hostname or "")
+                    redirects.append((current_url, redirect_url))
+                    current_url = redirect_url
+                    continue
+                content_type = response.headers.get("content-type")
+                body = response.text if content_type and "html" in content_type.lower() else ""
+                if len(body.encode("utf-8", errors="ignore")) > self.MAX_BODY_BYTES:
+                    body = body.encode("utf-8", errors="ignore")[: self.MAX_BODY_BYTES].decode(
+                        "utf-8", errors="ignore"
                     )
+                final_url = AdmissionService.normalize_url(str(response.url))
+                if not self._in_scope(final_url):
+                    raise AdmissionError("Response final URL is outside the allowed crawl scope.")
+                return FetchResult(
+                    requested_url=requested_url,
+                    final_url=final_url,
+                    status_code=response.status_code,
+                    content_type=content_type,
+                    elapsed_ms=(time.perf_counter() - started_at) * 1000,
+                    headers=list(response.headers.multi_items()),
+                    body=body,
+                    redirects=redirects,
+                )
             raise AdmissionError(f"Exceeded maximum redirects ({self.MAX_REDIRECTS})")
         except (AdmissionError, httpx.RequestError, UnicodeError) as exc:
             return FetchResult(
@@ -294,6 +371,7 @@ class CrawlerService:
                 redirects=redirects,
                 error=str(exc),
             )
+
 
     def _persist_page_result(
         self, page: Page, result: FetchResult, domain_root: str
