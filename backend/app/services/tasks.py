@@ -267,7 +267,7 @@ class TaskGraphCoordinator:
         event_keys = {item.event_key for item in db.query(AgentEvent).filter(AgentEvent.scan_id == scan_id, AgentEvent.event_type == OUTPUT_READY, AgentEvent.event_key.is_not(None)).all()}
         active_by_queue: dict[str, int] = {}
         for active in task_map.values():
-            if active.status in {"DISPATCHED", "RUNNING", "RETRYING"}:
+            if active.status in {"DISPATCHED", "RUNNING"}:
                 active_by_queue[active.queue_name] = active_by_queue.get(active.queue_name, 0) + 1
         for task in tasks:
             available_at = as_utc(task.available_at)
@@ -385,6 +385,7 @@ class TaskGraphCoordinator:
             payload={"state": scan.state},
         )
         db.commit()
+        cls.dispatch_ready(db, scan_id)
         cls.release_queued_scans(db)
         return scan
 
