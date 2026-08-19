@@ -89,6 +89,7 @@ class ReconAgent:
         self.crawler = CrawlerService(self.db, self.scan, self.scan.requested_url)
         self._asset_cache: dict[str, ReconAsset] = {}
         self._endpoint_cache: dict[str, ReconEndpoint] = {}
+        self._parameter_cache: dict[str, ReconParameter] = {}
 
     def run(self) -> dict[str, Any]:
         self._clear_previous_results()
@@ -505,8 +506,12 @@ class ReconAgent:
     def _record_parameter(self, name: str, location: str, source: str, endpoint: ReconEndpoint | None, page_id: UUID | None, example_value: Any, confidence: float, evidence: list[str], identity: str | None = None) -> ReconParameter:
         endpoint_key = str(endpoint.id) if endpoint else "-"
         dedupe = self._hash_key("parameter", name.lower(), location, endpoint_key, str(page_id or "-"), identity or source)
+        cached = self._parameter_cache.get(dedupe)
+        if cached is not None:
+            return cached
         existing = self.db.query(ReconParameter).filter(ReconParameter.scan_id == self.scan_id, ReconParameter.dedupe_key == dedupe).first()
         if existing:
+            self._parameter_cache[dedupe] = existing
             return existing
         parameter = ReconParameter(
             scan_id=self.scan_id,
@@ -524,6 +529,7 @@ class ReconAgent:
             dedupe_key=dedupe,
         )
         self.db.add(parameter)
+        self._parameter_cache[dedupe] = parameter
         return parameter
 
     def _record_asset(self, asset_type: str, value: str, source: str, *, classification: str, confidence: float, attributes: dict[str, Any] | None = None, evidence: list[str] | None = None, hostname: str | None = None, scope_status: str | None = None) -> ReconAsset:

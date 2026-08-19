@@ -99,6 +99,23 @@ def test_recon_normalizes_public_sources_and_existing_evidence(db, monkeypatch):
     assert db.query(ReconEndpoint).filter_by(scan_id=scan.id).count() == len(endpoints)
 
 
+def test_recon_deduplicates_repeated_pending_parameters(db):
+    scan = _scan(db)
+    agent = ReconAgent(db, scan.id)
+    first = agent._record_parameter(
+        "id", "query", "query_string", None, None, "1", 0.90,
+        ["Observed query string"], identity="https://example.com/?id=1",
+    )
+    second = agent._record_parameter(
+        "id", "query", "query_string", None, None, "1", 0.90,
+        ["Observed query string"], identity="https://example.com/?id=1",
+    )
+    db.commit()
+
+    assert first is second
+    assert db.query(ReconParameter).filter_by(scan_id=scan.id).count() == 1
+
+
 def test_recon_scope_blocks_out_of_scope_active_safe_candidates(db, monkeypatch):
     scan = _scan(db, mode="active_safe", allowed_domains=["example.com"], allowed_paths=["/docs"])
     db.commit()

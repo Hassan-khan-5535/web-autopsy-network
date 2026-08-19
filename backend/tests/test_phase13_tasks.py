@@ -234,3 +234,49 @@ def test_after_collection_includes_report_agent_after_synthesis(db):
     assert report.dependency_keys == ["synthesis"]
     assert report.event_requirements == [output_event_key("synthesis")]
     assert synthesis.dependency_keys == ["diagnosis"]
+
+
+def test_failed_dependency_is_never_dispatch_ready(db, monkeypatch):
+    dispatcher = FakeDispatcher()
+    monkeypatch.setattr("app.services.tasks.get_dispatcher", lambda: dispatcher)
+    scan = make_scan(db, "failed-release.example")
+    scan.state = "ANALYZING"
+    prerequisite = TaskGraphCoordinator._upsert_task(db, scan.id, "configuration", dependencies=[])
+    dependent = TaskGraphCoordinator._upsert_task(db, scan.id, "vulnerability", dependencies=["configuration"])
+    prerequisite.status = "FAILED"
+    prerequisite.finished_at = datetime.now(UTC)
+    prerequisite.error_reason = "fixture failure"
+    db.commit()
+
+    TaskGraphCoordinator.dispatch_ready(db, scan.id)
+    db.refresh(dependent)
+
+    assert dependent.status == "FAILED"
+    assert dispatcher.dispatched == []
+
+
+def test_failed_dependency_propagates_to_partial_failed_scan(db, monkeypatch):
+    dispatcher = FakeDispatcher()
+    monkeypatch.setattr("app.services.tasks.get_dispatcher", lambda: dispatcher)
+    scan = make_scan(db, "dependency-failure.example")
+    scan.state = "ANALYZING"
+    configuration = TaskGraphCoordinator._upsert_task(db, scan.id, "configuration", dependencies=[])
+    vulnerability = TaskGraphCoordinator._upsert_task(db, scan.id, "vulnerability", dependencies=["configuration"])
+    evidence = TaskGraphCoordinator._upsert_task(db, scan.id, "evidence", dependencies=["vulnerability"])
+    correlation = TaskGraphCoordinator._upsert_task(db, scan.id, "correlation", dependencies=["evidence"])
+    configuration.status = "FAILED"
+    configuration.finished_at = datetime.now(UTC)
+    configuration.error_reason = "configuration fixture failure"
+    db.commit()
+
+    TaskGraphCoordinator.dispatch_ready(db, scan.id)
+    for task in (vulnerability, evidence, correlation):
+        db.refresh(task)
+    TaskGraphCoordinator.finalize_if_complete(db, scan.id)
+    db.refresh(scan)
+
+    assert vulnerability.status == "FAILED"
+    assert evidence.status == "FAILED"
+    assert correlation.status == "FAILED"
+    assert scan.state == "PARTIAL_FAILED"
+    assert "configuration" in (vulnerability.error_reason or "")

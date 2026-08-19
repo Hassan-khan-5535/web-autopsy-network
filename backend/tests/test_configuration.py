@@ -1,4 +1,4 @@
-from app.models.scan import Header, HTTPResponse, Page, Scan, Website
+from app.models.scan import Header, HTTPObservation, HTTPResponse, Page, Scan, Website
 from app.services.configuration import CONFIGURATION_RULES, ConfigurationAgent, RULE_VERSION
 from app.services.http_agent import HTTPAgent
 from app.services.tasks import TaskGraphCoordinator
@@ -153,3 +153,23 @@ def test_configuration_is_idempotent(db):
     second = ConfigurationAgent(db, scan.id).analyze()
     assert second
     assert {finding.id for finding in second}.isdisjoint(first_ids)
+
+
+def test_configuration_handles_missing_response_observation(db):
+    scan, page, response = _scan_page(db, "https://example.com/")
+    db.delete(response)
+    db.add(HTTPObservation(
+        scan_id=scan.id,
+        page_id=page.id,
+        observation_type="response_anomaly",
+        subject="persisted_response",
+        source="browser_worker",
+        classification="UNKNOWN",
+        value={"anomaly": "no_persisted_response", "status_code": None},
+        dedupe_key="response-anomaly-no-response",
+    ))
+    db.commit()
+
+    findings = ConfigurationAgent(db, scan.id).analyze()
+
+    assert findings == []

@@ -255,10 +255,48 @@ class TaskGraphCoordinator:
         db.commit()
 
     @classmethod
+    def _propagate_dependency_failures(cls, db: Session, scan_id: UUID) -> bool:
+        """Terminalize queued work whose prerequisites failed, including transitive dependents."""
+        changed_any = False
+        while True:
+            changed = False
+            tasks = db.query(AgentTask).filter(AgentTask.scan_id == scan_id).all()
+            task_map = {task.task_key: task for task in tasks}
+            now = utc_now()
+            for task in tasks:
+                if task.status not in {"QUEUED", "RETRYING"}:
+                    continue
+                dependencies = [task_map.get(key) for key in (task.dependency_keys or [])]
+                failed = [dependency for dependency in dependencies if dependency and dependency.status == "FAILED"]
+                cancelled = [dependency for dependency in dependencies if dependency and dependency.status == "CANCELLED"]
+                if not failed and not cancelled:
+                    continue
+                blockers = failed or cancelled
+                task.status = "FAILED" if failed else "CANCELLED"
+                task.finished_at = now
+                task.available_at = None
+                task.error_reason = (
+                    "Blocked by failed dependency: " if failed else "Cancelled because dependency was cancelled: "
+                ) + ", ".join(dependency.task_key for dependency in blockers)
+                cls._event(
+                    db,
+                    scan_id,
+                    task,
+                    "TASK_DEPENDENCY_BLOCKED",
+                    {"dependencies": [dependency.task_key for dependency in blockers], "status": task.status},
+                )
+                changed = True
+                changed_any = True
+            if not changed:
+                break
+        return changed_any
+
+    @classmethod
     def dispatch_ready(cls, db: Session, scan_id: UUID) -> None:
         scan = db.query(Scan).filter(Scan.id == scan_id).first()
         if not scan or scan.cancel_requested or scan.pause_requested or scan.state == "PAUSED":
             return
+        cls._propagate_dependency_failures(db, scan_id)
         now = utc_now()
         budget = cls._budget(scan)
         tasks = db.query(AgentTask).filter(AgentTask.scan_id == scan_id, AgentTask.status.in_(["QUEUED", "RETRYING"])).order_by(AgentTask.created_at, AgentTask.task_key).all()
@@ -274,7 +312,7 @@ class TaskGraphCoordinator:
             if available_at and available_at > now:
                 continue
             deps = [task_map.get(key) for key in (task.dependency_keys or [])]
-            if any(dep is None or dep.status not in TERMINAL_TASK_STATES for dep in deps):
+            if any(dep is None or dep.status != "SUCCEEDED" for dep in deps):
                 continue
             if any(requirement not in event_keys for requirement in (task.event_requirements or [])):
                 continue

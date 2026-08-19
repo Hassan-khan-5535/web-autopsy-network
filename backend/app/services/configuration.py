@@ -211,14 +211,17 @@ class ConfigurationAgent:
             by_type[item.observation_type].append(item)
         headers: dict[str, list[str]] = defaultdict(list)
         for item in by_type.get("header", []):
-            value = item.value or {}
+            value = item.value if isinstance(item.value, dict) else {}
             name = str(value.get("name", "")).lower()
             if name:
-                for safe_value in value.get("values", []):
-                    headers[name].append(self._safe_text(safe_value))
+                raw_values = value.get("values", [])
+                values = raw_values if isinstance(raw_values, list) else [raw_values]
+                for safe_value in values:
+                    if safe_value is not None:
+                        headers[name].append(self._safe_text(safe_value))
         policies: dict[str, dict[str, Any]] = {}
         for item in by_type.get("security_policy", []):
-            value = item.value or {}
+            value = item.value if isinstance(item.value, dict) else {}
             name = str(value.get("name", "")).lower()
             if name:
                 policies[name] = value
@@ -227,7 +230,7 @@ class ConfigurationAgent:
         tls = self._first_value(by_type.get("tls"))
         cache = self._first_value(by_type.get("cache"))
         cors = self._first_value(by_type.get("cors"))
-        cookies = [item.value or {} for item in by_type.get("cookie", [])]
+        cookies = [item.value for item in by_type.get("cookie", []) if isinstance(item.value, dict)]
         body = response.raw_body if response and response.raw_body else ""
         return {
             "page": page,
@@ -245,8 +248,8 @@ class ConfigurationAgent:
         }
 
     @staticmethod
-    def _first_value(items: list[HTTPObservation]) -> dict[str, Any] | None:
-        return next((item.value for item in items if isinstance(item.value, dict)), None)
+    def _first_value(items: list[HTTPObservation] | None) -> dict[str, Any] | None:
+        return next((item.value for item in items or [] if isinstance(item.value, dict)), None)
 
     def _headers_rule(self, ctx: dict[str, Any]) -> dict[str, Any] | None:
         status = int(ctx["status"].get("status_code") or 0)
