@@ -1,5 +1,6 @@
 import asyncio
 import ipaddress
+import os
 import logging
 import socket
 from typing import Any
@@ -99,7 +100,11 @@ async def render_page(req: RenderRequest):
         from playwright.async_api import async_playwright
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            executable_path = os.getenv("BROWSER_EXECUTABLE_PATH")
+            launch_options = {"headless": True}
+            if executable_path:
+                launch_options["executable_path"] = executable_path
+            browser = await p.chromium.launch(**launch_options)
             context = await browser.new_context(
                 accept_downloads=False,
                 permissions=[],

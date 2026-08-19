@@ -120,7 +120,18 @@ Access the applications:
 
 To run the application locally without Docker containers:
 
-**1. Start Backend API:**
+**1. Start Browser Worker:**
+
+Real-site browser analysis requires the browser worker in manual mode. Start it in a separate terminal. On Linux/macOS, use the installed Chromium executable:
+
+```bash
+cd browser_worker
+BROWSER_EXECUTABLE_PATH="/usr/bin/chromium" PYTHONPATH="." python3 -m uvicorn app:app --host 127.0.0.1 --port 8001
+```
+
+Verify it with `curl http://127.0.0.1:8001/health`. On Windows, set `BROWSER_EXECUTABLE_PATH` to the installed Chromium or Chrome executable.
+
+**2. Start Backend API:**
 
 *PowerShell (Windows):*
 ```powershell
@@ -130,6 +141,7 @@ python -m venv venv
 $env:DATABASE_URL="sqlite:///web-autopsy-demo.db"
 $env:QUEUE_MODE="inline"
 $env:CORS_ORIGINS="http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
+$env:BROWSER_WORKER_URL="http://127.0.0.1:8001"
 $env:PYTHONPATH="."
 python -m pip install -r requirements.txt
 python seed_phase13_demo.py
@@ -143,10 +155,10 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 DATABASE_URL="sqlite:///web-autopsy-demo.db" QUEUE_MODE="inline" CORS_ORIGINS="http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001" PYTHONPATH="." python3 seed_phase13_demo.py
-DATABASE_URL="sqlite:///web-autopsy-demo.db" QUEUE_MODE="inline" CORS_ORIGINS="http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001" PYTHONPATH="." python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+DATABASE_URL="sqlite:///web-autopsy-demo.db" QUEUE_MODE="inline" BROWSER_WORKER_URL="http://127.0.0.1:8001" CORS_ORIGINS="http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001" PYTHONPATH="." python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-**2. Start Frontend Web UI in development mode:**
+**3. Start Frontend Web UI in development mode:**
 
 Open a second terminal and run:
 
@@ -159,6 +171,8 @@ npm run dev:3001
 Access the UI at `http://localhost:3001`. The `dev:3001` command compiles the app on demand; do not use `npm start` for development.
 
 **Production-mode alternative:**
+
+The production build uses standalone output. The `postbuild` script copies `.next/static` into the standalone server tree so CSS and JavaScript assets are served correctly.
 
 If you specifically want `next start`, a production build must exist first. Run these commands in the `frontend` directory:
 
@@ -181,6 +195,7 @@ cd backend
 source venv/bin/activate
 DATABASE_URL="sqlite:///web-autopsy-demo.db" \
 QUEUE_MODE="inline" \
+BROWSER_WORKER_URL="http://127.0.0.1:8001" \
 PYTHONPATH="." \
 python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 

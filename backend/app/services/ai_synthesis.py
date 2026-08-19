@@ -60,6 +60,58 @@ class AIDoctorEngine:
             
         return "\n".join(context_lines)
 
+    def _fallback_answer(self, question: str, reason: str) -> dict:
+        scan = self.db.query(Scan).filter(Scan.id == self.scan_id).first()
+        if not scan:
+            return {
+                "category": "GENERAL",
+                "subject": "Evidence unavailable",
+                "statement": "No scan evidence is available for this question.",
+                "classification": "deterministic_fallback",
+                "evidence": [],
+            }
+
+        question_lower = question.lower()
+        if "performance" in question_lower or "speed" in question_lower or "load" in question_lower:
+            candidates = list(scan.performance_metrics)
+            category = "PERFORMANCE"
+        elif "access" in question_lower or "wcag" in question_lower or "keyboard" in question_lower:
+            candidates = list(scan.accessibility_findings)
+            category = "ACCESSIBILITY"
+        elif "content" in question_lower or "seo" in question_lower or "metadata" in question_lower:
+            candidates = list(scan.content_findings)
+            category = "CONTENT"
+        else:
+            candidates = list(scan.security_findings) or list(scan.observations)
+            category = "SECURITY" if scan.security_findings else "GENERAL"
+
+        cited_ids: list[str] = []
+        statements: list[str] = []
+        for item in candidates[:3]:
+            item_id = getattr(item, "id", None)
+            statement = getattr(item, "statement", None) or getattr(item, "observation", None)
+            subject = getattr(item, "subject", None) or getattr(item, "metric_name", None)
+            if item_id and statement:
+                cited_ids.append(str(item_id))
+                statements.append(f"{subject}: {statement}")
+
+        if not statements:
+            return {
+                "category": category,
+                "subject": "No matching findings",
+                "statement": "The deterministic evidence store contains no findings matching this question.",
+                "classification": "deterministic_fallback",
+                "evidence": [],
+            }
+
+        return {
+            "category": category,
+            "subject": "Deterministic evidence summary",
+            "statement": "External AI interpretation is unavailable, so this answer uses the stored deterministic evidence instead.\n\n" + "\n".join(statements),
+            "classification": "deterministic_fallback",
+            "evidence": cited_ids,
+        }
+
     def ask_question(self, question: str) -> dict:
         """
         Answers a user's question about the scan, strictly citing evidence.
@@ -100,14 +152,8 @@ DO NOT hallucinate evidence IDs. ONLY use the IDs enclosed in [ID: ...] from the
             }
             
         except (LLMError, EvidenceValidationError) as e:
-            logger.warning(f"AI Doctor failed: {e}")
-            return {
-                "category": "ERROR",
-                "subject": question,
-                "statement": f"AI Interpretation failed: {e}",
-                "classification": "ai_interpretation",
-                "evidence": []
-            }
+            logger.warning(f"AI Doctor fallback used: {e}")
+            return self._fallback_answer(question, str(e))
 
 
 class AISynthesisEngine:
@@ -168,5 +214,17 @@ DO NOT hallucinate evidence IDs. ONLY use the IDs enclosed in [ID: ...] from the
             self.db.commit()
             
         except (LLMError, EvidenceValidationError) as e:
-            logger.error(f"AI Synthesis failed for scan {self.scan_id}: {e}")
-            # We don't fail the scan, we just log and skip
+            logger.warning(f"AI Synthesis fallback used for scan {self.scan_id}: {e}")
+            fallback_evidence = [str(item.id) for item in list(scan.security_findings)[:3]]
+            if not fallback_evidence:
+                fallback_evidence = [str(item.id) for item in list(scan.observations)[:3]]
+            if fallback_evidence:
+                interpretation = AIInterpretation(
+                    scan_id=self.scan_id,
+                    category="SUMMARY",
+                    subject="Deterministic evidence summary",
+                    statement="External AI synthesis is unavailable. The report remains complete using deterministic analysis and stored evidence.",
+                    evidence=fallback_evidence,
+                )
+                self.db.add(interpretation)
+                self.db.commit()
