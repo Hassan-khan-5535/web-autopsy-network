@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import urlsplit
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.scan import (
@@ -316,10 +317,28 @@ class CorrelationAgent:
         node = self._nodes.get(key)
         if node is None:
             node = AttackSurfaceGraphNode(scan_id=self.scan_id, entity_type=entity_type, natural_key=natural_key, label=label[:2048], classification=classification.upper()[:30], confidence=self._percentage(confidence), attributes=attributes or {}, provenance=[provenance] if provenance else [], first_seen_at=now, last_seen_at=now)
-            self.db.add(node)
-            self.db.flush()
-            self._nodes[key] = node
-            self._stats["inserted_nodes"] += 1
+            try:
+                with self.db.begin_nested():
+                    self.db.add(node)
+                    self.db.flush()
+                self._nodes[key] = node
+                self._stats["inserted_nodes"] += 1
+            except IntegrityError:
+                node = self.db.query(AttackSurfaceGraphNode).filter(
+                    AttackSurfaceGraphNode.scan_id == self.scan_id,
+                    AttackSurfaceGraphNode.entity_type == entity_type,
+                    AttackSurfaceGraphNode.natural_key == natural_key,
+                ).first()
+                if node is None:
+                    raise
+                node.label = label[:2048]
+                node.classification = classification.upper()[:30]
+                node.confidence = max(node.confidence, self._percentage(confidence))
+                node.attributes = self._merge_mapping(node.attributes, attributes)
+                node.provenance = self._merge_provenance(node.provenance, provenance)
+                node.last_seen_at = now
+                self._nodes[key] = node
+                self._stats["refreshed_nodes"] += 1
         else:
             node.label = label[:2048]
             node.classification = classification.upper()[:30]
@@ -339,9 +358,26 @@ class CorrelationAgent:
         now = utc_now()
         if edge is None:
             edge = AttackSurfaceGraphEdge(scan_id=self.scan_id, source_node_id=source.id, target_node_id=target.id, relationship_type=relationship_type, classification=classification.upper()[:30], confidence=self._percentage(confidence), attributes=attributes or {}, provenance=[provenance] if provenance else [], first_seen_at=now, last_seen_at=now)
-            self.db.add(edge)
-            self.db.flush()
-            self._stats["inserted_edges"] += 1
+            try:
+                with self.db.begin_nested():
+                    self.db.add(edge)
+                    self.db.flush()
+                self._stats["inserted_edges"] += 1
+            except IntegrityError:
+                edge = self.db.query(AttackSurfaceGraphEdge).filter(
+                    AttackSurfaceGraphEdge.scan_id == self.scan_id,
+                    AttackSurfaceGraphEdge.relationship_type == relationship_type,
+                    AttackSurfaceGraphEdge.source_node_id == source.id,
+                    AttackSurfaceGraphEdge.target_node_id == target.id,
+                ).first()
+                if edge is None:
+                    raise
+                edge.classification = classification.upper()[:30]
+                edge.confidence = max(edge.confidence, self._percentage(confidence))
+                edge.attributes = self._merge_mapping(edge.attributes, attributes)
+                edge.provenance = self._merge_provenance(edge.provenance, provenance)
+                edge.last_seen_at = now
+                self._stats["refreshed_edges"] += 1
         else:
             edge.classification = classification.upper()[:30]
             edge.confidence = max(edge.confidence, self._percentage(confidence))

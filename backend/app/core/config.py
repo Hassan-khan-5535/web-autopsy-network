@@ -3,6 +3,10 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+DEFAULT_JWT_SECRET = "replace-with-a-long-local-only-secret"
+DEFAULT_UPDATE_PACKAGE_HMAC_KEY = "development-local-update-key"
+
+
 class Settings(BaseSettings):
     app_name: str = "Web Autopsy Network API"
     app_env: str = "development"
@@ -11,7 +15,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://web_autopsy:change-me-for-local-development@localhost:5432/web_autopsy"
     cors_origins: str = "http://localhost:3000"
     browser_worker_url: str = "http://browser-worker:8001"
-    jwt_secret: str = "replace-with-a-long-local-only-secret"
+    jwt_secret: str = DEFAULT_JWT_SECRET
 
 
     crawl_default_max_depth: int = 2
@@ -65,7 +69,7 @@ class Settings(BaseSettings):
     orchestration_dispatches_per_request: int = 16
 
     # Extension 16: verified local rule and signature package lifecycle.
-    update_package_hmac_key: str = "development-local-update-key"
+    update_package_hmac_key: str = DEFAULT_UPDATE_PACKAGE_HMAC_KEY
     update_package_cache_dir: str = ".web-autopsy-cache"
     update_package_scanner_version: str = "0.16.0"
     update_package_require_signature: bool = True
@@ -101,6 +105,19 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    def validate_production_security(self) -> None:
+        if self.app_env.lower() not in {"production", "prod"}:
+            return
+        failures: list[str] = []
+        if self.jwt_secret == DEFAULT_JWT_SECRET or len(self.jwt_secret) < 32:
+            failures.append("JWT_SECRET must be a non-default value of at least 32 characters in production")
+        if self.update_package_hmac_key == DEFAULT_UPDATE_PACKAGE_HMAC_KEY or len(self.update_package_hmac_key) < 32:
+            failures.append("UPDATE_PACKAGE_HMAC_KEY must be a non-default value of at least 32 characters in production")
+        if "*" in self.cors_origins_list:
+            failures.append("CORS_ORIGINS must not contain a wildcard in production")
+        if failures:
+            raise ValueError("Production security configuration invalid: " + "; ".join(failures))
 
 
 @lru_cache

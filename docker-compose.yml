@@ -1,3 +1,5 @@
+# Development-only composition. It intentionally mounts source files and runs hot-reload/dev commands;
+# use immutable images and a production-specific deployment manifest for production releases.
 services:
   postgres:
     image: postgres:16-alpine
@@ -33,8 +35,8 @@ services:
     build:
       context: ./browser_worker
       dockerfile: Dockerfile
-    ports:
-      - "${BROWSER_WORKER_PORT:-8001}:8001"
+    expose:
+      - "8001"
     restart: unless-stopped
 
   backend:

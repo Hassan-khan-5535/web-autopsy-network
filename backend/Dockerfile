@@ -8,7 +8,11 @@ WORKDIR /app
 COPY requirements.txt requirements-dev.txt ./
 RUN pip install --default-timeout=1000 --no-cache-dir -r requirements.txt -r requirements-dev.txt
 
-COPY . .
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+
+COPY --chown=appuser:appgroup . .
+
+USER appuser
 
 EXPOSE 8000
 

@@ -1,13 +1,15 @@
 import asyncio
+import asyncio
 import ipaddress
 import os
 import logging
+import re
 import socket
 from typing import Any
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("browser_worker")
@@ -57,13 +59,30 @@ def is_private_ip(ip_str: str) -> bool:
         return True
 
 
-def is_url_allowed(url: str) -> bool:
+def _hostname_allowed(hostname: str, allowed_domains: list[str]) -> bool:
+    canonical = hostname.lower().rstrip(".")
+    return any(canonical == domain.lower().rstrip(".") or canonical.endswith("." + domain.lower().rstrip(".")) for domain in allowed_domains)
+
+
+def _path_allowed(path: str, allowed_paths: list[str], excluded_paths: list[str]) -> bool:
+    if any(path.startswith(prefix) for prefix in excluded_paths):
+        return False
+    return not allowed_paths or any(path.startswith(prefix) for prefix in allowed_paths)
+
+
+def is_url_allowed(url: str, *, allowed_domains: list[str] | None = None, allowed_paths: list[str] | None = None, excluded_paths: list[str] | None = None) -> bool:
     parsed = urlsplit(url)
     if parsed.scheme not in ("http", "https"):
         return False
 
     hostname = parsed.hostname
     if not hostname:
+        return False
+    if parsed.username or parsed.password:
+        return False
+    if allowed_domains and not _hostname_allowed(hostname, allowed_domains):
+        return False
+    if not _path_allowed(parsed.path or "/", allowed_paths or [], excluded_paths or []):
         return False
 
     try:
@@ -77,10 +96,35 @@ def is_url_allowed(url: str) -> bool:
         return False
 
 
+class EgressPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    allowed_domains: list[str] = Field(default_factory=list, max_length=100)
+    allowed_paths: list[str] = Field(default_factory=list, max_length=100)
+    excluded_paths: list[str] = Field(default_factory=list, max_length=100)
+    blocked_private_networks: bool = True
+
+
+class ResourceLimits(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    max_cpu_seconds: int = Field(default=20, ge=1, le=60)
+    max_memory_mb: int = Field(default=512, ge=64, le=2048)
+    max_rendered_bytes: int = Field(default=2 * 1024 * 1024, ge=1024, le=8 * 1024 * 1024)
+    max_network_events: int = Field(default=250, ge=1, le=1000)
+    max_console_events: int = Field(default=250, ge=1, le=1000)
+
+
 class RenderRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     url: str
-    timeout_ms: int = Field(default=20000, ge=1000, le=60000)
-    headers: dict[str, str] = Field(default_factory=dict)
+    scan_id: str | None = Field(default=None, max_length=64)
+    page_id: str | None = Field(default=None, max_length=64)
+    timeout_ms: int = Field(default=15000, ge=1000, le=30000)
+    headers: dict[str, str] = Field(default_factory=dict, max_length=25)
+    egress_policy: EgressPolicy = Field(default_factory=EgressPolicy)
+    resource_limits: ResourceLimits = Field(default_factory=ResourceLimits)
 
 
 class NetworkRequestItem(BaseModel):
@@ -110,7 +154,9 @@ def health_check():
 
 @app.post("/render", response_model=RenderResponse)
 async def render_page(req: RenderRequest):
-    if not is_url_allowed(req.url):
+    policy = req.egress_policy
+    limits = req.resource_limits
+    if not is_url_allowed(req.url, allowed_domains=policy.allowed_domains, allowed_paths=policy.allowed_paths, excluded_paths=policy.excluded_paths):
         return RenderResponse(
             status="failed",
             error=f"SSRF Check blocked target URL: {req.url}"
@@ -136,11 +182,15 @@ async def render_page(req: RenderRequest):
             )
 
             page = await context.new_page()
+            page.set_default_navigation_timeout(req.timeout_ms)
+            page.set_default_timeout(req.timeout_ms)
             page.on("dialog", lambda d: asyncio.create_task(d.dismiss()))
-            page.on("console", lambda msg: console_logs.append({"type": msg.type, "text": msg.text}))
+            page.on("console", lambda msg: console_logs.append({"type": msg.type, "text": _redact(msg.text)[:2048]}) if len(console_logs) < limits.max_console_events else None)
 
             async def route_interceptor(route, request):
-                if not is_url_allowed(request.url):
+                if not is_url_allowed(request.url, allowed_domains=policy.allowed_domains, allowed_paths=policy.allowed_paths, excluded_paths=policy.excluded_paths):
+                    await route.abort("blockedbyclient")
+                elif len(captured_requests) >= limits.max_network_events:
                     await route.abort("blockedbyclient")
                 else:
                     captured_requests.append({
@@ -153,11 +203,16 @@ async def render_page(req: RenderRequest):
             await page.route("**/*", route_interceptor)
 
             try:
-                response = await page.goto(req.url, timeout=15000, wait_until="domcontentloaded")
-                await asyncio.sleep(1.0)  # Allow JS execution to settle
+                response = await page.goto(req.url, timeout=req.timeout_ms, wait_until="domcontentloaded")
+                await asyncio.sleep(min(1.0, max(0.1, req.timeout_ms / 10000)))
 
                 rendered_html = await page.content()
                 final_url = page.url
+                if not is_url_allowed(final_url, allowed_domains=policy.allowed_domains, allowed_paths=policy.allowed_paths, excluded_paths=policy.excluded_paths):
+                    await browser.close()
+                    return RenderResponse(status="failed", error="Browser final URL was blocked by current egress policy.")
+                if len(rendered_html.encode("utf-8", errors="ignore")) > limits.max_rendered_bytes:
+                    rendered_html = rendered_html.encode("utf-8", errors="ignore")[: limits.max_rendered_bytes].decode("utf-8", errors="ignore")
                 status_code = response.status if response else 200
 
                 timing_json = await page.evaluate("""() => {
@@ -185,16 +240,20 @@ async def render_page(req: RenderRequest):
                         ) for item in captured_requests
                     ],
                     timing_data={"navigation": timing_json},
-                    console_logs=console_logs
+                    console_logs=console_logs[: limits.max_console_events]
                 )
             except Exception as exc:
                 await browser.close()
                 return RenderResponse(
                     status="failed",
-                    error=f"Browser execution failed: {str(exc)}"
+                    error=f"Browser execution failed: {_redact(exc)}"
                 )
     except Exception as exc:
         return RenderResponse(
             status="failed",
-            error=f"Playwright worker initialization failed: {str(exc)}"
+            error=f"Playwright worker initialization failed: {_redact(exc)}"
         )
+
+
+def _redact(value: object) -> str:
+    return re.sub(r"(?i)(authorization|cookie|token|secret|password|api[-_]?key)\s*[:=]\s*[^,;\s]+", r"\1=[REDACTED]", str(value))
