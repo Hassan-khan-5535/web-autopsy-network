@@ -1,272 +1,275 @@
-<div align="center">
+# Web Autopsy Network
 
-  <h1>🔬 Web Autopsy Network</h1>
-  <p><strong>Dissect any website. Understand how it works. Zero hallucinations.</strong></p>
-  <p>An evidence-backed, distributed digital forensics and web intelligence platform for authorized web targets.</p>
+**Web Autopsy Network** is an evidence-backed web intelligence and security assessment platform for authorized research. It collects observable HTTP and browser evidence, normalizes reconnaissance results, analyzes configuration and security posture with deterministic rules, and produces a report that distinguishes measured facts from derived conclusions and unknowns.
 
-  <p>
-    <a href="https://github.com/your-username/web-autopsy-network/actions"><img src="https://img.shields.io/badge/Build-Passing-brightgreen?style=for-the-badge&logo=githubactions" alt="Build Status" /></a>
-    <a href="#6-testing"><img src="https://img.shields.io/badge/Tests-60%2F60%20Passed-emerald?style=for-the-badge&logo=pytest" alt="Tests Passed" /></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License" /></a>
-    <a href="#4-tech-stack"><img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python" alt="Python" /></a>
-    <a href="#4-tech-stack"><img src="https://img.shields.io/badge/Frontend-Next.js%2015-black?style=for-the-badge&logo=next.js" alt="Next.js" /></a>
-    <a href="#4-tech-stack"><img src="https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge&logo=fastapi" alt="FastAPI" /></a>
-    <a href="#4-tech-stack"><img src="https://img.shields.io/badge/AI-Gemini%202.5%20Flash-4285F4?style=for-the-badge&logo=google" alt="Gemini AI" /></a>
-  </p>
+> **Safety boundary:** The platform is detection- and reporting-only. Every assessment requires recorded authorization, explicit scope, bounded request controls, SSRF-resistant admission checks, robots-policy handling, and an immutable audit record. It does not perform destructive exploitation, persistence, credential theft, evasion, denial of service, or target data modification.
 
-  <p>
-    <a href="http://localhost:3000/scans/demo-scan-autopsy"><strong>🚀 Live Demo</strong></a> •
-    <a href="https://github.com/your-username/web-autopsy-network/issues/new?template=bug_report.md"><strong>🐛 Report Bug</strong></a> •
-    <a href="https://github.com/your-username/web-autopsy-network/issues/new?template=feature_request.md"><strong>✨ Request Feature</strong></a> •
-    <a href="docs/API.md"><strong>📖 API Reference</strong></a>
-  </p>
+| Resource | Link |
+|---|---|
+| Live frontend | [Open the running Web Autopsy Network UI](https://3001-iuz98nix5x3egg8bbruc3-2761d934.us2.manus.computer) |
+| Repository | [atifkhani397/web-autopsy-network](https://github.com/atifkhani397/web-autopsy-network) |
+| Live verification record | [`docs/extension4-live-verification.md`](docs/extension4-live-verification.md) |
+| Integration design | [`docs/configuration-agent-integration-design.md`](docs/configuration-agent-integration-design.md) |
 
-</div>
+## Platform status
 
----
+Extensions 1 through 4 are implemented. Extension 4, the **Configuration Agent**, is included in the `main` branch and has been verified against a real bounded scan of `https://www.python.org/`. The verification scan completed at 100%, and its `configuration` task reached `SUCCEEDED` alongside the HTTP, recon, security, diagnosis, and synthesis tasks.
 
-## 📸 Preview
+The latest release commit is `67952b6`, titled `feat: add Configuration Agent with 11 independently testable misconfiguration rules`.
 
-![Web Autopsy Network Dashboard](docs/assets/dashboard-preview.png)
-> *Placeholder: Interactive Web Autopsy dashboard displaying Cause of Death verdict, real-time pipeline execution, and citation-grounded AI diagnostic reasoning.*
+## Implemented capabilities
 
----
+| Extension | Capability | Implementation status |
+|---|---|---|
+| Extension 1 | Scope, consent, authorization records, encrypted authentication secrets, immutable audit trail, scan pause/resume/cancel, assessment profiles, bounded crawl controls, and SSRF-resistant admission | Complete |
+| Extension 2 | Passive Certificate Transparency and DNS observations, technology fingerprints, scoped crawling, robots and sitemap processing, JavaScript/API/parameter extraction, sensitive-path classification, and cloud-asset candidate detection | Complete |
+| Extension 3 | Central HTTP behavior analysis with bounded response capture, secret redaction, status and header observations, cookies, redirects, cache behavior, content type, TLS, CORS, compression, security policy, and anomalies | Complete |
+| Extension 4 | Configuration Agent with 11 independently testable, low-false-positive rules and a report UI backed by persisted `SecurityFinding` records | Complete |
 
-## ✨ Key Features
+The Configuration Agent rules are:
 
-* 🎯 **Cause of Death Forensic Verdict:** Deterministic prioritization engine that analyzes telemetry to pinpoint the primary root-cause bottleneck (e.g., render-blocking JS bundles, missing CSP headers, or high LCP).
-* 🤖 **Citation-Grounded AI Doctor:** Advanced LLM synthesis (powered by Gemini 2.5 Flash or GPT-4o) operating behind a strict evidence validation gate that strips or flags ungrounded claims (`[UNGROUNDED_CLAIM_REJECTED]`).
-* 🛡️ **Passive Security & Performance Audits:** Zero-latency evaluation of security headers, HSTS, CORS origins, cookie security flags, and Core Web Vitals (LCP, FID, CLS, TTFB).
-* 🌐 **Sandboxed Browser Execution & Dependency Graph:** Sub-resource SSRF-protected Playwright microservice that captures DOM state, console logs, dynamic timing, and renders interactive SVG dependency maps.
-* ⏱️ **Time Machine & Historical Diff Engine:** Version-controlled scan history with deterministic category-by-category diffing and automated change summaries.
+| Rule ID | Detection area |
+|---|---|
+| `CFG-HEADERS-001` | Missing or weak security headers |
+| `CFG-CORS-001` | Unsafe CORS configuration |
+| `CFG-TLS-001` | TLS transport weakness observations |
+| `CFG-TLS-002` | TLS certificate or protocol observations that require review |
+| `CFG-DIR-001` | Directory-listing indicators |
+| `CFG-EXPOSED-ARTIFACT-001` | Safely detectable `.git`, `.env`, configuration, backup, and similar artifacts |
+| `CFG-ERROR-001` | Verbose error-message disclosure |
+| `CFG-CACHE-001` | Unsafe caching behavior |
+| `CFG-DISCLOSURE-001` | Server or framework information disclosure |
+| `CFG-COOKIE-001` | Insecure cookie attributes |
+| `CFG-HTTP-001` | Dangerous HTTP methods or behavior |
 
----
+Each rule carries a rule ID, prerequisites, detection logic, evidence requirements, severity, confidence, remediation guidance, and CWE/OWASP references where applicable. Findings are classified as observed evidence and are not presented as proof of exploitability.
 
-## 🛠️ Tech Stack
+## Scan lifecycle and task graph
 
-### Core Architecture
-* **Frontend:** Next.js 15, React 19, TypeScript, Tailwind CSS, Lucide React.
-* **Backend:** FastAPI, Python 3.11+, SQLAlchemy 2.0, Alembic, Structlog.
-* **Database:** PostgreSQL (Production) / SQLite (Local Fallback) with eager loading (`selectinload`) and composite indexes.
-* **AI & LLM Integration:** OpenAI SDK, Google Gemini 2.5 Flash / OpenAI GPT-4o, Custom Citation Verification Gate.
+A scan moves through the persisted lifecycle `QUEUED`, `COLLECTING`, `ANALYZING`, `SYNTHESIZING`, and `COMPLETED`, with explicit failure, pause, and cancellation states. The frontend streams or polls persisted progress and displays task-level status, elapsed time, estimated remaining time, expected completion, retry state, and terminal results.
 
-### Infrastructure & DevOps
-* **Distributed Task Queue:** Celery, Redis, 4 Parallel Worker Pools (`worker-crawl`, `worker-browser`, `worker-analysis`, `worker-ai`).
-* **Browser Container Sandbox:** Python Playwright Microservice with socket-level IP connection hooks & SSRF shields.
-* **Orchestration & Containerization:** Docker, Docker Compose.
+The current task graph is:
 
----
+```text
+admission → collection →
+  [technology, structure, api_intelligence, network_intelligence,
+   http_agent, configuration, security, content, recon]
+  → performance → accessibility → diagnosis → synthesis
+```
 
-## ⚡ Getting Started
+The Configuration Agent waits for both `collection` and `http_agent`. It consumes persisted `HTTPObservation` evidence, so it does not perform a separate unbounded request pass. Its API response includes the complete rule catalog, matched findings, a ruleset version, and severity counts:
+
+```text
+GET /v1/scans/{scan_id}/configuration
+```
+
+## What the platform observes
+
+The platform is designed to report real observations from the supplied public target rather than fabricate demo values in live scans. Evidence includes response status and headers, redirect chains, cookies, cache directives, content types, compression, TLS metadata, CORS behavior, security policies, DNS and CT observations where permitted, page structure, browser telemetry, dependencies, discovered API routes, and normalized parameters.
+
+A live scan can produce no findings when rule prerequisites are not met. That result means the configured evidence did not satisfy a detection rule; it is **not** a guarantee that the target is secure. Every report includes limitations and evidence provenance so users can distinguish observed, inferred, AI-interpreted, and unknown information.
+
+## Scope and safety controls
+
+Before collection begins, the API records the actor, target, authorization acknowledgement, allowed domains, allowed paths, excluded paths, assessment profile, robots setting, request limits, concurrency, rate limit, authentication type, and optional expiration. Authentication values are encrypted and only fingerprints are used in authorization records. Runtime credentials and API keys must remain outside Git.
+
+Admission validates canonical URLs and applies hostname, DNS, IP, path, and redirect controls to prevent access to private or internal resources unless a deployment policy explicitly permits it. Active-safe discovery is restricted to scope-checked, bounded requests. The default posture is passive-only recon with robots respected.
+
+## Honest coverage and limitations
+
+This is a security assessment foundation, not an unrestricted penetration-testing tool. It currently provides high-confidence passive and active-safe observations, but it does not verify SQL injection, reflected or stored XSS, CSRF, authentication or authorization flaws, IDOR/BOLA, SSRF exploitation, command injection, file-upload vulnerabilities, deserialization, RCE, authenticated API behavior, session weaknesses, dependency CVEs, port and service exposure, subdomain takeover, or meaningful open-redirect exploitability. It also does not log into targets or submit target forms.
+
+Those limitations are intentional. Any future active checks must preserve explicit consent, scope enforcement, rate limits, non-destructive behavior, audit logging, and evidence-based reporting.
+
+## Architecture
+
+| Layer | Current implementation |
+|---|---|
+| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS, standalone production output |
+| Backend | FastAPI, Python 3.12 runtime, SQLAlchemy 2.0, Alembic, Structlog |
+| Database | SQLite for the current manual runtime; PostgreSQL-compatible SQLAlchemy patterns are retained where supported |
+| Browser worker | Playwright microservice with Chromium, isolated from the API process |
+| Task execution | Inline synchronous queue mode for the current runtime; persisted task graph and retry states |
+| Evidence model | Shared observations, normalized assets/endpoints/parameters, `HTTPObservation`, and `SecurityFinding` records |
+| Optional AI | Citation-grounded synthesis may be enabled through deployment configuration; deterministic assessment and configuration rules do not require an LLM |
+
+Extension 4 does not require a new Alembic migration because it stores findings in the existing `SecurityFinding` table using `category="configuration"`. The active database remains at Alembic head `20260819_extension3`.
+
+## Manual setup without Docker
+
+Docker is not required for the supported local workflow. The commands below start the browser worker, backend, and frontend as separate processes.
 
 ### Prerequisites
 
-Ensure you have the following installed locally:
-* **Node.js:** v18.0.0 or higher
-* **Python:** v3.11 or higher
-* **Docker & Docker Compose:** *(Optional, recommended for full distributed mode)*
+Install Node.js 18 or newer, Python 3.11 or newer, npm, and a Chromium-compatible browser. On the current Linux runtime, Chromium is available at `/usr/bin/chromium`.
 
----
+### Backend environment
 
-### Environment Setup (`.env`)
+Create and activate the backend virtual environment, then install dependencies:
 
-Create a `.env` file in the project root by copying the template:
-
-```bash
-cp backend/config.env.example .env
-```
-
-Configure your environment variables in `.env`:
-
-```env
-COMPOSE_PROJECT_NAME=web-autopsy-network
-POSTGRES_DB=web_autopsy
-POSTGRES_USER=web_autopsy
-POSTGRES_PASSWORD=change-me-for-local-development
-POSTGRES_PORT=5432
-REDIS_PORT=6380
-
-BACKEND_PORT=8000
-FRONTEND_PORT=3000
-DATABASE_URL=postgresql+psycopg://web_autopsy:change-me-for-local-development@postgres:5432/web_autopsy
-CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001
-
-# LLM Configuration (Gemini 2.5 Flash / OpenAI)
-LLM_API_KEY=your_actual_api_key_here
-LLM_API_BASE=https://generativelanguage.googleapis.com/v1beta/openai/
-LLM_MODEL=gemini-2.5-flash
-```
-
----
-
-### Running the Application
-
-#### Method 1: Docker Compose (Recommended)
-
-To run the complete microservice architecture:
-
-```bash
-# Build and start all services
-docker compose up --build
-```
-
-Access the applications:
-* **Frontend Web UI:** `http://localhost:3000`
-* **Backend API Docs:** `http://localhost:8000/docs`
-
----
-
-#### Method 2: Local Direct Service (Without Docker)
-
-To run the application locally without Docker containers:
-
-**1. Start Browser Worker:**
-
-Real-site browser analysis requires the browser worker in manual mode. Start it in a separate terminal. On Linux/macOS, use the installed Chromium executable:
-
-```bash
-cd browser_worker
-BROWSER_EXECUTABLE_PATH="/usr/bin/chromium" PYTHONPATH="." python3 -m uvicorn app:app --host 127.0.0.1 --port 8001
-```
-
-Verify it with `curl http://127.0.0.1:8001/health`. On Windows, set `BROWSER_EXECUTABLE_PATH` to the installed Chromium or Chrome executable.
-
-**2. Start Backend API:**
-
-*PowerShell (Windows):*
-```powershell
-cd backend
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-$env:DATABASE_URL="sqlite:///web-autopsy-demo.db"
-$env:QUEUE_MODE="inline"
-$env:CORS_ORIGINS="http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
-$env:BROWSER_WORKER_URL="http://127.0.0.1:8001"
-$env:PYTHONPATH="."
-python -m pip install -r requirements.txt
-python seed_phase13_demo.py
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-*Bash (Linux/macOS):*
 ```bash
 cd backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-DATABASE_URL="sqlite:///web-autopsy-demo.db" QUEUE_MODE="inline" CORS_ORIGINS="http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001" PYTHONPATH="." python3 seed_phase13_demo.py
-DATABASE_URL="sqlite:///web-autopsy-demo.db" QUEUE_MODE="inline" BROWSER_WORKER_URL="http://127.0.0.1:8001" CORS_ORIGINS="http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001" PYTHONPATH="." python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-**3. Start Frontend Web UI in development mode:**
-
-Open a second terminal and run:
+Set runtime configuration in the shell or a local untracked environment file. Do not copy real credentials into this README or commit them to Git:
 
 ```bash
-cd frontend
-npm ci
-npm run dev:3001
+export APP_ENV=PROD
+export DATABASE_URL="sqlite:///web-autopsy-demo.db"
+export QUEUE_MODE="inline"
+export BROWSER_WORKER_URL="http://127.0.0.1:8001"
+export ASSESSMENT_ENCRYPTION_KEY="<generate-a-fernet-key-for-this-deployment>"
+# Optional AI configuration; keep the key outside Git and outside public logs.
+# export LLM_API_KEY="<runtime-only-key>"
+# export LLM_API_BASE="https://generativelanguage.googleapis.com/v1beta/openai/"
+# export LLM_MODEL="gemini-2.5-flash"
 ```
 
-Access the UI at `http://localhost:3001`. The `dev:3001` command compiles the app on demand; do not use `npm start` for development.
-
-**Production-mode alternative:**
-
-The production build uses standalone output. The `postbuild` script copies `.next/static` into the standalone server tree so CSS and JavaScript assets are served correctly.
-
-If you specifically want `next start`, a production build must exist first. Run these commands in the `frontend` directory:
+Generate a Fernet key for a fresh deployment with a local, uncommitted command:
 
 ```bash
-npm ci
-rm -rf .next
-npm run build
-npm run start:3001
+python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
 ```
 
-The error `Could not find a production build in the '.next' directory` means `npm start` was run before `npm run build`, or the `.next` directory was deleted. It is not fixed by changing the browser URL; build first, then start.
+### Start the browser worker
 
-**Public sandbox/link mode:**
-
-The frontend now uses a same-origin `/api` proxy by default. This prevents a public browser from accidentally calling its own `localhost:8000`. Run the backend and frontend on the same machine; no `NEXT_PUBLIC_API_BASE_URL` value is required for the public link:
+In one terminal:
 
 ```bash
-# Backend terminal
+cd browser_worker
+BROWSER_EXECUTABLE_PATH="/usr/bin/chromium" \
+  ../backend/venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8001
+```
+
+Verify the worker:
+
+```bash
+curl http://127.0.0.1:8001/health
+```
+
+### Apply migrations and start the backend
+
+In a second terminal:
+
+```bash
 cd backend
 source venv/bin/activate
-DATABASE_URL="sqlite:///web-autopsy-demo.db" \
-QUEUE_MODE="inline" \
-BROWSER_WORKER_URL="http://127.0.0.1:8001" \
-PYTHONPATH="." \
-python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+export DATABASE_URL="sqlite:///web-autopsy-demo.db"
+export QUEUE_MODE="inline"
+export BROWSER_WORKER_URL="http://127.0.0.1:8001"
+export ASSESSMENT_ENCRYPTION_KEY="<same-runtime-only-key-as-above>"
+PYTHONPATH=. alembic upgrade head
+PYTHONPATH=. python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
 
-# Frontend terminal
+Verify the API:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+The expected health response reports the API service, a connected database, and the current environment.
+
+### Build and start the frontend
+
+In a third terminal:
+
+```bash
 cd frontend
+npm ci
+npm run lint
+npm run typecheck
 npm run build
 npm run start:3001
 ```
 
-The Next.js server forwards `/api/*` to `http://127.0.0.1:8000/*`, so browser requests remain same-origin. Set `NEXT_PUBLIC_API_BASE_URL` only when the backend is deployed on a separate host.
+Open `http://localhost:3001`. The default frontend API base is same-origin `/api`, which allows the Next.js server to proxy API requests without exposing a browser-side `localhost:8000` dependency. Set `NEXT_PUBLIC_API_BASE_URL` only when the backend is intentionally hosted on another origin and the CORS policy is configured for it.
 
----
+## Creating a bounded authorized scan
 
-## 🧪 Testing
-
-Execute the automated test suites to verify system integrity:
+The scan endpoint requires `authorization_acknowledged: true`. A minimal safe request should provide the target, explicit domain scope, path scope, bounded limits, and an actor identifier:
 
 ```bash
-# 1. Run Backend 60-Test Regression Suite (100% Pass Rate)
-cd backend
-pytest tests/ -v
-
-# 2. Run Frontend TypeScript Typecheck (0 Errors)
-npm --prefix frontend run typecheck
-
-# 3. Run Frontend Code Quality Audit (0 Warnings/Errors)
-npm --prefix frontend run lint
+curl -X POST http://127.0.0.1:8000/v1/scans \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  -H 'X-Actor-ID: authorized-researcher' \
+  -d '{
+    "url": "https://www.python.org/",
+    "authorization_acknowledged": true,
+    "assessment_profile": "safe",
+    "allowed_domains": ["python.org", "www.python.org"],
+    "allowed_paths": ["/"],
+    "excluded_paths": ["/downloads/"],
+    "max_depth": 1,
+    "max_pages": 5,
+    "max_requests": 10,
+    "max_concurrency": 1,
+    "rate_limit_per_host_ms": 500,
+    "robots_override": false,
+    "recon_mode": "passive_only",
+    "test_account_ref": "authorized-research-record"
+  }'
 ```
 
----
+Use the returned scan ID to inspect progress and reports:
 
-## 🗺️ Roadmap
+```bash
+SCAN_ID="<returned-scan-id>"
+curl "http://127.0.0.1:8000/v1/scans/${SCAN_ID}/progress"
+curl "http://127.0.0.1:8000/v1/scans/${SCAN_ID}/http-observations"
+curl "http://127.0.0.1:8000/v1/scans/${SCAN_ID}/configuration"
+curl "http://127.0.0.1:8000/v1/scans/${SCAN_ID}/diagnosis"
+```
 
-- [x] **Phase 1 — System Architecture Foundation:** Monorepo setup, settings, structured logging.
-- [x] **Phase 2 — Admission & HTTP Collector:** Socket-level SSRF protection & passive HTTP collector.
-- [x] **Phase 3 — Bounded BFS Crawler:** Same-domain, rate-limited, robots.txt compliant crawler.
-- [x] **Phase 4 — Technology DNA Engine:** Signature detection with confidence scoring.
-- [x] **Phase 5 — Structure & Dependency Graph:** Route tree discovery & interactive SVG node graph.
-- [x] **Phase 6 — Isolated Browser Analysis:** Playwright container sandbox & DOM timing capture.
-- [x] **Phase 7 — Passive Security Analysis:** Evaluation of HSTS, CSP, cookies, CORS, and headers.
-- [x] **Phase 8 — Passive Performance Engine:** Core Web Vitals (LCP, FID, CLS) computation.
-- [x] **Phase 9 — Accessibility & Content/SEO:** WCAG automated audit & SEO content analysis.
-- [x] **Phase 10 — AI Doctor & Citation Synthesis:** Citation-grounded LLM reasoning layer.
-- [x] **Phase 11 — History & Time Machine:** Historical comparisons & deterministic diffing.
-- [x] **Phase 12 — Cause of Death Diagnosis:** Multi-dimensional risk/impact prioritization verdict.
-- [x] **Phase 13 — Distributed Worker Scaling:** Celery/Redis queues with 4 worker pools & SSE streams.
-- [x] **Phase 14 — Production Hardening:** DNS rebinding protection, DB N+1 query removal, Redis cache, wall-clock scan expiry.
-- [ ] **Phase 15 — Multi-Region Distributed Collectors:** Edge collector nodes for worldwide latency profiling.
-- [ ] **Phase 16 — Automated Remediation PRs:** One-click GitHub PR generation for flagged security headers & performance fixes.
+The frontend report exposes Configuration, Security, HTTP Agent, Recon Agent, API Intelligence, performance, accessibility, content, evidence, diagnosis, and synthesis sections when the corresponding data is available.
 
----
+## Testing and release verification
 
-## 🤝 Contributing & License
+Run the complete local validation sequence from the repository root:
 
-Contributions are welcome! Follow this workflow to contribute:
+```bash
+backend/venv/bin/python -m compileall -q backend/app
+PYTHONPATH=backend backend/venv/bin/python -m pytest backend/tests -q
+(cd frontend && npm run lint && npm run typecheck && npm run build)
+(cd backend && DATABASE_URL=sqlite:///web-autopsy-demo.db PYTHONPATH=. ../backend/venv/bin/alembic current)
+```
 
-1. **Fork** the repository.
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`).
-3. **Commit** your changes (`git commit -m 'feat: add amazing feature'`).
-4. **Push** to the branch (`git push origin feature/amazing-feature`).
-5. **Open** a Pull Request.
+The Extension 4 release was validated with **83 backend tests passing**, successful Python compilation, successful frontend linting, successful TypeScript checking, a successful production build, and Alembic reporting `20260819_extension3 (head)`. A real bounded Python.org scan completed with `requests_used: 7`, `state: COMPLETED`, `status: completed`, and `configuration: SUCCEEDED`.
 
-### License
+The full live verification details are recorded in [`docs/extension4-live-verification.md`](docs/extension4-live-verification.md). The Configuration Agent design and rule catalog are documented in [`docs/configuration-agent-integration-design.md`](docs/configuration-agent-integration-design.md).
 
-Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information.
+## Repository documentation
 
----
+| Document | Purpose |
+|---|---|
+| [`LOCAL_VERIFICATION.md`](LOCAL_VERIFICATION.md) | Local verification notes and runtime checks |
+| [`docs/configuration-agent-integration-design.md`](docs/configuration-agent-integration-design.md) | Configuration Agent integration design and rule metadata |
+| [`docs/extension4-live-verification.md`](docs/extension4-live-verification.md) | Real-target live verification record |
+| [`PHASE11_IMPLEMENTATION.md`](PHASE11_IMPLEMENTATION.md) | Historical implementation notes for the existing platform |
+| [`PHASE12_IMPLEMENTATION.md`](PHASE12_IMPLEMENTATION.md) | Historical implementation notes for the existing platform |
+| [`PHASE13_IMPLEMENTATION.md`](PHASE13_IMPLEMENTATION.md) | Historical implementation notes for the existing platform |
 
-## 📬 Contact
+## Contributing
 
-* **Project Maintainer:** [Your Name / Team Name](https://github.com/your-username)
-* **Twitter / X:** [@your_handle](https://twitter.com/your_handle)
-* **Discord Community:** [Join Discord Server](https://discord.gg/your-community)
-* **Email:** maintainer@webautopsynetwork.io
+Contributions should preserve the platform’s authorization, scope, SSRF, rate-limit, audit, evidence, and non-destructive guarantees. New security rules should be independently testable, low-false-positive, explicit about prerequisites and limitations, and backed by persisted evidence. Changes that introduce credentials, destructive actions, unbounded network behavior, or unreviewed exploit automation should not be merged.
+
+```bash
+git checkout -b feature/your-change
+# make and test the change
+git add .
+git commit -m "feat: describe the change"
+git push origin feature/your-change
+```
+
+## References
+
+[1]: https://fastapi.tiangolo.com/ "FastAPI documentation"
+[2]: https://nextjs.org/docs "Next.js documentation"
+[3]: https://playwright.dev/python/ "Playwright Python documentation"
+[4]: https://docs.sqlalchemy.org/ "SQLAlchemy documentation"
+[5]: https://alembic.sqlalchemy.org/ "Alembic documentation"
+[6]: https://owasp.org/www-project-top-ten/ "OWASP Top 10"
