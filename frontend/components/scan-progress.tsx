@@ -22,6 +22,25 @@ const LABELS: Record<string, string> = {
 
 const TERMINAL_STATES = ["COMPLETED", "FAILED", "PARTIAL_FAILED", "CANCELLED"];
 
+const PHASES = [
+  { key: "COLLECTING", label: "Collecting", description: "Admission, SSRF validation, HTTP collection, and bounded crawl" },
+  { key: "ANALYZING", label: "Analyzing", description: "Technology, structure, security, performance, accessibility, and content" },
+  { key: "SYNTHESIZING", label: "Synthesizing", description: "Diagnosis and citation-grounded AI synthesis" },
+  { key: "COMPLETED", label: "Completed", description: "All worker tasks are terminal and the report is ready" },
+] as const;
+
+function phaseIndex(state: string) {
+  if (state === "QUEUED" || state === "COLLECTING") return 0;
+  if (state === "ANALYZING") return 1;
+  if (state === "SYNTHESIZING") return 2;
+  if (state === "COMPLETED") return 3;
+  return 0;
+}
+
+function eventLabel(type: string) {
+  return type.replaceAll("_", " ").toLowerCase().replace(/(^| )\w/g, (letter) => letter.toUpperCase());
+}
+
 function statusStyle(status: string) {
   if (status === "SUCCEEDED") return "text-emerald-300 border-emerald-500/20 bg-emerald-500/10";
   if (status === "RUNNING" || status === "DISPATCHED") return "text-cyan-300 border-cyan-500/20 bg-cyan-500/10";
@@ -151,6 +170,8 @@ export function ScanProgress({ scanId, state }: { scanId: string; state: string 
   }
 
   const isTerminal = timing.isTerminal;
+  const liveState = progress?.state ?? state;
+  const activePhaseIndex = phaseIndex(liveState);
   const percent = progress?.percent ?? (state === "QUEUED" ? 0 : 5);
 
   return (
@@ -162,6 +183,28 @@ export function ScanProgress({ scanId, state }: { scanId: string; state: string 
           <p className="mt-1 text-sm text-emerald-100/50">Task state is persisted and streamed from the worker graph; downstream tasks wait for their declared dependencies.</p>
         </div>
         {progress && !isTerminal && <button type="button" onClick={handleCancel} disabled={cancelling || progress.cancel_requested} className="rounded-lg border border-red-500/25 bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-200 hover:bg-red-500/20 disabled:opacity-40">{cancelling ? "Cancelling…" : progress.cancel_requested ? "Cancellation requested" : "Cancel scan"}</button>}
+      </div>
+      <div className="mt-6 rounded-xl border border-cyan-500/15 bg-black/20 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-mono uppercase tracking-[0.22em] text-cyan-300/60">Current phase</p>
+            <p className="mt-1 text-lg font-semibold text-cyan-100">{liveState === "QUEUED" ? "Queued" : PHASES[activePhaseIndex].label}</p>
+          </div>
+          <span className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-xs font-mono text-cyan-200">{liveState}</span>
+        </div>
+        <p className="mt-1 text-xs text-emerald-100/50">{liveState === "QUEUED" ? "Waiting for a worker slot to begin admission and collection." : PHASES[activePhaseIndex].description}</p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-4">
+          {PHASES.map((phase, index) => {
+            const complete = isTerminal ? index <= 3 : index < activePhaseIndex;
+            const active = !isTerminal && index === activePhaseIndex;
+            return (
+              <div key={phase.key} className={`rounded-lg border px-3 py-2 ${complete ? "border-emerald-400/30 bg-emerald-400/10" : active ? "border-cyan-400/40 bg-cyan-400/10" : "border-white/10 bg-white/[0.02]"}`}>
+                <div className="flex items-center justify-between gap-2"><span className={`text-xs font-semibold ${complete ? "text-emerald-200" : active ? "text-cyan-100" : "text-emerald-100/40"}`}>{phase.label}</span><span className={`h-2 w-2 rounded-full ${complete ? "bg-emerald-300" : active ? "animate-pulse bg-cyan-300" : "bg-white/20"}`} /></div>
+                <p className="mt-1 text-[10px] leading-4 text-emerald-100/40">{complete ? "Done" : active ? "Running now" : "Waiting"}</p>
+              </div>
+            );
+          })}
+        </div>
       </div>
       {error && <p className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200/80">{error}</p>}
       <div className="mt-5 flex items-center gap-3"><div className="h-2 flex-1 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400 transition-all" style={{ width: `${percent}%` }} /></div><span className="w-12 text-right text-sm font-mono text-cyan-200">{percent}%</span></div>
@@ -175,6 +218,21 @@ export function ScanProgress({ scanId, state }: { scanId: string; state: string 
       <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {(progress?.tasks ?? []).map((task) => <div key={task.id} className={`rounded-lg border p-3 ${statusStyle(task.status)}`}><div className="flex items-center justify-between gap-2"><p className="text-xs font-semibold">{LABELS[task.task_type] ?? task.task_type}</p><span className="rounded-full border px-2 py-0.5 text-[10px] font-mono">{task.status}</span></div><div className="mt-2 flex items-center justify-between text-[10px] font-mono opacity-70"><span>{task.queue} pool</span><span>attempt {task.attempt}/{task.max_retries + 1}</span></div>{task.error_reason && <p className="mt-2 text-[10px] leading-4 opacity-80">{task.error_reason}</p>}</div>)}
       </div>
+      {progress && progress.events.length > 0 && (
+        <details className="mt-5 rounded-xl border border-white/10 bg-black/20" open={!isTerminal}>
+          <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold text-emerald-100/70">Execution activity · {progress.events.length} recent events</summary>
+          <div className="max-h-64 overflow-y-auto border-t border-white/5 px-4 py-3">
+            <div className="space-y-2">
+              {[...progress.events].reverse().slice(0, 12).map((event, index) => (
+                <div key={`${event.created_at}-${event.type}-${index}`} className="flex flex-col gap-1 border-l border-cyan-400/25 pl-3 text-xs sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                  <div><span className="font-semibold text-cyan-200">{eventLabel(event.type)}</span><span className="ml-2 text-emerald-100/45">{typeof event.payload.task_type === "string" ? event.payload.task_type : typeof event.payload.status === "string" ? event.payload.status : "worker graph update"}</span></div>
+                  <time className="font-mono text-[10px] text-emerald-100/35">{new Date(event.created_at).toLocaleTimeString()}</time>
+                </div>
+              ))}
+            </div>
+          </div>
+        </details>
+      )}
       {progress && <p className="mt-4 text-xs font-mono text-emerald-100/40">{progress.completed_tasks}/{progress.total_tasks} terminal tasks · {taskCounts.size} task types · state {progress.state}</p>}
       {isTerminal && (
         <div className="mt-6 flex flex-col gap-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
