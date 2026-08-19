@@ -124,11 +124,19 @@ export function ScanProgress({ scanId, state }: { scanId: string; state: string 
     const finishedAt = taskFinishes.length && progress && TERMINAL_STATES.includes(progress.state) ? Math.max(...taskFinishes) : null;
     const elapsedMs = startedAt === null ? 0 : Math.max(0, (finishedAt ?? now) - startedAt);
     const isTerminal = Boolean(progress && TERMINAL_STATES.includes(progress.state));
-    const remainingMs = !progress || isTerminal || progress.percent <= 0
+    const runningTasks = (progress?.tasks ?? []).filter((task) => ["RUNNING", "DISPATCHED", "RETRYING"].includes(task.status)).length;
+    const pendingTasks = (progress?.tasks ?? []).filter((task) => ["PENDING", "QUEUED"].includes(task.status)).length;
+    const rawRemainingMs = !progress || isTerminal || progress.percent <= 0
       ? (isTerminal ? 0 : null)
       : Math.max(0, elapsedMs * ((100 - progress.percent) / progress.percent));
+    const isOutlierEstimate = rawRemainingMs !== null && rawRemainingMs > 30 * 60 * 1000;
+    const remainingMs = rawRemainingMs === null
+      ? null
+      : isOutlierEstimate
+      ? null
+      : Math.max(rawRemainingMs, (runningTasks + pendingTasks) * 1000);
     const expectedAt = remainingMs === null ? null : now + remainingMs;
-    return { elapsedMs, remainingMs, expectedAt, startedAt, finishedAt, isTerminal };
+    return { elapsedMs, remainingMs, expectedAt, startedAt, finishedAt, isTerminal, isOutlierEstimate };
   }, [now, progress]);
 
   const taskCounts = useMemo(() => {
@@ -162,7 +170,7 @@ export function ScanProgress({ scanId, state }: { scanId: string; state: string 
         <div className="rounded-lg border border-white/5 bg-black/20 p-3"><p className="text-[10px] uppercase tracking-wider text-emerald-100/40">{isTerminal ? "Total duration" : "Estimated remaining"}</p><p className="mt-1 text-lg font-mono text-cyan-200">{formatDuration(isTerminal ? timing.elapsedMs : timing.remainingMs)}</p></div>
         <div className="rounded-lg border border-white/5 bg-black/20 p-3"><p className="text-[10px] uppercase tracking-wider text-emerald-100/40">{isTerminal ? "Finished" : "Expected completion"}</p><p className="mt-1 text-lg font-mono text-emerald-100">{isTerminal ? formatClock(timing.finishedAt) : formatClock(timing.expectedAt)}</p></div>
       </div>
-      {!isTerminal && <p className="mt-3 text-xs text-emerald-100/45">The remaining-time estimate recalculates every second from completed progress and the current task graph. It is an estimate, not a hard deadline.</p>}
+      {!isTerminal && <p className="mt-3 text-xs text-emerald-100/45">{timing.isOutlierEstimate ? "The scan timing is recalibrating from live task activity; a reliable ETA will appear shortly." : "The remaining-time estimate recalculates from live task activity. It is an estimate, not a hard deadline."}</p>}
       {progress?.queue_position && progress.queue_position > 1 && <p className="mt-3 text-xs text-amber-200/70">Queue position {progress.queue_position} · estimated wait {progress.estimated_wait_seconds}s</p>}
       <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {(progress?.tasks ?? []).map((task) => <div key={task.id} className={`rounded-lg border p-3 ${statusStyle(task.status)}`}><div className="flex items-center justify-between gap-2"><p className="text-xs font-semibold">{LABELS[task.task_type] ?? task.task_type}</p><span className="rounded-full border px-2 py-0.5 text-[10px] font-mono">{task.status}</span></div><div className="mt-2 flex items-center justify-between text-[10px] font-mono opacity-70"><span>{task.queue} pool</span><span>attempt {task.attempt}/{task.max_retries + 1}</span></div>{task.error_reason && <p className="mt-2 text-[10px] leading-4 opacity-80">{task.error_reason}</p>}</div>)}
