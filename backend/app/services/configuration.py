@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 from sqlalchemy.orm import Session
 
 from app.models.scan import HTTPObservation, HTTPResponse, Page, SecurityFinding, Scan
+from app.services.updates import UpdatePackageError, UpdatePackageService
 
 
 RULE_VERSION = "phase4-config-v1"
@@ -145,6 +146,7 @@ class ConfigurationAgent:
         self.scan = db.query(Scan).filter(Scan.id == scan_id).first()
         if not self.scan:
             raise ValueError("Scan not found")
+        self.rule_version, self.disabled_rule_ids = self._update_metadata()
 
     def analyze(self) -> list[SecurityFinding]:
         self.db.query(SecurityFinding).filter(
@@ -186,7 +188,18 @@ class ConfigurationAgent:
             candidate = rule(context)
             if candidate:
                 candidates.append(candidate)
-        return candidates
+        return [candidate for candidate in candidates if candidate["rule"].rule_id not in self.disabled_rule_ids]
+
+    def _update_metadata(self) -> tuple[str, set[str]]:
+        try:
+            active = UpdatePackageService(self.db).resolve_component("configuration_rules")
+        except UpdatePackageError:
+            active = None
+        if not active:
+            return RULE_VERSION, set()
+        component = active["component"]
+        version = component.get("version", RULE_VERSION)
+        return f"{version}+{active['package_name']}-{active['package_version']}", set(component.get("disabled_rule_ids", []))
 
     def _context(self, page: Page, response: HTTPResponse | None) -> dict[str, Any]:
         observations = self.db.query(HTTPObservation).filter(
@@ -387,7 +400,7 @@ class ConfigurationAgent:
             confidence_band="high" if candidate["confidence"] >= 80 else "medium",
             severity=candidate["severity"],
             rule_id=rule.rule_id,
-            rule_version=RULE_VERSION,
+            rule_version=self.rule_version,
             evidence=[evidence],
             limitations=LIMITATIONS,
         )

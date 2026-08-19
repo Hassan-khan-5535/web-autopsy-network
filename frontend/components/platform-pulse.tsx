@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getPlatformDashboard, type PlatformDashboardResponse } from "@/lib/api";
+import { getPlatformDashboard, getUpdateStatus, type PlatformDashboardResponse, type UpdateStatusResponse } from "@/lib/api";
 
 const stateStyle: Record<string, string> = {
   COMPLETED: "border-emerald-400/30 bg-emerald-500/10 text-emerald-200",
@@ -13,6 +13,7 @@ const stateStyle: Record<string, string> = {
 
 export function PlatformPulse() {
   const [data, setData] = useState<PlatformDashboardResponse | null>(null);
+  const [updates, setUpdates] = useState<UpdateStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
 
@@ -20,9 +21,10 @@ export function PlatformPulse() {
     let active = true;
     const load = async () => {
       try {
-        const next = await getPlatformDashboard();
+        const [next, updateStatus] = await Promise.all([getPlatformDashboard(), getUpdateStatus().catch(() => null)]);
         if (!active) return;
         setData(next);
+        setUpdates(updateStatus);
         setRefreshedAt(new Date());
         setError(null);
       } catch (err: unknown) {
@@ -47,8 +49,15 @@ export function PlatformPulse() {
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-emerald-500/10 px-4 py-3 text-[10px] font-mono uppercase tracking-wider text-emerald-100/40"><span>Recent investigations</span><span>Posture / report</span></div>
         {scans.length ? scans.slice(0, 6).map((scan) => <Link key={scan.id} href={`/scans/${scan.id}`} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-emerald-500/10 px-4 py-4 transition-colors hover:bg-emerald-500/[0.05]"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="truncate text-sm font-medium text-emerald-100" title={scan.target_url}>{scan.target_url}</p><span className={`rounded-full border px-2 py-0.5 text-[10px] font-mono ${stateStyle[scan.state] ?? "border-cyan-400/30 bg-cyan-500/10 text-cyan-100"}`}>{scan.state}</span></div><p className="mt-1 text-xs text-emerald-100/45">{scan.assessment_profile ?? "legacy"} profile · {scan.page_count} persisted pages · started {new Date(scan.created_at).toLocaleString()}</p></div><div className="text-right"><p className="text-sm font-mono text-cyan-100">{scan.risk_score ?? "—"}</p><p className="mt-1 text-[10px] uppercase tracking-wider text-emerald-100/45">{scan.risk_band ?? "risk pending"}{scan.posture_available ? " · posture" : ""}</p></div></Link>) : <div className="px-4 py-8 text-sm text-emerald-100/50">No persisted scans are available yet. Create an authorized assessment to start the portfolio timeline.</div>}
       </div>
+      <UpdateLifecycle updates={updates} />
     </section>
   );
+}
+
+function UpdateLifecycle({ updates }: { updates: UpdateStatusResponse | null }) {
+  const active = updates?.packages.find((item) => item.status === "active");
+  const disabledCount = active?.validation_report?.regression?.disabled_rule_ids?.length ?? 0;
+  return <div className="mt-5 rounded-2xl border border-cyan-500/15 bg-cyan-500/[0.035] p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-mono uppercase tracking-[0.18em] text-cyan-300/70">Signature intelligence lifecycle</p><p className="mt-1 text-sm font-semibold text-cyan-100">{active ? `${active.name} · ${active.version}` : "Built-in rule fallback active"}</p><p className="mt-1 text-xs text-emerald-100/55">{active ? `Verified ${active.activated_at ? new Date(active.activated_at).toLocaleString() : "locally"} · ${active.components.length} component sets · ${disabledCount} disabled rules` : updates?.fallback ?? "Local signatures remain available if update metadata is unavailable."}</p></div><span className={`rounded-full border px-3 py-1 text-[10px] font-mono ${active?.signature_verified ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-100" : "border-slate-400/30 bg-slate-500/10 text-slate-200"}`}>{active?.signature_verified ? "VERIFIED PACKAGE" : "OFFLINE FALLBACK"}</span></div></div>;
 }
 
 function Metric({ label, value, detail }: { label: string; value: string | number; detail: string }) {

@@ -87,3 +87,9 @@
 - [x] Upgrade dashboard scan setup, live agent activity, attack-surface investigation, severity/confidence filtering, evidence drill-down, posture/trend, regression, and export workflows.
 - [x] Add focused Extension 15 API and CLI tests, verify premium dashboard behavior, and run full regression/build checks.
 - [ ] Create and push the professional Extension 15 GitHub release commit.
+- [x] Assess existing technology signatures, configuration rules, vulnerability checks, secret patterns, CVE intelligence, remediation metadata, and their current provenance/version handling.
+- [x] Define the Extension 16 versioned update-package schema, signature verification, compatibility, local cache, rollback, disabled-rule, and offline activation contract.
+- [x] Implement verified local update-package lifecycle management with schema validation, provenance, timestamps, compatibility gates, staged regression checks, rollback, and offline-safe fallback.
+- [x] Integrate active update-package metadata and disabled-rule handling with technology, configuration, secret, CVE, vulnerability, and remediation component metadata; active package components resolve locally while built-in rule sources remain the offline fallback.
+- [x] Add update lifecycle visibility, focused Extension 16 regression coverage, and full verification.
+- [ ] Create and push the professional Extension 16 GitHub release commit.

@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 
 from app.models.scan import HTTPResponse, Page, Resource, SecurityFinding
+from app.services.updates import UpdatePackageError, UpdatePackageService
 
 RULE_VERSION = "phase7-secrets-v1"
 REDACTED = "[REDACTED]"
@@ -199,6 +200,7 @@ class SecretsAgent:
     def __init__(self, db: Session, scan_id: UUID) -> None:
         self.db = db
         self.scan_id = scan_id
+        self.rule_version, self.disabled_rule_ids = self._update_metadata()
 
     def _sources(self) -> list[SecretSource]:
         sources: list[SecretSource] = []
@@ -236,6 +238,8 @@ class SecretsAgent:
         seen: set[tuple[str, str, str, UUID | None]] = set()
         for source in self._sources():
             for candidate in self._detect_source(source):
+                if candidate.rule_id in self.disabled_rule_ids:
+                    continue
                 key = (candidate.rule_id, candidate.secret_kind, candidate.source_type, candidate.page_id)
                 if key in seen:
                     continue
@@ -252,7 +256,7 @@ class SecretsAgent:
                     confidence_band="high" if candidate.confidence >= 90 else "medium" if candidate.confidence >= 70 else "low",
                     severity=candidate.severity,
                     rule_id=candidate.rule_id,
-                    rule_version=RULE_VERSION,
+                    rule_version=self.rule_version,
                     evidence=[dict(item) for item in candidate.evidence],
                     limitations=candidate.limitations,
                 )
@@ -266,11 +270,11 @@ class SecretsAgent:
         findings = self.db.query(SecurityFinding).filter(SecurityFinding.scan_id == self.scan_id, SecurityFinding.category == "secrets").order_by(SecurityFinding.severity.desc(), SecurityFinding.subject).all()
         return {
             "scan_id": str(self.scan_id),
-            "rule_version": RULE_VERSION,
-            "rules": [SECRETS_RULES[key].as_dict() for key in sorted(SECRETS_RULES)],
+            "rule_version": self.rule_version,
+            "rules": [SECRETS_RULES[key].as_dict() for key in sorted(SECRETS_RULES) if key not in self.disabled_rule_ids],
             "findings": [self._finding_dict(finding) for finding in findings],
             "summary": {
-                "rule_count": len(SECRETS_RULES),
+                "rule_count": len([key for key in SECRETS_RULES if key not in self.disabled_rule_ids]),
                 "finding_count": len(findings),
                 "critical_count": sum(1 for item in findings if item.severity == "critical"),
                 "high_count": sum(1 for item in findings if item.severity == "high"),
@@ -280,6 +284,17 @@ class SecretsAgent:
             },
             "redaction": {"values_persisted": False, "values_logged": False, "values_returned": False, "stored_evidence_mode": "minimum-redacted-metadata"},
         }
+
+    def _update_metadata(self) -> tuple[str, set[str]]:
+        try:
+            active = UpdatePackageService(self.db).resolve_component("secret_patterns")
+        except UpdatePackageError:
+            active = None
+        if not active:
+            return RULE_VERSION, set()
+        component = active["component"]
+        version = component.get("version", RULE_VERSION)
+        return f"{version}+{active['package_name']}-{active['package_version']}", set(component.get("disabled_rule_ids", []))
 
     def _detect_source(self, source: SecretSource) -> Iterable[SecretCandidate]:
         text = source.text

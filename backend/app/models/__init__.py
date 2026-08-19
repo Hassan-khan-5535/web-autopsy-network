@@ -1,6 +1,7 @@
 """Future SQLAlchemy domain models are added here through Alembic migrations."""
 
 from app.models.base import Base
+from app.models.update_package import UpdatePackage
 from app.models.scan import (
     AccessibilityFinding,
     AssessmentAuditEvent,
@@ -44,6 +45,7 @@ from app.models.scan import (
 
 __all__ = [
     "Base",
+    "UpdatePackage",
     "Website",
     "Scan",
     "ScanDifference",

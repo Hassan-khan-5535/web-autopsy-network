@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.models.scan import Scan, ScanRiskSummary, SecurityPostureSnapshot, Website
 from app.services.reporting import SecurityReportService
+from app.services.updates import UpdatePackageService
 
 router = APIRouter()
 
@@ -33,6 +34,7 @@ CAPABILITIES = {
         {"id": "compare", "method": "POST", "path": "/v1/scans/compare", "description": "Compare persisted scans of the same target."},
         {"id": "report", "method": "GET", "path": "/v1/scans/{scan_id}/report", "description": "Retrieve the unified security posture report."},
         {"id": "exports", "method": "GET", "path": "/v1/scans/{scan_id}/report/export/{pdf|json|sarif}", "description": "Download redaction-preserving report exports."},
+        {"id": "update_status", "method": "GET", "path": "/v1/platform/updates", "description": "Inspect locally verified rule and signature package provenance, activation, rollback, and offline fallback state."},
     ],
 }
 
@@ -72,6 +74,12 @@ def get_dashboard_snapshot(limit: int = Query(default=20, ge=1, le=100), db: Ses
             for scan in scans
         ],
     }
+
+
+@router.get("/platform/updates")
+def get_update_status(db: Session = Depends(get_db)):
+    """Read-only visibility into the local, verified update package lifecycle."""
+    return UpdatePackageService(db).status()
 
 
 @router.get("/platform/scans/{scan_id}/findings")

@@ -1557,3 +1557,25 @@ export async function getPlatformDashboard(limit = 20): Promise<PlatformDashboar
   if (!response.ok) throw new Error("Failed to fetch the platform dashboard");
   return response.json() as Promise<PlatformDashboardResponse>;
 }
+
+export type UpdatePackageStatus = {
+  id: string;
+  name: string;
+  version: string;
+  status: string;
+  signature_verified: boolean;
+  sha256: string;
+  components: string[];
+  provenance: Record<string, unknown>;
+  installed_at: string;
+  activated_at: string | null;
+  rolled_back_at: string | null;
+  validation_report: { regression?: { disabled_rule_ids?: string[]; checked_rule_count?: number } };
+};
+export type UpdateStatusResponse = { update_version: string; offline_safe: boolean; external_feed_required: boolean; cache_dir: string; packages: UpdatePackageStatus[]; fallback: string };
+
+export async function getUpdateStatus(): Promise<UpdateStatusResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/platform/updates`, { headers: { Accept: "application/json" }, cache: "no-store" });
+  if (!response.ok) throw new Error("Failed to fetch update package status");
+  return response.json() as Promise<UpdateStatusResponse>;
+}

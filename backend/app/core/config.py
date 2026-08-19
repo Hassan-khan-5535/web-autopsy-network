@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     orchestration_min_task_dispatch_budget: int = 32
     orchestration_dispatches_per_request: int = 16
 
+    # Extension 16: verified local rule and signature package lifecycle.
+    update_package_hmac_key: str = "development-local-update-key"
+    update_package_cache_dir: str = ".web-autopsy-cache"
+    update_package_scanner_version: str = "0.16.0"
+    update_package_require_signature: bool = True
+
     llm_api_key: str | None = None
     llm_api_base: str | None = None
     llm_model: str = "gpt-4o-mini"

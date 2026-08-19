@@ -16,6 +16,7 @@ from app.models.scan import (
     Technology,
     TechnologyEvidence,
 )
+from app.services.updates import UpdatePackageError, UpdatePackageService
 
 RULESET_PATH = Path(__file__).resolve().parent.parent / "data" / "technology_signatures.json"
 
@@ -284,16 +285,28 @@ class TechnologyDetectionService:
         start = max(0, position - 100)
         return value[start : start + 300]
 
-    @staticmethod
-    def _load_rules() -> tuple[str, list[SignatureRule]]:
-        with RULESET_PATH.open(encoding="utf-8") as handle:
-            data = json.load(handle)
-        rules = [SignatureRule(**raw_rule) for raw_rule in data["rules"]]
+    def _load_rules(self) -> tuple[str, list[SignatureRule]]:
+        data: dict[str, Any]
+        disabled_rule_ids: set[str] = set()
+        try:
+            active = UpdatePackageService(self.db).resolve_component("technology_signatures")
+        except UpdatePackageError:
+            active = None
+        if active:
+            component = active["component"]
+            data = component.get("data", component)
+            disabled_rule_ids = set(component.get("disabled_rule_ids", []))
+            source_version = f"{data.get('version', 'unknown')}+{active['package_name']}-{active['package_version']}"
+        else:
+            with RULESET_PATH.open(encoding="utf-8") as handle:
+                data = json.load(handle)
+            source_version = str(data.get("version", ""))
+        rules = [SignatureRule(**raw_rule) for raw_rule in data["rules"] if raw_rule.get("id") not in disabled_rule_ids]
         if not data.get("version") or not rules:
             raise EvidenceValidationError(
                 "Technology ruleset must have a version and at least one rule."
             )
-        return data["version"], rules
+        return source_version, rules
 
 
 __all__ = [
