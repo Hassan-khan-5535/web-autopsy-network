@@ -21,6 +21,7 @@ import {
   getScanCVEIntelligence,
   getScanEvidenceReviews,
   getScanAttackSurfaceGraph,
+  getScanRiskPrioritization,
   getScanPerformance,
   getScanPageRendered,
   getScanAccessibility,
@@ -46,6 +47,7 @@ import {
   type CVEIntelligenceResponse,
   type EvidenceResponse,
   type AttackSurfaceGraphResponse,
+  type RiskPrioritizationResponse,
   type PerformanceResponse,
   type AccessibilityFinding,
   type ContentFinding,
@@ -57,6 +59,7 @@ import { HistoryPanel } from "@/components/history-panel";
 import { CauseOfDeath } from "@/components/cause-of-death";
 import { ScanProgress } from "@/components/scan-progress";
 import { AttackSurfaceGraph } from "@/components/attack-surface-graph";
+import { RiskPrioritization } from "@/components/risk-prioritization";
 
 export default function ScanResultPage() {
   const params = useParams();
@@ -79,6 +82,7 @@ export default function ScanResultPage() {
   const [cveIntelligence, setCveIntelligence] = useState<CVEIntelligenceResponse | null>(null);
   const [evidenceReviews, setEvidenceReviews] = useState<EvidenceResponse | null>(null);
   const [attackSurfaceGraph, setAttackSurfaceGraph] = useState<AttackSurfaceGraphResponse | null>(null);
+  const [riskPrioritization, setRiskPrioritization] = useState<RiskPrioritizationResponse | null>(null);
   const [performance, setPerformance] = useState<PerformanceResponse | null>(null);
   const [accessibilityFindings, setAccessibilityFindings] = useState<AccessibilityFinding[]>([]);
   const [contentFindings, setContentFindings] = useState<ContentFinding[]>([]);
@@ -112,7 +116,7 @@ export default function ScanResultPage() {
         }
 
         if (["COMPLETED", "FAILED", "PARTIAL_FAILED", "CANCELLED"].includes(scanData.state)) {
-          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, reconData, httpData, securityData, configurationData, apiAgentData, vulnerabilityData, secretsData, cveIntelligenceData, evidenceReviewsData, attackSurfaceGraphData, performanceData, accessData, contentData] = await Promise.all([
+          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, reconData, httpData, securityData, configurationData, apiAgentData, vulnerabilityData, secretsData, cveIntelligenceData, evidenceReviewsData, attackSurfaceGraphData, riskPrioritizationData, performanceData, accessData, contentData] = await Promise.all([
             getScanPages(id).catch(() => []),
             getScanTechnologies(id).catch(() => []),
             getScanEvidence(id).catch(() => []),
@@ -129,6 +133,7 @@ export default function ScanResultPage() {
             getScanCVEIntelligence(id).catch(() => null),
             getScanEvidenceReviews(id).catch(() => null),
             getScanAttackSurfaceGraph(id).catch(() => null),
+            getScanRiskPrioritization(id).catch(() => null),
             getScanPerformance(id).catch(() => null),
             getScanAccessibility(id).catch(() => []),
             getScanContent(id).catch(() => []),
@@ -151,6 +156,7 @@ export default function ScanResultPage() {
             setCveIntelligence(cveIntelligenceData);
             setEvidenceReviews(evidenceReviewsData);
             setAttackSurfaceGraph(attackSurfaceGraphData);
+            setRiskPrioritization(riskPrioritizationData);
             setPerformance(performanceData);
             setAccessibilityFindings(accessData);
             setContentFindings(contentData);
@@ -275,7 +281,7 @@ export default function ScanResultPage() {
               <span className="mr-2 text-xs font-mono uppercase tracking-wider text-emerald-100/45">Report sections</span>
               {[
                 ["cause-of-death", "Cause of Death"], ["ai-doctor", "AI Doctor"], ["history", "History"], ["dependencies", "Dependencies"],
-                ["architecture", "Architecture"], ["http-agent", "HTTP Agent"], ["recon", "Recon Agent"], ["api-intelligence", "API Intelligence"], ["api-agent", "API Agent"], ["vulnerability-agent", "Vulnerability Agent"], ["secrets", "Secrets & Sensitive Data"], ["cve-intelligence", "CVE Intelligence"], ["evidence-agent", "Evidence Agent"], ["attack-surface-graph", "Attack Surface Graph"], ["technology-dna", "Technology DNA"], ["performance", "Performance"],
+                ["architecture", "Architecture"], ["http-agent", "HTTP Agent"], ["recon", "Recon Agent"], ["api-intelligence", "API Intelligence"], ["api-agent", "API Agent"], ["vulnerability-agent", "Vulnerability Agent"], ["secrets", "Secrets & Sensitive Data"], ["cve-intelligence", "CVE Intelligence"], ["evidence-agent", "Evidence Agent"], ["risk-prioritization", "Risk Prioritization"], ["attack-surface-graph", "Attack Surface Graph"], ["technology-dna", "Technology DNA"], ["performance", "Performance"],
                 ["configuration", "Configuration"], ["security", "Security"], ["accessibility", "Accessibility"], ["content-seo", "Content & SEO"], ["raw-evidence", "Raw Evidence"],
               ].map(([anchor, label]) => <a key={anchor} href={`#${anchor}`} className="rounded-full border border-emerald-500/20 px-3 py-1.5 text-xs text-emerald-300 hover:border-emerald-400/50 hover:bg-emerald-500/10">{label}</a>)}
             </div>
@@ -302,6 +308,7 @@ export default function ScanResultPage() {
         {/* Phase 11 History / Time Machine */}
         {isCompleted && !isDemo && <section id="history"><HistoryPanel websiteId={scan.website_id} currentScanId={scan.id} /></section>}
 
+        {riskPrioritization && <RiskPrioritization report={riskPrioritization} />}
         {attackSurfaceGraph && <AttackSurfaceGraph graph={attackSurfaceGraph} />}
 
         {/* Phase 5 Interactive Dependency Graph */}

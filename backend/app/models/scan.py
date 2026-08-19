@@ -120,6 +120,12 @@ class Scan(Base):
     attack_surface_graph_updates: Mapped[list["AttackSurfaceGraphUpdate"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan"
     )
+    risk_assessments: Mapped[list["RiskAssessment"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
+    risk_summary: Mapped[Optional["ScanRiskSummary"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan", uselist=False
+    )
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     pause_requested: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -663,6 +669,47 @@ class AttackSurfaceGraphUpdate(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
 
     scan: Mapped["Scan"] = relationship(back_populates="attack_surface_graph_updates")
+
+
+class RiskAssessment(Base):
+    __tablename__ = "risk_assessments"
+    __table_args__ = (UniqueConstraint("scan_id", "security_finding_id", name="uq_risk_assessments_scan_finding"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
+    security_finding_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("security_findings.id", ondelete="CASCADE"), index=True)
+    deterministic_version: Mapped[str] = mapped_column(String(50), index=True)
+    risk_score: Mapped[float] = mapped_column(Float, default=0.0, index=True)
+    risk_band: Mapped[str] = mapped_column(String(30), default="info", index=True)
+    eligible_for_prioritization: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    evidence_state: Mapped[str] = mapped_column(String(30), default="not_reviewed", index=True)
+    score_components: Mapped[dict] = mapped_column(JSON)
+    decision_notes: Mapped[list] = mapped_column(JSON)
+    evidence_snapshot: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    scan: Mapped["Scan"] = relationship(back_populates="risk_assessments")
+    security_finding: Mapped["SecurityFinding"] = relationship()
+
+
+class ScanRiskSummary(Base):
+    __tablename__ = "scan_risk_summaries"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), unique=True, index=True)
+    website_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("websites.id", ondelete="CASCADE"), index=True)
+    deterministic_version: Mapped[str] = mapped_column(String(50), index=True)
+    overall_score: Mapped[float] = mapped_column(Float, default=0.0, index=True)
+    risk_band: Mapped[str] = mapped_column(String(30), default="info", index=True)
+    eligible_assessment_count: Mapped[int] = mapped_column(Integer, default=0)
+    assessment_count: Mapped[int] = mapped_column(Integer, default=0)
+    summary: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    scan: Mapped["Scan"] = relationship(back_populates="risk_summary")
+    website: Mapped["Website"] = relationship()
 
 
 class ApiEndpoint(Base):

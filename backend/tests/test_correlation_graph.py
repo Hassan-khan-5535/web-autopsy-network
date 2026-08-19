@@ -2,7 +2,7 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from app.api.routes.scans import get_scan_attack_surface_graph
+from app.api.routes.scans import get_scan_attack_surface_graph, get_scan_risk_prioritization
 from app.models.scan import (
     ApiEndpoint,
     AttackSurfaceGraphEdge,
@@ -15,12 +15,15 @@ from app.models.scan import (
     ReconAsset,
     ReconEndpoint,
     ReconParameter,
+    RiskAssessment,
     Scan,
+    ScanRiskSummary,
     SecurityFinding,
     Technology,
     Website,
 )
 from app.services.correlation import CORRELATION_VERSION, CorrelationAgent
+from app.services.risk import RISK_COMPONENT_WEIGHTS, RiskAgent
 from app.services.tasks import TaskGraphCoordinator
 
 
@@ -229,3 +232,75 @@ def test_correlation_task_waits_for_evidence_and_gates_diagnosis(db: Session):
 
     assert task_map["correlation"].dependency_keys == ["evidence"]
     assert "correlation" in task_map["diagnosis"].dependency_keys
+    assert task_map["risk"].dependency_keys == ["correlation", "evidence"]
+    assert "risk" in task_map["diagnosis"].dependency_keys
+
+
+def test_risk_agent_persists_transparent_scores_and_safe_contract(db: Session):
+    scan = _scan(db)
+    _seed_evidence(db, scan)
+    CorrelationAgent(db, scan.id).analyze(source_event="test:risk")
+
+    assessments = RiskAgent(db, scan.id).analyze()
+    report = RiskAgent(db, scan.id).report()
+
+    assert len(assessments) == 1
+    assert db.query(RiskAssessment).filter_by(scan_id=scan.id).count() == 1
+    assert db.query(ScanRiskSummary).filter_by(scan_id=scan.id).count() == 1
+    assessment = report["assessments"][0]
+    assert set(assessment["score_components"]) == set(RISK_COMPONENT_WEIGHTS)
+    assert sum(component["weight"] for component in assessment["score_components"].values()) == 100
+    assert assessment["risk_score"] >= 70
+    assert assessment["evidence_snapshot"]["secret_values_included"] is False
+    assert report["scoring_contract"]["model"] == "deterministic_heuristic"
+    assert report["scoring_contract"]["opaque_override_allowed"] is False
+    assert report["scoring_contract"]["active_exploitation_supported"] is False
+    assert get_scan_risk_prioritization(scan.id, db)["summary"]["available"] is True
+
+
+def test_risk_agent_caps_nonvalidated_evidence_and_compares_same_target(db: Session):
+    current = _scan(db)
+    _seed_evidence(db, current)
+    review = db.query(EvidenceReview).filter_by(scan_id=current.id).one()
+    review.finding_state = "candidate"
+    db.commit()
+    CorrelationAgent(db, current.id).analyze(source_event="test:current")
+
+    prior = Scan(
+        id=uuid4(),
+        website_id=current.website_id,
+        state="COMPLETED",
+        requested_url="https://app.example.com/",
+        max_depth=1,
+        max_pages=5,
+        max_concurrency=1,
+        request_delay_ms=100,
+        same_domain_mode="hostname",
+    )
+    db.add(prior)
+    db.flush()
+    prior_finding = SecurityFinding(
+        scan_id=prior.id,
+        category="security",
+        subject="Missing Content-Security-Policy",
+        statement="Stored CSP observation.",
+        classification="OBSERVED",
+        confidence=80.0,
+        confidence_band="high",
+        severity="medium",
+        rule_id="SEC-CSP-001",
+        rule_version="test",
+        evidence=[{"id": "prior-csp"}],
+        limitations="Stored evidence only.",
+    )
+    db.add(prior_finding)
+    db.commit()
+    RiskAgent(db, prior.id).analyze()
+    RiskAgent(db, current.id).analyze()
+    report = RiskAgent(db, current.id).report()
+
+    assert report["assessments"][0]["risk_score"] <= 69.99
+    assert any("capped" in note.lower() for note in report["assessments"][0]["decision_notes"])
+    assert report["trend"]["prior_scan"]["scan_id"] == str(prior.id)
+    assert report["trend"]["movement"] in {"increased", "decreased", "stable"}
+    assert len(report["trend"]["series"]) == 2

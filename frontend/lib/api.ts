@@ -429,6 +429,64 @@ export type AttackSurfaceGraphResponse = {
   };
 };
 
+export type RiskScoreComponent = {
+  weight: number;
+  score: number;
+  weighted_contribution: number;
+  explanation: string;
+};
+
+export type RiskAssessmentResponse = {
+  id: string;
+  security_finding_id: string;
+  subject: string;
+  category: string;
+  severity: string;
+  rule_id: string;
+  risk_score: number;
+  risk_band: string;
+  eligible_for_prioritization: boolean;
+  evidence_state: string;
+  score_components: Record<string, RiskScoreComponent>;
+  decision_notes: string[];
+  evidence_snapshot: Record<string, unknown>;
+  updated_at: string;
+};
+
+export type RiskPrioritizationResponse = {
+  scan_id: string;
+  deterministic_version: string;
+  summary: {
+    available: boolean;
+    overall_score: number;
+    risk_band: string;
+    eligible_assessment_count: number;
+    assessment_count: number;
+    summary: Record<string, unknown>;
+    updated_at?: string;
+  };
+  assessments: RiskAssessmentResponse[];
+  trend: {
+    prior_scan: { scan_id: string; overall_score: number; risk_band: string; updated_at: string } | null;
+    score_delta: number | null;
+    movement: string;
+    series: Array<{ scan_id: string; overall_score: number; risk_band: string; updated_at: string }>;
+    finding_changes: Array<Record<string, unknown>>;
+    limitation: string;
+  };
+  scoring_contract: {
+    model: string;
+    component_weights: Record<string, number>;
+    components_are_transparent: boolean;
+    ml_assistance_enabled: boolean;
+    ml_requirement: string;
+    validated_evidence_can_be_overridden_by_ml: boolean;
+    opaque_override_allowed: boolean;
+    active_exploitation_supported: boolean;
+    network_requests_performed: boolean;
+  };
+};
+
 export type CVEIntelligenceResponse = {
   scan_id: string;
   rule_version: string;
@@ -584,6 +642,7 @@ import {
   DEMO_PERFORMANCE,
   DEMO_PAGES,
   DEMO_ATTACK_SURFACE_GRAPH,
+  DEMO_RISK_PRIORITIZATION,
 } from "./demo-data";
 
 export async function getAssessmentAuthorization(id: string): Promise<AssessmentAuthorization> {
@@ -741,6 +800,20 @@ export async function getScanAttackSurfaceGraph(id: string): Promise<AttackSurfa
     throw new Error(`Failed to fetch Attack Surface Graph for scan ${id}`);
   }
   return response.json() as Promise<AttackSurfaceGraphResponse>;
+}
+
+export async function getScanRiskPrioritization(id: string): Promise<RiskPrioritizationResponse> {
+  if (id === DEMO_SCAN_ID || id.startsWith("demo")) {
+    return DEMO_RISK_PRIORITIZATION;
+  }
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/risk-prioritization`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Risk Prioritization for scan ${id}`);
+  }
+  return response.json() as Promise<RiskPrioritizationResponse>;
 }
 
 export async function getScanCVEIntelligence(id: string): Promise<CVEIntelligenceResponse> {
