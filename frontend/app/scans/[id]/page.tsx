@@ -196,6 +196,19 @@ export default function ScanResultPage() {
 
         {!isDemo && <ScanProgress scanId={scan.id} state={scan.state} />}
 
+        {isCompleted && (
+          <nav aria-label="Report sections" className="rounded-2xl border border-emerald-900/30 bg-[#0b1714] p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-2 text-xs font-mono uppercase tracking-wider text-emerald-100/45">Report sections</span>
+              {[
+                ["cause-of-death", "Cause of Death"], ["ai-doctor", "AI Doctor"], ["history", "History"], ["dependencies", "Dependencies"],
+                ["architecture", "Architecture"], ["api-intelligence", "API Intelligence"], ["technology-dna", "Technology DNA"], ["performance", "Performance"],
+                ["security", "Security"], ["accessibility", "Accessibility"], ["content-seo", "Content & SEO"], ["raw-evidence", "Raw Evidence"],
+              ].map(([anchor, label]) => <a key={anchor} href={`#${anchor}`} className="rounded-full border border-emerald-500/20 px-3 py-1.5 text-xs text-emerald-300 hover:border-emerald-400/50 hover:bg-emerald-500/10">{label}</a>)}
+            </div>
+          </nav>
+        )}
+
         {isFailed && (
           <section className="bg-red-500/5 border border-red-500/10 rounded-2xl p-6">
             <h3 className="text-red-400 font-semibold mb-2">Collection Failed</h3>
@@ -208,24 +221,24 @@ export default function ScanResultPage() {
 
         {/* AI Doctor Section */}
         {isCompleted && (
-          <section className="mb-10">
+          <section id="ai-doctor" className="mb-10">
             <AIDoctor scanId={scan.id} />
           </section>
         )}
 
         {/* Phase 11 History / Time Machine */}
-        {isCompleted && <HistoryPanel websiteId={scan.website_id} currentScanId={scan.id} />}
+        {isCompleted && <section id="history"><HistoryPanel websiteId={scan.website_id} currentScanId={scan.id} /></section>}
 
         {/* Phase 5 Interactive Dependency Graph */}
         {(isCompleted || isFailed) && dependencies.length > 0 && (
-          <section>
+          <section id="dependencies">
             <DependencyGraph dependencies={dependencies} targetUrl={scan.requested_url} evidence={evidence} />
           </section>
         )}
 
         {/* Phase 5 Site Architecture Section */}
         {(isCompleted || isFailed) && architecture && (
-          <section className="space-y-6 bg-[#0b1714] border border-emerald-900/30 rounded-2xl p-6">
+          <section id="architecture" className="space-y-6 bg-[#0b1714] border border-emerald-900/30 rounded-2xl p-6">
             <div className="flex items-end justify-between border-b border-emerald-900/20 pb-4">
               <div>
                 <h2 className="text-xl font-semibold text-emerald-400 flex items-center gap-2">
@@ -303,7 +316,7 @@ export default function ScanResultPage() {
 
         {/* Phase 5 API Endpoints Catalog */}
         {(isCompleted || isFailed) && apiEndpoints.length > 0 && (
-          <section className="space-y-4 bg-[#0b1714] border border-emerald-900/30 rounded-2xl p-6">
+          <section id="api-intelligence" className="space-y-4 bg-[#0b1714] border border-emerald-900/30 rounded-2xl p-6">
             <div className="flex items-end justify-between border-b border-emerald-900/20 pb-4">
               <div>
                 <h2 className="text-xl font-semibold text-emerald-400 flex items-center gap-2">
@@ -359,7 +372,7 @@ export default function ScanResultPage() {
 
         {/* Existing Technology DNA Section */}
         {(isCompleted || isFailed) && (
-          <section className="space-y-4">
+          <section id="technology-dna" className="space-y-4">
             <div className="flex items-end justify-between">
               <div>
                 <h2 className="text-xl font-semibold">Technology DNA</h2>
@@ -425,7 +438,7 @@ export default function ScanResultPage() {
 
         {/* Phase 8 Performance Section */}
         {(isCompleted || isFailed) && performance && (
-          <section className="space-y-5 rounded-2xl border border-emerald-900/30 bg-[#0b1714] p-6">
+          <section id="performance" className="space-y-5 rounded-2xl border border-emerald-900/30 bg-[#0b1714] p-6">
             <div className="flex items-end justify-between border-b border-emerald-900/20 pb-4">
               <div>
                 <h2 className="text-xl font-semibold text-emerald-400">Performance</h2>
@@ -520,7 +533,7 @@ export default function ScanResultPage() {
 
         {/* Phase 7 Passive Security Section */}
         {(isCompleted || isFailed) && (
-          <section className="space-y-4">
+          <section id="security" className="space-y-4">
             <div className="flex items-end justify-between">
               <div>
                 <h2 className="text-xl font-semibold">Security</h2>
@@ -585,7 +598,7 @@ export default function ScanResultPage() {
 
         {/* Phase 9 Accessibility Section */}
         {(isCompleted || isFailed) && (
-          <section className="space-y-4">
+          <section id="accessibility" className="space-y-4">
             <div className="flex items-end justify-between">
               <div>
                 <h2 className="text-xl font-semibold flex items-center gap-2">
@@ -651,7 +664,7 @@ export default function ScanResultPage() {
 
         {/* Phase 9 Content Section */}
         {(isCompleted || isFailed) && (
-          <section className="space-y-4">
+          <section id="content-seo" className="space-y-4">
             <div className="flex items-end justify-between">
               <div>
                 <h2 className="text-xl font-semibold flex items-center gap-2">
@@ -933,7 +946,7 @@ export default function ScanResultPage() {
 
         {/* Existing Raw Evidence Section */}
         {isCompleted && (
-          <section className="space-y-4">
+          <section id="raw-evidence" className="space-y-4">
             <h2 className="text-xl font-semibold flex items-center gap-2">
               <span className="text-emerald-400">Raw Evidence</span>
               <span className="text-xs font-mono bg-white/5 px-2 py-0.5 rounded text-emerald-100/50">
