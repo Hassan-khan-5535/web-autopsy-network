@@ -8,14 +8,15 @@
 |---|---|
 | Live frontend | [Open the running Web Autopsy Network UI](https://3001-iuz98nix5x3egg8bbruc3-2761d934.us2.manus.computer) |
 | Repository | [atifkhani397/web-autopsy-network](https://github.com/atifkhani397/web-autopsy-network) |
-| Live verification record | [`docs/extension4-live-verification.md`](docs/extension4-live-verification.md) |
-| Integration design | [`docs/configuration-agent-integration-design.md`](docs/configuration-agent-integration-design.md) |
+| Live verification record | [`docs/extension5-live-verification.md`](docs/extension5-live-verification.md) |
+| API Agent design | [`docs/extension5-api-agent-integration-design.md`](docs/extension5-api-agent-integration-design.md) |
+| Configuration Agent design | [`docs/configuration-agent-integration-design.md`](docs/configuration-agent-integration-design.md) |
 
 ## Platform status
 
-Extensions 1 through 4 are implemented. Extension 4, the **Configuration Agent**, is included in the `main` branch and has been verified against a real bounded scan of `https://www.python.org/`. The verification scan completed at 100%, and its `configuration` task reached `SUCCEEDED` alongside the HTTP, recon, security, diagnosis, and synthesis tasks.
+Extensions 1 through 5 are implemented. Extension 5, the **API Agent**, is included in the `main` branch and has been verified against a fresh real bounded scan of `https://www.python.org/`. The verification scan completed at 100%, and its `api_agent` task reached `SUCCEEDED` after the existing API Intelligence, HTTP Agent, and Recon Agent dependencies completed.
 
-The latest release commit is `67952b6`, titled `feat: add Configuration Agent with 11 independently testable misconfiguration rules`.
+The latest completed release before this extension was `431cdfd`; the Extension 5 implementation is pending its final release commit after validation.
 
 ## Implemented capabilities
 
@@ -25,6 +26,28 @@ The latest release commit is `67952b6`, titled `feat: add Configuration Agent wi
 | Extension 2 | Passive Certificate Transparency and DNS observations, technology fingerprints, scoped crawling, robots and sitemap processing, JavaScript/API/parameter extraction, sensitive-path classification, and cloud-asset candidate detection | Complete |
 | Extension 3 | Central HTTP behavior analysis with bounded response capture, secret redaction, status and header observations, cookies, redirects, cache behavior, content type, TLS, CORS, compression, security policy, and anomalies | Complete |
 | Extension 4 | Configuration Agent with 11 independently testable, low-false-positive rules and a report UI backed by persisted `SecurityFinding` records | Complete |
+| Extension 5 | API Agent with normalized route/schema inventory, method and parameter analysis, authentication-boundary indicators, data-exposure and error checks, rate-limit and CORS indicators, and a typed report UI | Complete |
+
+The API Agent combines the existing API Intelligence catalog, normalized Recon endpoints and parameters, captured OpenAPI/Swagger documents, and persisted HTTP response evidence. It does not probe undocumented routes, send method-variation requests, authenticate, submit forms, or mutate target data. Its report endpoint is:
+
+```text
+GET /v1/scans/{scan_id}/api-agent
+```
+
+The API Agent rules are:
+
+| Rule ID | Detection area |
+|---|---|
+| `API-INV-001` | Undocumented API route candidates against captured same-host schemas |
+| `API-METHOD-001` | Observed TRACE method exposure |
+| `API-PARAM-001` | Sensitive parameter names in URL/query/path locations |
+| `API-AUTH-001` | Informational authentication-boundary review for sensitive routes |
+| `API-AUTH-002` | Basic authentication challenge over HTTP |
+| `API-DATA-001` | Sensitive field names in bounded JSON-like API responses |
+| `API-RATE-001` | Retry-After, rate-limit headers, and 429 indicators |
+| `API-ERROR-001` | High-signal API error detail markers |
+| `API-POLICY-001` | Wildcard CORS on JSON-like API responses |
+| `API-SCHEMA-001` | Captured public OpenAPI/Swagger schema metadata |
 
 The Configuration Agent rules are:
 
@@ -53,14 +76,15 @@ The current task graph is:
 ```text
 admission → collection →
   [technology, structure, api_intelligence, network_intelligence,
-   http_agent, configuration, security, content, recon]
+   http_agent, configuration, api_agent, security, content, recon]
   → performance → accessibility → diagnosis → synthesis
 ```
 
-The Configuration Agent waits for both `collection` and `http_agent`. It consumes persisted `HTTPObservation` evidence, so it does not perform a separate unbounded request pass. Its API response includes the complete rule catalog, matched findings, a ruleset version, and severity counts:
+The Configuration Agent waits for both `collection` and `http_agent`. The API Agent waits for `collection`, `api_intelligence`, `http_agent`, and, when enabled, `recon`. Both agents consume persisted evidence and do not perform a separate unbounded request pass. The API Agent response includes the complete rule catalog, normalized inventory, schemas, indicators, matched findings, a ruleset version, and severity counts:
 
 ```text
 GET /v1/scans/{scan_id}/configuration
+GET /v1/scans/{scan_id}/api-agent
 ```
 
 ## What the platform observes
@@ -93,7 +117,7 @@ Those limitations are intentional. Any future active checks must preserve explic
 | Evidence model | Shared observations, normalized assets/endpoints/parameters, `HTTPObservation`, and `SecurityFinding` records |
 | Optional AI | Citation-grounded synthesis may be enabled through deployment configuration; deterministic assessment and configuration rules do not require an LLM |
 
-Extension 4 does not require a new Alembic migration because it stores findings in the existing `SecurityFinding` table using `category="configuration"`. The active database remains at Alembic head `20260819_extension3`.
+Extension 5 does not require a new Alembic migration because it stores API findings in the existing `SecurityFinding` table using `category="api"`; the existing `/api-endpoints` inventory endpoint remains backward-compatible. The active database remains at Alembic head `20260819_extension3`.
 
 ## Manual setup without Docker
 
@@ -238,9 +262,9 @@ PYTHONPATH=backend backend/venv/bin/python -m pytest backend/tests -q
 (cd backend && DATABASE_URL=sqlite:///web-autopsy-demo.db PYTHONPATH=. ../backend/venv/bin/alembic current)
 ```
 
-The Extension 4 release was validated with **83 backend tests passing**, successful Python compilation, successful frontend linting, successful TypeScript checking, a successful production build, and Alembic reporting `20260819_extension3 (head)`. A real bounded Python.org scan completed with `requests_used: 7`, `state: COMPLETED`, `status: completed`, and `configuration: SUCCEEDED`.
+The Extension 4 release was validated with **83 backend tests passing**, and Extension 5 raised the full backend regression total to **87 tests passing**. The combined release passed Python compilation, frontend linting, TypeScript checking, production build, and Alembic validation at `20260819_extension3 (head)`. A fresh bounded Python.org scan completed with `requests_used: 7`, `state: COMPLETED`, `status: completed`, and `api_agent: SUCCEEDED`; its API Agent report contained 10 rules, zero findings, and an empty route inventory because no API-like route or schema was captured.
 
-The full live verification details are recorded in [`docs/extension4-live-verification.md`](docs/extension4-live-verification.md). The Configuration Agent design and rule catalog are documented in [`docs/configuration-agent-integration-design.md`](docs/configuration-agent-integration-design.md).
+The Extension 4 live verification details are recorded in [`docs/extension4-live-verification.md`](docs/extension4-live-verification.md). The Extension 5 live verification details are recorded in [`docs/extension5-live-verification.md`](docs/extension5-live-verification.md). The API Agent design and rule catalog are documented in [`docs/extension5-api-agent-integration-design.md`](docs/extension5-api-agent-integration-design.md), and the Configuration Agent design is documented in [`docs/configuration-agent-integration-design.md`](docs/configuration-agent-integration-design.md).
 
 ## Repository documentation
 

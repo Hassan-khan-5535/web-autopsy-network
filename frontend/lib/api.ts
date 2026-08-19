@@ -182,7 +182,7 @@ export type SecurityEvidence = {
 
 export type SecurityFinding = {
   id: string;
-  category: "security" | "SECURITY" | "configuration";
+  category: "security" | "SECURITY" | "configuration" | "api";
   subject: string;
   statement: string;
   classification: "OBSERVED" | "INFERRED";
@@ -432,6 +432,19 @@ export async function getScanConfiguration(id: string): Promise<ConfigurationRes
   return response.json() as Promise<ConfigurationResponse>;
 }
 
+export async function getScanAPIAgent(id: string): Promise<APIAgentResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/api-agent`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch API Agent report for scan ${id}`);
+  }
+
+  return response.json() as Promise<APIAgentResponse>;
+}
+
 export async function getScanPerformance(id: string): Promise<PerformanceResponse> {
   if (id === DEMO_SCAN_ID || id.startsWith("demo")) {
     return DEMO_PERFORMANCE;
@@ -533,6 +546,79 @@ export type ApiEndpointItem = {
   confidence: number;
   discovered_from_source: string;
   created_at: string;
+};
+
+export type APIAgentRule = {
+  rule_id: string;
+  title: string;
+  prerequisites: string;
+  detection_logic: string;
+  evidence_requirements: string;
+  severity: string;
+  confidence: number;
+  remediation_guidance: string;
+  cwe: string[];
+  owasp: string[];
+  rule_version: string;
+};
+
+export type APIAgentInventoryItem = {
+  route: string;
+  path: string;
+  host: string;
+  methods: string[];
+  content_types: string[];
+  sources: string[];
+  status_codes: number[];
+  scope_statuses: string[];
+  confidence: number;
+  parameter_names: string[];
+  documented: boolean;
+  observed: boolean;
+  is_schema: boolean;
+};
+
+export type APIAgentSchema = {
+  url: string;
+  host: string;
+  format: string;
+  version: string | null;
+  paths: string[];
+  security_schemes: string[];
+  publicly_observable: boolean;
+};
+
+export type APIAgentResponse = {
+  scan_id: string;
+  rule_version: string;
+  rules: APIAgentRule[];
+  inventory: APIAgentInventoryItem[];
+  schemas: APIAgentSchema[];
+  indicators: {
+    rate_limit: { observed: boolean; routes: Array<Record<string, unknown>>; absence_not_escalated: boolean };
+    authentication: { routes: Array<Record<string, unknown>>; absence_not_escalated: boolean };
+    errors: Array<Record<string, unknown>>;
+    policy: Array<Record<string, unknown>>;
+    methods: Array<{ route: string; methods: string[] }>;
+  };
+  findings: SecurityFinding[];
+  summary: {
+    inventory_count: number;
+    schema_count: number;
+    documented_route_count: number;
+    undocumented_route_count: number;
+    source_counts: Record<string, number>;
+    method_counts: Record<string, number>;
+    rate_limit_route_count: number;
+    auth_signal_route_count: number;
+    error_route_count: number;
+    policy_route_count: number;
+    high_count: number;
+    medium_count: number;
+    low_count: number;
+    info_count: number;
+    finding_count: number;
+  };
 };
 
 export type ReconAsset = {

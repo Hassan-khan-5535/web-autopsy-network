@@ -15,6 +15,7 @@ import {
   getScanHTTPObservations,
   getScanSecurity,
   getScanConfiguration,
+  getScanAPIAgent,
   getScanPerformance,
   getScanPageRendered,
   getScanAccessibility,
@@ -34,6 +35,7 @@ import {
   type PageRenderedResponse,
   type SecurityFinding,
   type ConfigurationResponse,
+  type APIAgentResponse,
   type PerformanceResponse,
   type AccessibilityFinding,
   type ContentFinding,
@@ -60,6 +62,7 @@ export default function ScanResultPage() {
   const [httpObservations, setHttpObservations] = useState<HTTPObservationResponse | null>(null);
   const [securityFindings, setSecurityFindings] = useState<SecurityFinding[]>([]);
   const [configuration, setConfiguration] = useState<ConfigurationResponse | null>(null);
+  const [apiAgent, setApiAgent] = useState<APIAgentResponse | null>(null);
   const [performance, setPerformance] = useState<PerformanceResponse | null>(null);
   const [accessibilityFindings, setAccessibilityFindings] = useState<AccessibilityFinding[]>([]);
   const [contentFindings, setContentFindings] = useState<ContentFinding[]>([]);
@@ -93,7 +96,7 @@ export default function ScanResultPage() {
         }
 
         if (["COMPLETED", "FAILED", "PARTIAL_FAILED", "CANCELLED"].includes(scanData.state)) {
-          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, reconData, httpData, securityData, configurationData, performanceData, accessData, contentData] = await Promise.all([
+          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, reconData, httpData, securityData, configurationData, apiAgentData, performanceData, accessData, contentData] = await Promise.all([
             getScanPages(id).catch(() => []),
             getScanTechnologies(id).catch(() => []),
             getScanEvidence(id).catch(() => []),
@@ -104,6 +107,7 @@ export default function ScanResultPage() {
             getScanHTTPObservations(id).catch(() => null),
             getScanSecurity(id).catch(() => []),
             getScanConfiguration(id).catch(() => null),
+            getScanAPIAgent(id).catch(() => null),
             getScanPerformance(id).catch(() => null),
             getScanAccessibility(id).catch(() => []),
             getScanContent(id).catch(() => []),
@@ -120,6 +124,7 @@ export default function ScanResultPage() {
             setHttpObservations(httpData);
             setSecurityFindings(securityData);
             setConfiguration(configurationData);
+            setApiAgent(apiAgentData);
             setPerformance(performanceData);
             setAccessibilityFindings(accessData);
             setContentFindings(contentData);
@@ -244,7 +249,7 @@ export default function ScanResultPage() {
               <span className="mr-2 text-xs font-mono uppercase tracking-wider text-emerald-100/45">Report sections</span>
               {[
                 ["cause-of-death", "Cause of Death"], ["ai-doctor", "AI Doctor"], ["history", "History"], ["dependencies", "Dependencies"],
-                ["architecture", "Architecture"], ["http-agent", "HTTP Agent"], ["recon", "Recon Agent"], ["api-intelligence", "API Intelligence"], ["technology-dna", "Technology DNA"], ["performance", "Performance"],
+                ["architecture", "Architecture"], ["http-agent", "HTTP Agent"], ["recon", "Recon Agent"], ["api-intelligence", "API Intelligence"], ["api-agent", "API Agent"], ["technology-dna", "Technology DNA"], ["performance", "Performance"],
                 ["configuration", "Configuration"], ["security", "Security"], ["accessibility", "Accessibility"], ["content-seo", "Content & SEO"], ["raw-evidence", "Raw Evidence"],
               ].map(([anchor, label]) => <a key={anchor} href={`#${anchor}`} className="rounded-full border border-emerald-500/20 px-3 py-1.5 text-xs text-emerald-300 hover:border-emerald-400/50 hover:bg-emerald-500/10">{label}</a>)}
             </div>
@@ -462,6 +467,24 @@ export default function ScanResultPage() {
                 </tbody>
               </table>
             </div>
+          </section>
+        )}
+
+        {/* Extension 5 API Agent analysis */}
+        {(isCompleted || isFailed) && apiAgent && (
+          <section id="api-agent" className="space-y-5 bg-[#0b1714] border border-violet-900/30 rounded-2xl p-6">
+            <div className="flex flex-wrap items-end justify-between gap-4 border-b border-violet-900/20 pb-4">
+              <div>
+                <h2 className="text-xl font-semibold text-violet-300">API Agent</h2>
+                <p className="mt-1 text-sm text-emerald-100/50">Evidence-driven API inventory and security indicators from discovered routes, schemas, parameters, and persisted HTTP observations.</p>
+              </div>
+              <div className="flex gap-2 text-xs font-mono"><span className="rounded border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-violet-300">{apiAgent.rule_version}</span><span className="rounded border border-emerald-500/20 px-2.5 py-1 text-emerald-300">{apiAgent.summary.inventory_count} routes · {apiAgent.summary.finding_count} findings</span></div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><div className="rounded-xl border border-violet-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Inventory</p><p className="mt-1 text-2xl font-semibold text-violet-300">{apiAgent.summary.inventory_count}</p><p className="mt-1 text-[10px] text-emerald-100/45">{apiAgent.summary.documented_route_count} documented</p></div><div className="rounded-xl border border-red-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">High</p><p className="mt-1 text-2xl font-semibold text-red-300">{apiAgent.summary.high_count}</p></div><div className="rounded-xl border border-amber-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Medium</p><p className="mt-1 text-2xl font-semibold text-amber-300">{apiAgent.summary.medium_count}</p></div><div className="rounded-xl border border-emerald-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Informational</p><p className="mt-1 text-2xl font-semibold text-emerald-300">{apiAgent.summary.info_count}</p></div></div>
+            <div className="grid gap-3 md:grid-cols-2"><div className="rounded-xl border border-violet-900/30 bg-[#050b09] p-4"><p className="text-xs font-semibold text-violet-200">Observed API signals</p><p className="mt-2 text-xs text-emerald-100/60">Methods: {Object.entries(apiAgent.summary.method_counts).map(([method, count]) => `${method} ${count}`).join(" · ") || "none observed"}</p><p className="mt-1 text-xs text-emerald-100/60">Rate-limit indicators: {apiAgent.summary.rate_limit_route_count} routes · authentication signals: {apiAgent.summary.auth_signal_route_count} routes · error routes: {apiAgent.summary.error_route_count} · policy routes: {apiAgent.summary.policy_route_count}</p><p className="mt-2 text-[10px] text-emerald-100/40">Absence of rate-limit or authentication signals is not escalated because no repeated probe or authentication attempt was performed.</p></div><div className="rounded-xl border border-violet-900/30 bg-[#050b09] p-4"><p className="text-xs font-semibold text-violet-200">Inventory sources</p><p className="mt-2 text-xs text-emerald-100/60">{Object.entries(apiAgent.summary.source_counts).map(([source, count]) => `${source.replaceAll("_", " ")}: ${count}`).join(" · ")}</p><p className="mt-1 text-xs text-emerald-100/60">Schema documents: {apiAgent.summary.schema_count} · undocumented route candidates: {apiAgent.summary.undocumented_route_count}</p></div></div>
+            {apiAgent.findings.length > 0 ? <div className="space-y-3">{apiAgent.findings.map((finding) => { const rule = apiAgent.rules.find((item) => item.rule_id === finding.rule_id); return <details key={finding.id} className="rounded-xl border border-violet-900/30 bg-[#050b09] p-4"><summary className="cursor-pointer list-none"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-violet-200">{finding.statement}</p><p className="mt-1 text-xs font-mono text-emerald-100/50">{finding.rule_id} · {finding.subject}</p></div><span className="rounded-full border border-violet-500/20 px-3 py-1 text-xs font-mono text-violet-300">{finding.severity} · {finding.confidence ?? "—"}%</span></div></summary><div className="mt-4 grid gap-3 border-t border-violet-900/20 pt-4 text-xs text-emerald-100/65 md:grid-cols-2"><div><p className="font-mono uppercase tracking-wider text-emerald-100/40">Evidence</p><p className="mt-1">{finding.evidence?.map((item) => typeof item === "string" ? item : item.observation).join(" · ") || "Evidence recorded"}</p><p className="mt-3 font-mono uppercase tracking-wider text-emerald-100/40">Limitations</p><p className="mt-1">{finding.limitations || "Persisted evidence only"}</p></div><div><p className="font-mono uppercase tracking-wider text-emerald-100/40">Remediation</p><p className="mt-1">{rule?.remediation_guidance || "Review the rule guidance."}</p><p className="mt-3 font-mono uppercase tracking-wider text-emerald-100/40">References</p><p className="mt-1">{rule ? [...rule.cwe, ...rule.owasp].join(", ") : "—"}</p></div></div></details>; })}</div> : <div className="rounded-xl border border-emerald-900/30 bg-[#050b09] p-5 text-sm text-emerald-100/65">No API Agent rules met their prerequisites with the persisted evidence. This is not a guarantee that the target API is secure.</div>}
+            <details className="rounded-xl border border-violet-900/20 bg-[#050b09] p-4"><summary className="cursor-pointer text-sm font-semibold text-violet-200">View API route inventory</summary><div className="mt-3 overflow-x-auto"><table className="w-full text-left text-xs"><thead className="text-emerald-100/45"><tr><th className="px-2 py-2">ROUTE</th><th className="px-2 py-2">METHODS</th><th className="px-2 py-2">SOURCES</th><th className="px-2 py-2">STATUS</th><th className="px-2 py-2">PARAMETERS</th></tr></thead><tbody>{apiAgent.inventory.slice(0, 100).map((route) => <tr key={`${route.host}${route.path}`} className="border-t border-violet-900/20"><td className="max-w-[320px] truncate px-2 py-2 font-mono text-violet-200" title={route.route}>{route.route}</td><td className="px-2 py-2 text-emerald-100/60">{route.methods.join(", ") || "observed"}</td><td className="px-2 py-2 text-emerald-100/60">{route.sources.join(", ")}</td><td className="px-2 py-2 text-emerald-100/60">{route.status_codes.join(", ") || "—"}</td><td className="px-2 py-2 text-emerald-100/60">{route.parameter_names.join(", ") || "—"}</td></tr>)}</tbody></table>{apiAgent.inventory.length > 100 && <p className="mt-2 text-[10px] text-emerald-100/40">Showing first 100 routes of {apiAgent.inventory.length}; the API response contains the complete bounded inventory.</p>}{apiAgent.inventory.length === 0 && <p className="p-3 text-sm text-emerald-100/60">No API-like routes were normalized from this scan’s persisted evidence.</p>}</div></details>
+            <details className="rounded-xl border border-violet-900/20 bg-[#050b09] p-4"><summary className="cursor-pointer text-sm font-semibold text-violet-200">View captured API schemas and rule catalog</summary><div className="mt-3 space-y-3">{apiAgent.schemas.length > 0 ? apiAgent.schemas.map((schema) => <div key={schema.url} className="border-t border-violet-900/20 pt-3 text-xs text-emerald-100/60"><p className="font-mono text-violet-300">{schema.format} {schema.version || "unknown"} · {schema.url}</p><p className="mt-1">{schema.paths.length} documented paths · security schemes: {schema.security_schemes.join(", ") || "none observed"}</p></div>) : <p className="text-xs text-emerald-100/55">No public OpenAPI/Swagger schema was captured in the bounded evidence.</p>}{apiAgent.rules.map((rule) => <div key={rule.rule_id} className="border-t border-violet-900/20 pt-3 text-xs"><p className="font-mono text-violet-300">{rule.rule_id} · {rule.title} · {rule.severity} / {rule.confidence}%</p><p className="mt-1 text-emerald-100/60">{rule.detection_logic}</p></div>)}</div></details>
           </section>
         )}
 
