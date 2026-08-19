@@ -395,6 +395,69 @@ class Technology(Base):
     )
 
 
+class CVEFeedRun(Base):
+    __tablename__ = "cve_feed_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    source_name: Mapped[str] = mapped_column(String(100), index=True)
+    source_url: Mapped[str] = mapped_column(String(2048))
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    source_last_modified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    record_count: Mapped[int] = mapped_column(Integer, default=0)
+    stale_after_seconds: Mapped[int] = mapped_column(Integer, default=86400)
+    is_stale: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    status: Mapped[str] = mapped_column(String(30), default="succeeded")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class CVEIntelligence(Base):
+    __tablename__ = "cve_intelligence"
+    __table_args__ = (UniqueConstraint("source_name", "cve_id", name="uq_cve_intelligence_source_cve"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    source_name: Mapped[str] = mapped_column(String(100), index=True)
+    cve_id: Mapped[str] = mapped_column(String(30), index=True)
+    vendor: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    product: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    cwe: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    cvss_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cvss_vector: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    affected_ranges: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_modified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_url: Mapped[str] = mapped_column(String(2048))
+    feed_retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    feed_stale_after_seconds: Mapped[int] = mapped_column(Integer, default=86400)
+    feed_is_stale: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    kev_listed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    kev_date_added: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    kev_due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    provenance: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    dedupe_key: Mapped[str] = mapped_column(String(255), index=True)
+
+
+class TechnologyCVEMatch(Base):
+    __tablename__ = "technology_cve_matches"
+    __table_args__ = (UniqueConstraint("scan_id", "technology_id", "cve_intelligence_id", name="uq_technology_cve_scan_match"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
+    technology_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("technologies.id", ondelete="CASCADE"), index=True)
+    cve_intelligence_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cve_intelligence.id", ondelete="SET NULL"), nullable=True, index=True)
+    vendor: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    product: Mapped[str] = mapped_column(String(255))
+    detected_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    version_source: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    detection_confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    version_evidence_confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    applicability_confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    applicability_state: Mapped[str] = mapped_column(String(40), index=True)
+    match_reason: Mapped[str] = mapped_column(Text)
+    provenance: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
 class TechnologyEvidence(Base):
     __tablename__ = "technology_evidence"
 

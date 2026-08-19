@@ -258,6 +258,65 @@ export type SecretsRule = {
   rule_version: string;
 };
 
+export type CVEIntelligenceMatch = {
+  id: string;
+  technology_id: string;
+  cve_id: string | null;
+  vendor: string | null;
+  product: string;
+  detected_version: string | null;
+  version_source: string | null;
+  detection_confidence: number;
+  version_evidence_confidence: number;
+  applicability_confidence: number;
+  applicability_state: "matched" | "version_insufficient" | "no_match" | "stale_feed";
+  match_reason: string;
+  provenance: Record<string, unknown>;
+  cwe: string[];
+  cvss_score: number | null;
+  cvss_vector: string | null;
+  description: string | null;
+  kev_listed: boolean;
+  source_url: string | null;
+  feed_retrieved_at: string | null;
+  feed_is_stale: boolean | null;
+  created_at: string;
+};
+
+export type CVEFeedRun = {
+  id: string;
+  source_name: string;
+  source_url: string;
+  retrieved_at: string;
+  source_last_modified_at: string | null;
+  record_count: number;
+  stale_after_seconds: number;
+  is_stale: boolean;
+  status: string;
+  error: string | null;
+};
+
+export type CVEIntelligenceResponse = {
+  scan_id: string;
+  rule_version: string;
+  matches: CVEIntelligenceMatch[];
+  feed_runs: CVEFeedRun[];
+  summary: {
+    technology_count: number;
+    matched_count: number;
+    version_insufficient_count: number;
+    no_match_count: number;
+    stale_feed_count: number;
+    kev_count: number;
+    feed_count: number;
+  };
+  confidence_contract: {
+    detected_version_confidence_is_separate: boolean;
+    cve_applicability_requires_explicit_version: boolean;
+    family_only_detection_is_not_applicable: boolean;
+  };
+};
+
 export type SecretsResponse = {
   scan_id: string;
   rule_version: string;
@@ -523,6 +582,19 @@ export async function getScanAPIAgent(id: string): Promise<APIAgentResponse> {
   }
 
   return response.json() as Promise<APIAgentResponse>;
+}
+
+export async function getScanCVEIntelligence(id: string): Promise<CVEIntelligenceResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/cve-intelligence`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch CVE intelligence for scan ${id}`);
+  }
+
+  return response.json() as Promise<CVEIntelligenceResponse>;
 }
 
 export async function getScanSecrets(id: string): Promise<SecretsResponse> {

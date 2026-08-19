@@ -17,6 +17,7 @@ const LABELS: Record<string, string> = {
   api_agent: "API Agent",
   vulnerability: "Vulnerability analysis",
   secrets: "Secrets & sensitive data analysis",
+  cve_intelligence: "CVE & technology intelligence",
   recon: "Recon Agent",
   security: "Security analysis",
   performance: "Performance analysis",
@@ -30,7 +31,7 @@ const TERMINAL_STATES = ["COMPLETED", "FAILED", "PARTIAL_FAILED", "CANCELLED"];
 
 const PHASES = [
   { key: "COLLECTING", label: "Collecting", description: "Admission, SSRF validation, HTTP collection, and bounded crawl" },
-  { key: "ANALYZING", label: "Analyzing", description: "HTTP behavior, API, vulnerability, secrets, recon, technology, structure, security, performance, accessibility, and content" },
+  { key: "ANALYZING", label: "Analyzing", description: "HTTP behavior, API, vulnerability, secrets, CVE intelligence, recon, technology, structure, security, performance, accessibility, and content" },
   { key: "SYNTHESIZING", label: "Synthesizing", description: "Diagnosis and citation-grounded AI synthesis" },
   { key: "COMPLETED", label: "Completed", description: "All worker tasks are terminal and the report is ready" },
 ] as const;

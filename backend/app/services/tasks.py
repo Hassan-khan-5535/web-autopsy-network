@@ -20,6 +20,7 @@ from app.services.api_intelligence import ApiIntelligenceAgent
 from app.services.api_agent import APIAgent
 from app.services.vulnerability import VulnerabilityAgent
 from app.services.secrets import SecretsAgent
+from app.services.cve_intelligence import CVEIntelligenceAgent
 from app.services.browser_client import BrowserWorkerClient
 from app.services.configuration import ConfigurationAgent
 from app.services.content import ContentEngine
@@ -50,12 +51,13 @@ TASK_DEFINITIONS = {
     "api_agent": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection", "api_intelligence", "http_agent"]},
     "vulnerability": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection", "security", "configuration", "api_agent", "http_agent"]},
     "secrets": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection", "http_agent"]},
+    "cve_intelligence": {"queue": "analysis", "max_retries": 2, "dependencies": ["technology"]},
     "recon": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection"]},
     "security": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection"]},
     "content": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection"]},
     "performance": {"queue": "analysis", "max_retries": 2, "dependencies": []},
     "accessibility": {"queue": "analysis", "max_retries": 2, "dependencies": []},
-    "diagnosis": {"queue": "analysis", "max_retries": 1, "dependencies": ["technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "configuration", "api_agent", "security", "vulnerability", "secrets", "performance", "accessibility", "content"]},
+    "diagnosis": {"queue": "analysis", "max_retries": 1, "dependencies": ["technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "configuration", "api_agent", "security", "vulnerability", "secrets", "cve_intelligence", "performance", "accessibility", "content"]},
     "synthesis": {"queue": "ai", "max_retries": 1, "dependencies": ["diagnosis"]},
 }
 
@@ -154,7 +156,7 @@ class TaskGraphCoordinator:
                 db.flush()
                 cls._event(db, scan_id, task, "TASK_QUEUED", {"task_type": "browser_analysis", "page_id": str(page.id)})
             page_tasks.append(page_key)
-        analysis_types = ["technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "configuration", "api_agent", "security", "vulnerability", "secrets", "content"]
+        analysis_types = ["technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "configuration", "api_agent", "security", "vulnerability", "secrets", "cve_intelligence", "content"]
         if scan.recon_mode in {"passive_only", "active_safe"}:
             analysis_types.append("recon")
         for task_type in analysis_types:
@@ -169,10 +171,12 @@ class TaskGraphCoordinator:
                 dependencies = ["collection", "security", "configuration", "api_agent", "http_agent"]
             if task_type == "secrets":
                 dependencies = ["collection", "http_agent"]
+            if task_type == "cve_intelligence":
+                dependencies = ["technology"]
             cls._upsert_task(db, scan_id, task_type, dependencies=dependencies)
         cls._upsert_task(db, scan_id, "performance", dependencies=page_tasks or ["collection"])
         cls._upsert_task(db, scan_id, "accessibility", dependencies=page_tasks or ["collection"])
-        analysis_keys = ["technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "configuration", "api_agent", "security", "vulnerability", "secrets", "performance", "accessibility", "content"]
+        analysis_keys = ["technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "configuration", "api_agent", "security", "vulnerability", "secrets", "cve_intelligence", "performance", "accessibility", "content"]
         if scan.recon_mode in {"passive_only", "active_safe"}:
             analysis_keys.append("recon")
         cls._upsert_task(db, scan_id, "diagnosis", dependencies=analysis_keys)
@@ -485,6 +489,9 @@ class TaskRunner:
         if task.task_type == "secrets":
             findings = SecretsAgent(db, scan.id).analyze()
             return {"findings": len(findings)}
+        if task.task_type == "cve_intelligence":
+            matches = CVEIntelligenceAgent(db, scan.id).analyze()
+            return {"matches": len(matches)}
         if task.task_type == "network_intelligence":
             return {"findings": len(NetworkIntelligenceAgent(db, scan.id).analyze())}
         if task.task_type == "http_agent":

@@ -18,6 +18,7 @@ import {
   getScanAPIAgent,
   getScanVulnerabilityAgent,
   getScanSecrets,
+  getScanCVEIntelligence,
   getScanPerformance,
   getScanPageRendered,
   getScanAccessibility,
@@ -40,6 +41,7 @@ import {
   type APIAgentResponse,
   type VulnerabilityResponse,
   type SecretsResponse,
+  type CVEIntelligenceResponse,
   type PerformanceResponse,
   type AccessibilityFinding,
   type ContentFinding,
@@ -69,6 +71,7 @@ export default function ScanResultPage() {
   const [apiAgent, setApiAgent] = useState<APIAgentResponse | null>(null);
   const [vulnerability, setVulnerability] = useState<VulnerabilityResponse | null>(null);
   const [secrets, setSecrets] = useState<SecretsResponse | null>(null);
+  const [cveIntelligence, setCveIntelligence] = useState<CVEIntelligenceResponse | null>(null);
   const [performance, setPerformance] = useState<PerformanceResponse | null>(null);
   const [accessibilityFindings, setAccessibilityFindings] = useState<AccessibilityFinding[]>([]);
   const [contentFindings, setContentFindings] = useState<ContentFinding[]>([]);
@@ -102,7 +105,7 @@ export default function ScanResultPage() {
         }
 
         if (["COMPLETED", "FAILED", "PARTIAL_FAILED", "CANCELLED"].includes(scanData.state)) {
-          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, reconData, httpData, securityData, configurationData, apiAgentData, vulnerabilityData, secretsData, performanceData, accessData, contentData] = await Promise.all([
+          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, reconData, httpData, securityData, configurationData, apiAgentData, vulnerabilityData, secretsData, cveIntelligenceData, performanceData, accessData, contentData] = await Promise.all([
             getScanPages(id).catch(() => []),
             getScanTechnologies(id).catch(() => []),
             getScanEvidence(id).catch(() => []),
@@ -116,6 +119,7 @@ export default function ScanResultPage() {
             getScanAPIAgent(id).catch(() => null),
             getScanVulnerabilityAgent(id).catch(() => null),
             getScanSecrets(id).catch(() => null),
+            getScanCVEIntelligence(id).catch(() => null),
             getScanPerformance(id).catch(() => null),
             getScanAccessibility(id).catch(() => []),
             getScanContent(id).catch(() => []),
@@ -135,6 +139,7 @@ export default function ScanResultPage() {
             setApiAgent(apiAgentData);
             setVulnerability(vulnerabilityData);
             setSecrets(secretsData);
+            setCveIntelligence(cveIntelligenceData);
             setPerformance(performanceData);
             setAccessibilityFindings(accessData);
             setContentFindings(contentData);
@@ -259,7 +264,7 @@ export default function ScanResultPage() {
               <span className="mr-2 text-xs font-mono uppercase tracking-wider text-emerald-100/45">Report sections</span>
               {[
                 ["cause-of-death", "Cause of Death"], ["ai-doctor", "AI Doctor"], ["history", "History"], ["dependencies", "Dependencies"],
-                ["architecture", "Architecture"], ["http-agent", "HTTP Agent"], ["recon", "Recon Agent"], ["api-intelligence", "API Intelligence"], ["api-agent", "API Agent"], ["vulnerability-agent", "Vulnerability Agent"], ["secrets", "Secrets & Sensitive Data"], ["technology-dna", "Technology DNA"], ["performance", "Performance"],
+                ["architecture", "Architecture"], ["http-agent", "HTTP Agent"], ["recon", "Recon Agent"], ["api-intelligence", "API Intelligence"], ["api-agent", "API Agent"], ["vulnerability-agent", "Vulnerability Agent"], ["secrets", "Secrets & Sensitive Data"], ["cve-intelligence", "CVE Intelligence"], ["technology-dna", "Technology DNA"], ["performance", "Performance"],
                 ["configuration", "Configuration"], ["security", "Security"], ["accessibility", "Accessibility"], ["content-seo", "Content & SEO"], ["raw-evidence", "Raw Evidence"],
               ].map(([anchor, label]) => <a key={anchor} href={`#${anchor}`} className="rounded-full border border-emerald-500/20 px-3 py-1.5 text-xs text-emerald-300 hover:border-emerald-400/50 hover:bg-emerald-500/10">{label}</a>)}
             </div>
@@ -526,6 +531,17 @@ export default function ScanResultPage() {
             <div className="rounded-xl border border-emerald-900/30 bg-[#050b09] p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold text-emerald-200">Redaction contract</p><p className="mt-1 text-xs text-emerald-100/60">{secrets.redaction.stored_evidence_mode}</p></div><div className="flex flex-wrap gap-2 text-[10px] font-mono text-emerald-300"><span>persisted: {secrets.redaction.values_persisted ? "yes" : "no"}</span><span>logged: {secrets.redaction.values_logged ? "yes" : "no"}</span><span>returned: {secrets.redaction.values_returned ? "yes" : "no"}</span></div></div></div>
             {secrets.findings.length > 0 ? <div className="space-y-3">{secrets.findings.map((finding) => { const rule = secrets.rules.find((item) => item.rule_id === finding.rule_id); return <details key={finding.id} className="rounded-xl border border-amber-900/30 bg-[#050b09] p-4"><summary className="cursor-pointer list-none"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-amber-200">{finding.statement}</p><p className="mt-1 text-xs font-mono text-emerald-100/50">{finding.rule_id} · {finding.subject}</p></div><span className="rounded-full border border-amber-500/20 px-3 py-1 text-xs font-mono text-amber-300">{finding.severity} · {finding.confidence ?? "—"}%</span></div></summary><div className="mt-4 grid gap-3 border-t border-amber-900/20 pt-4 text-xs text-emerald-100/65 md:grid-cols-2"><div><p className="font-mono uppercase tracking-wider text-emerald-100/40">Redacted evidence</p><p className="mt-1">{finding.evidence?.map((item) => typeof item === "string" ? item : item.observation).join(" · ") || "Redacted evidence recorded"}</p><p className="mt-3 font-mono uppercase tracking-wider text-emerald-100/40">Limitations</p><p className="mt-1">{finding.limitations || "Secret values are not retained"}</p></div><div><p className="font-mono uppercase tracking-wider text-emerald-100/40">Remediation</p><p className="mt-1">{rule?.remediation_guidance || "Review the linked secret-handling guidance."}</p><p className="mt-3 font-mono uppercase tracking-wider text-emerald-100/40">References</p><p className="mt-1">{rule ? [...rule.cwe, ...rule.owasp].join(", ") : "—"}</p></div></div></details>; })}</div> : <div className="rounded-xl border border-emerald-900/30 bg-[#050b09] p-5 text-sm text-emerald-100/65">No high-confidence secret or sensitive-identifier rule met its prerequisites in the bounded evidence. This is not proof that the target contains no secrets.</div>}
             <details className="rounded-xl border border-amber-900/20 bg-[#050b09] p-4"><summary className="cursor-pointer text-sm font-semibold text-amber-200">View signature catalog and suppression rules</summary><div className="mt-3 space-y-3">{secrets.rules.map((rule) => <div key={rule.rule_id} className="border-t border-amber-900/20 pt-3 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-mono text-amber-300">{rule.rule_id} · {rule.title}</p><span className="text-emerald-100/45">{rule.confidence_tier} · {rule.confidence}%</span></div><p className="mt-1 text-emerald-100/60">{rule.detection_logic}</p><p className="mt-1 text-emerald-100/45">Suppression: {rule.suppression_logic}</p></div>)}</div></details>
+          </section>
+        )}
+
+        {/* Extension 8 CVE & Technology Intelligence analysis */}
+        {(isCompleted || isFailed) && cveIntelligence && (
+          <section id="cve-intelligence" className="space-y-5 rounded-2xl border border-cyan-900/30 bg-[#0b1714] p-6">
+            <div className="flex flex-wrap items-end justify-between gap-4 border-b border-cyan-900/20 pb-4"><div><h2 className="text-xl font-semibold text-cyan-300">CVE &amp; Technology Intelligence Agent</h2><p className="mt-1 text-sm text-emerald-100/50">Conservative public-feed matching. A technology family without explicit version evidence is never reported as CVE-applicable.</p></div><div className="flex gap-2 text-xs font-mono"><span className="rounded border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-cyan-300">{cveIntelligence.rule_version}</span><span className="rounded border border-emerald-500/20 px-2.5 py-1 text-emerald-300">{cveIntelligence.summary.matched_count} matched</span></div></div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6"><div className="rounded-xl border border-cyan-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Technologies</p><p className="mt-1 text-2xl font-semibold text-cyan-200">{cveIntelligence.summary.technology_count}</p></div><div className="rounded-xl border border-red-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">CVE matches</p><p className="mt-1 text-2xl font-semibold text-red-300">{cveIntelligence.summary.matched_count}</p></div><div className="rounded-xl border border-amber-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Version insufficient</p><p className="mt-1 text-2xl font-semibold text-amber-300">{cveIntelligence.summary.version_insufficient_count}</p></div><div className="rounded-xl border border-emerald-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">No match</p><p className="mt-1 text-2xl font-semibold text-emerald-300">{cveIntelligence.summary.no_match_count}</p></div><div className="rounded-xl border border-orange-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">KEV listed</p><p className="mt-1 text-2xl font-semibold text-orange-300">{cveIntelligence.summary.kev_count}</p></div><div className="rounded-xl border border-slate-800 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Feed runs</p><p className="mt-1 text-2xl font-semibold text-slate-200">{cveIntelligence.summary.feed_count}</p></div></div>
+            <div className="rounded-xl border border-cyan-900/30 bg-[#050b09] p-4 text-xs text-emerald-100/65"><p className="font-semibold text-cyan-200">Confidence separation</p><p className="mt-1">Detection confidence, version-evidence confidence, and CVE-applicability confidence are stored separately. Family-only detections remain `version_insufficient` and cannot produce a matched CVE finding.</p></div>
+            {cveIntelligence.matches.length > 0 ? <div className="space-y-3">{cveIntelligence.matches.map((match) => <details key={match.id} className="rounded-xl border border-cyan-900/30 bg-[#050b09] p-4"><summary className="cursor-pointer list-none"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-cyan-200">{match.product}{match.detected_version ? ` ${match.detected_version}` : ""}{match.cve_id ? ` · ${match.cve_id}` : ""}</p><p className="mt-1 text-xs font-mono text-emerald-100/50">{match.vendor || "vendor unknown"} · {match.applicability_state} · detected {Math.round(match.detection_confidence)}% · applicability {Math.round(match.applicability_confidence)}%</p></div>{match.kev_listed && <span className="rounded-full border border-orange-500/30 px-3 py-1 text-xs font-mono text-orange-300">CISA KEV</span>}</div></summary><div className="mt-4 grid gap-3 border-t border-cyan-900/20 pt-4 text-xs text-emerald-100/65 md:grid-cols-2"><div><p className="font-mono uppercase tracking-wider text-emerald-100/40">Match reason</p><p className="mt-1">{match.match_reason}</p><p className="mt-3 font-mono uppercase tracking-wider text-emerald-100/40">Version evidence</p><p className="mt-1">{match.detected_version ? `${match.detected_version} from ${match.version_source || "stored evidence"} (${Math.round(match.version_evidence_confidence)}%)` : "No explicit version evidence; applicability withheld."}</p><p className="mt-3 font-mono uppercase tracking-wider text-emerald-100/40">Feed provenance</p><p className="mt-1">{match.source_url || "No CVE feed record"} · {match.feed_retrieved_at || "not retrieved"}{match.feed_is_stale ? " · STALE" : ""}</p></div><div><p className="font-mono uppercase tracking-wider text-emerald-100/40">CVE metadata</p><p className="mt-1">CVSS {match.cvss_score ?? "—"}{match.cvss_vector ? ` · ${match.cvss_vector}` : ""} · CWE {match.cwe.length ? match.cwe.join(", ") : "—"}</p><p className="mt-3 text-emerald-100/60">{match.description || "No CVE record matched this product/version."}</p></div></div></details>)}</div> : <div className="rounded-xl border border-emerald-900/30 bg-[#050b09] p-5 text-sm text-emerald-100/65">No normalized technology/CVE matches were persisted for this scan. The report does not infer applicability from family-only technology detection.</div>}
+            <details className="rounded-xl border border-cyan-900/20 bg-[#050b09] p-4"><summary className="cursor-pointer text-sm font-semibold text-cyan-200">Feed provenance and freshness</summary><div className="mt-3 space-y-3">{cveIntelligence.feed_runs.map((feed) => <div key={feed.id} className="border-t border-cyan-900/20 pt-3 text-xs"><div className="flex flex-wrap justify-between gap-2"><p className="font-mono text-cyan-300">{feed.source_name} · {feed.status}</p><span className={feed.is_stale ? "text-orange-300" : "text-emerald-300"}>{feed.is_stale ? "STALE" : "fresh at retrieval"}</span></div><p className="mt-1 text-emerald-100/55">{feed.record_count} records · retrieved {feed.retrieved_at} · stale threshold {feed.stale_after_seconds}s</p>{feed.error && <p className="mt-1 text-orange-300">{feed.error}</p>}</div>)}</div></details>
           </section>
         )}
 
