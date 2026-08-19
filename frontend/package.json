@@ -6,8 +6,8 @@
     "dev": "next dev -H 0.0.0.0",
     "dev:3001": "next dev -H 0.0.0.0 -p 3001",
     "build": "next build",
-    "start": "next start -H 0.0.0.0",
-    "start:3001": "next start -H 0.0.0.0 -p 3001",
+    "start": "HOSTNAME=0.0.0.0 node .next/standalone/server.js",
+    "start:3001": "HOSTNAME=0.0.0.0 PORT=3001 node .next/standalone/server.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
