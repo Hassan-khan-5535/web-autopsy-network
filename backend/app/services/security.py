@@ -80,6 +80,10 @@ class SecurityAnalysisService:
         candidates: list[FindingCandidate] = []
         for page in pages:
             context = self._page_context(page)
+            response: HTTPResponse | None = context["response"]
+            if response is None or response.status_code >= 400:
+                candidates.append(self._unavailable_candidate(context))
+                continue
             candidates.extend(self._header_findings(context))
             candidates.extend(self._cookie_findings(context))
             candidates.extend(self._cors_findings(context))
@@ -151,6 +155,29 @@ class SecurityAnalysisService:
             "soup": soup,
             "resources": [resource for resource in page.resources if resource.url],
         }
+
+    def _unavailable_candidate(self, context: dict[str, Any]) -> FindingCandidate:
+        page: Page = context["page"]
+        response: HTTPResponse | None = context["response"]
+        status = response.status_code if response is not None else "unknown"
+        return self._candidate(
+            subject="Security analysis unavailable",
+            statement=f"Passive security checks were not run for {page.canonical_url} because the stored HTTP response status was {status}; no vulnerability conclusion is made from this page.",
+            classification="OBSERVED",
+            confidence=100,
+            severity="info",
+            rule_id="security_analysis_unavailable",
+            page_id=page.id,
+            evidence=[
+                self._evidence(
+                    "response_status",
+                    page.canonical_url,
+                    f"Stored HTTP response status: {status}.",
+                    page.id,
+                )
+            ],
+            limitations=PASSIVE_LIMITATIONS + " The page must return a successful response before header, cookie, CORS, and HTML security checks can be evaluated.",
+        )
 
     def _header_findings(self, context: dict[str, Any]) -> list[FindingCandidate]:
         page: Page = context["page"]

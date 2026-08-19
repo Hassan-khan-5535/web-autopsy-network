@@ -176,3 +176,22 @@ def test_evidence_agent_rejects_security_finding_without_evidence(db: Session) -
     with pytest.raises(EvidenceValidationError):
         service._persist_candidate(candidate)
     assert db.query(SecurityFinding).filter(SecurityFinding.scan_id == scan.id).count() == 0
+
+
+def test_unavailable_response_does_not_create_missing_header_vulnerabilities(db: Session) -> None:
+    scan = make_scan_with_page(db)
+    page = db.query(Page).filter(Page.scan_id == scan.id).first()
+    assert page is not None
+    response = db.query(HTTPResponse).filter(HTTPResponse.page_id == page.id).first()
+    assert response is not None
+    response.status_code = 503
+    response.raw_body = ""
+    response.rendered_body = None
+    db.commit()
+
+    findings = SecurityAnalysisService(db, scan.id).analyze()
+    subjects = {finding.subject for finding in findings}
+    assert "Security analysis unavailable" in subjects
+    assert "Content-Security-Policy" not in subjects
+    assert "X-Frame-Options" not in subjects
+    assert all(finding.evidence for finding in findings)
