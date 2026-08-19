@@ -452,11 +452,14 @@ def _progress_payload(scan_id: UUID, db: Session) -> dict[str, object]:
             "id": str(task.id), "task_key": task.task_key, "task_type": task.task_type,
             "queue": task.queue_name, "status": task.status, "attempt": task.attempt,
             "max_retries": task.max_retries, "progress": task.progress,
-            "dependencies": task.dependency_keys or [], "error_reason": task.error_reason,
+            "dependencies": task.dependency_keys or [], "event_requirements": task.event_requirements or [], "error_reason": task.error_reason,
             "started_at": task.started_at.isoformat() if task.started_at else None,
             "finished_at": task.finished_at.isoformat() if task.finished_at else None,
+            "deadline_at": task.deadline_at.isoformat() if task.deadline_at else None,
         } for task in tasks],
-        "events": [{"type": event.event_type, "payload": event.payload or {}, "created_at": event.created_at.isoformat()} for event in reversed(events)],
+        "events": [{"type": event.event_type, "event_key": event.event_key, "payload": event.payload or {}, "created_at": event.created_at.isoformat()} for event in reversed(events)],
+        "orchestration": scan.orchestration_state or {},
+        "budget": scan.orchestration_budget or {},
     }
 
 

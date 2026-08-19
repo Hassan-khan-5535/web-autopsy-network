@@ -67,3 +67,10 @@
 - [x] Add report views for differential changes, security-posture timeline, and schedule status.
 - [x] Add focused tests and build validation for Extension 12 differentials and scheduling safeguards.
 - [ ] Complete a terminal-state real authorized W3Schools scan observation for the Extension 12 report sections; the local inline worker test run did not transition its persisted analysis tasks after dispatch.
+- [x] Assess the existing task graph, dispatcher, task-event persistence, retry, cancellation, timeout, scope, and profile safeguards for Extension 13.
+- [x] Define the Extension 13 event taxonomy, dependency rules, resource budget contract, and isolated scan-state boundaries.
+- [x] Implement event-driven dependency release across Recon, HTTP, Configuration, API, Vulnerability, Secrets, CVE Intelligence, Evidence, Correlation, Risk, and Report agents without a rigid linear pipeline.
+- [x] Enforce agent-level scope/profile checks, idempotency keys, retries, timeouts, cancellation, and per-scan resource budgets through the orchestration layer.
+- [x] Expose multi-agent orchestration state, dependency decisions, event history, and resource-budget usage in the persisted report flow.
+- [x] Add focused Extension 13 orchestration tests and run full regression/build verification.
+- [ ] Create and push the professional Extension 13 GitHub release commit.

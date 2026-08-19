@@ -1435,9 +1435,11 @@ export type ScanTaskProgress = {
   max_retries: number;
   progress: number;
   dependencies: string[];
+  event_requirements: string[];
   error_reason: string | null;
   started_at: string | null;
   finished_at: string | null;
+  deadline_at: string | null;
 };
 
 export type ScanProgressResponse = {
@@ -1451,7 +1453,9 @@ export type ScanProgressResponse = {
   queue_position: number | null;
   estimated_wait_seconds: number;
   tasks: ScanTaskProgress[];
-  events: Array<{ type: string; payload: Record<string, unknown>; created_at: string }>;
+  events: Array<{ type: string; event_key: string | null; payload: Record<string, unknown>; created_at: string }>;
+  orchestration: Record<string, unknown>;
+  budget: Record<string, unknown>;
 };
 
 export async function getScanProgress(id: string): Promise<ScanProgressResponse> {

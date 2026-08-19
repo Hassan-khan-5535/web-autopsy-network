@@ -1,8 +1,12 @@
 from datetime import UTC, datetime, timedelta
 
-from app.models.scan import AgentTask, Scan, Website
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
+from app.models.scan import AgentTask, AssessmentAuthorization, Scan, Website
 from app.api.routes.scans import ScanCreate, _progress_payload, create_scan
-from app.services.tasks import TaskGraphCoordinator
+from app.services.tasks import OUTPUT_READY, ScopePolicyViolation, TaskGraphCoordinator, TaskRunner, output_event_key
 
 
 class FakeDispatcher:
@@ -21,6 +25,33 @@ def make_scan(db, hostname):
     db.add(scan)
     db.commit()
     return scan
+
+
+def authorize_safe_scan(db, scan, *, allowed_domains=None):
+    scan.assessment_profile = "safe"
+    authorization = AssessmentAuthorization(
+        scan_id=scan.id,
+        authorization_type="acknowledged",
+        actor_id="test-user",
+        target_url=scan.requested_url,
+        allowed_paths=["/"],
+        excluded_paths=[],
+        allowed_domains=allowed_domains or [scan.requested_url.split("//", 1)[1]],
+        assessment_profile="safe",
+        robots_override=False,
+        max_depth=1,
+        max_pages=5,
+        max_requests=5,
+        max_concurrency=1,
+        rate_limit_per_host_ms=1000,
+        consent_hash="a" * 64,
+        authorized_at=datetime.now(UTC),
+        policy_version="assessment-v1",
+        scope_json={"target_url": scan.requested_url},
+    )
+    db.add(authorization)
+    db.commit()
+    return authorization
 
 
 def test_post_scan_returns_queued_without_running_pipeline(db, monkeypatch):
@@ -96,3 +127,110 @@ def test_progress_payload_reports_task_and_queue_state(db, monkeypatch):
     assert payload["total_tasks"] == 2
     assert payload["queue_position"] == 1
     assert payload["tasks"][0]["dependencies"] == []
+
+
+def test_event_requirement_releases_only_after_same_scan_output_event(db, monkeypatch):
+    dispatcher = FakeDispatcher()
+    monkeypatch.setattr("app.services.tasks.get_dispatcher", lambda: dispatcher)
+    scan = make_scan(db, "event-release.example")
+    task = TaskGraphCoordinator._upsert_task(
+        db, scan.id, "api_agent", dependencies=[], event_requirements=[output_event_key("recon")]
+    )
+    db.commit()
+
+    TaskGraphCoordinator.dispatch_ready(db, scan.id)
+    assert task.status == "QUEUED"
+
+    TaskGraphCoordinator._event(db, scan.id, None, OUTPUT_READY, {"task_key": "recon"}, event_key=output_event_key("recon"))
+    db.commit()
+    TaskGraphCoordinator.dispatch_ready(db, scan.id)
+    db.refresh(task)
+
+    assert task.status == "DISPATCHED"
+    assert dispatcher.dispatched == [(str(task.id), "analysis")]
+
+
+def test_event_isolation_prevents_cross_scan_release(db, monkeypatch):
+    dispatcher = FakeDispatcher()
+    monkeypatch.setattr("app.services.tasks.get_dispatcher", lambda: dispatcher)
+    first = make_scan(db, "first-isolated.example")
+    second = make_scan(db, "second-isolated.example")
+    task = TaskGraphCoordinator._upsert_task(
+        db, first.id, "api_agent", dependencies=[], event_requirements=[output_event_key("recon")]
+    )
+    TaskGraphCoordinator._event(db, second.id, None, OUTPUT_READY, {"task_key": "recon"}, event_key=output_event_key("recon"))
+    db.commit()
+
+    TaskGraphCoordinator.dispatch_ready(db, first.id)
+    db.refresh(task)
+
+    assert task.status == "QUEUED"
+    assert dispatcher.dispatched == []
+
+
+def test_dispatch_budget_fails_closed_without_issuing_work(db, monkeypatch):
+    dispatcher = FakeDispatcher()
+    monkeypatch.setattr("app.services.tasks.get_dispatcher", lambda: dispatcher)
+    scan = make_scan(db, "budget.example")
+    scan.orchestration_budget = {
+        "task_dispatch_limit": 0,
+        "task_dispatches_used": 0,
+        "per_queue_active_limit": 1,
+        "task_timeout_seconds": 60,
+    }
+    task = TaskGraphCoordinator._upsert_task(db, scan.id, "technology", dependencies=[])
+    db.commit()
+
+    TaskGraphCoordinator.dispatch_ready(db, scan.id)
+    db.refresh(task)
+
+    assert task.status == "FAILED"
+    assert task.error_reason == "Per-scan task dispatch budget exhausted."
+    assert dispatcher.dispatched == []
+
+
+def test_deadline_expiry_requeues_within_retry_budget(db, monkeypatch):
+    dispatcher = FakeDispatcher()
+    monkeypatch.setattr("app.services.tasks.get_dispatcher", lambda: dispatcher)
+    scan = make_scan(db, "deadline.example")
+    scan.state = "ANALYZING"
+    scan.queued_at = datetime.now(UTC)
+    task = AgentTask(
+        scan_id=scan.id,
+        task_key="analysis:deadline",
+        task_type="security",
+        queue_name="analysis",
+        status="RUNNING",
+        attempt=1,
+        max_retries=1,
+        dependency_keys=[],
+        deadline_at=datetime.now(UTC) - timedelta(seconds=1),
+        updated_at=datetime.now(UTC),
+    )
+    db.add(task)
+    db.commit()
+
+    TaskGraphCoordinator.recover_stale_tasks(db)
+    db.refresh(task)
+
+    assert task.status in {"RETRYING", "DISPATCHED"}
+    assert task.error_reason and "deadline" in task.error_reason.lower()
+
+
+def test_scope_gate_fails_closed_before_agent_action(db):
+    scan = make_scan(db, "scope.example")
+    authorize_safe_scan(db, scan, allowed_domains=["different.example"])
+
+    with pytest.raises(ScopePolicyViolation, match="hostname or path"):
+        TaskRunner._assert_action_authorized(scan)
+
+
+def test_after_collection_includes_report_agent_after_synthesis(db):
+    scan = make_scan(db, "report-agent.example")
+    TaskGraphCoordinator.after_collection(db, scan.id)
+    report = db.query(AgentTask).filter(AgentTask.scan_id == scan.id, AgentTask.task_key == "report").one()
+    synthesis = db.query(AgentTask).filter(AgentTask.scan_id == scan.id, AgentTask.task_key == "synthesis").one()
+
+    assert report.dependency_keys == ["synthesis"]
+    assert report.event_requirements == [output_event_key("synthesis")]
+    assert synthesis.dependency_keys == ["diagnosis"]

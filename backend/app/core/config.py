@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     task_heartbeat_seconds: int = 15
     task_max_retries: int = 2
     task_retry_backoff_seconds: int = 2
+    orchestration_task_timeout_seconds: int = 180
+    orchestration_min_task_dispatch_budget: int = 32
+    orchestration_dispatches_per_request: int = 16
 
     llm_api_key: str | None = None
     llm_api_base: str | None = None

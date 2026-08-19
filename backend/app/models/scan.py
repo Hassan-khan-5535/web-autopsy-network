@@ -53,6 +53,8 @@ class Scan(Base):
     assessment_profile: Mapped[str | None] = mapped_column(String(30), nullable=True, default="legacy_passive", index=True)
     max_requests: Mapped[int | None] = mapped_column(Integer, nullable=True, default=30)
     recon_mode: Mapped[str] = mapped_column(String(30), default="passive_only", index=True)
+    orchestration_state: Mapped[dict] = mapped_column(JSON, default=dict)
+    orchestration_budget: Mapped[dict] = mapped_column(JSON, default=dict)
     recurring_schedule_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("recurring_scan_schedules.id", ondelete="SET NULL"), nullable=True, index=True
     )
@@ -911,12 +913,14 @@ class AgentTask(Base):
     max_retries: Mapped[int] = mapped_column(Integer, default=2)
     progress: Mapped[int] = mapped_column(Integer, default=0)
     dependency_keys: Mapped[list] = mapped_column(JSON, default=list)
+    event_requirements: Mapped[list] = mapped_column(JSON, default=list)
     error_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     available_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
@@ -931,6 +935,7 @@ class AgentEvent(Base):
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
     task_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("agent_tasks.id", ondelete="SET NULL"), nullable=True, index=True)
     event_type: Mapped[str] = mapped_column(String(60), index=True)
+    event_key: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
 

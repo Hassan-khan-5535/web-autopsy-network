@@ -28,6 +28,7 @@ const LABELS: Record<string, string> = {
   content: "Content & SEO analysis",
   diagnosis: "Cause of Death diagnosis",
   synthesis: "AI synthesis",
+  report: "Report update",
 };
 
 const TERMINAL_STATES = ["COMPLETED", "FAILED", "PARTIAL_FAILED", "CANCELLED"];
@@ -200,7 +201,7 @@ export function ScanProgress({ scanId, state }: { scanId: string; state: string 
     <section className="rounded-2xl border border-cyan-900/40 bg-[#0b1714] p-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <p className="text-xs font-mono uppercase tracking-[0.25em] text-cyan-400/70">Distributed scan execution</p>
+          <p className="text-xs font-mono uppercase tracking-[0.25em] text-cyan-400/70">Event-driven multi-agent investigation</p>
           <h2 className="mt-2 text-xl font-semibold text-cyan-200">{isTerminal ? "Scan Summary" : "Live Scan Progress"}</h2>
           <p className="mt-1 text-sm text-emerald-100/50">Task state is persisted and streamed from the worker graph; downstream tasks wait for their declared dependencies.</p>
         </div>
@@ -237,8 +238,9 @@ export function ScanProgress({ scanId, state }: { scanId: string; state: string 
       </div>
       {!isTerminal && <p className="mt-3 text-xs text-emerald-100/45">{timing.isOutlierEstimate ? "The scan timing is recalibrating from live task activity; a reliable ETA will appear shortly." : "The remaining-time estimate recalculates from live task activity. It is an estimate, not a hard deadline."}</p>}
       {progress?.queue_position && progress.queue_position > 1 && <p className="mt-3 text-xs text-amber-200/70">Queue position {progress.queue_position} · estimated wait {progress.estimated_wait_seconds}s</p>}
+      {progress && Object.keys(progress.budget).length > 0 && <div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded-lg border border-cyan-500/15 bg-cyan-500/[0.04] p-3"><p className="text-[10px] uppercase tracking-wider text-cyan-100/45">Task dispatch budget</p><p className="mt-1 font-mono text-sm text-cyan-100">{String(progress.budget.task_dispatches_used ?? 0)} / {String(progress.budget.task_dispatch_limit ?? "—")}</p></div><div className="rounded-lg border border-cyan-500/15 bg-cyan-500/[0.04] p-3"><p className="text-[10px] uppercase tracking-wider text-cyan-100/45">Per-queue parallelism</p><p className="mt-1 font-mono text-sm text-cyan-100">{String(progress.budget.per_queue_active_limit ?? "—")}</p></div><div className="rounded-lg border border-cyan-500/15 bg-cyan-500/[0.04] p-3"><p className="text-[10px] uppercase tracking-wider text-cyan-100/45">Task deadline</p><p className="mt-1 font-mono text-sm text-cyan-100">{String(progress.budget.task_timeout_seconds ?? "—")}s</p></div></div>}
       <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {(progress?.tasks ?? []).map((task) => <div key={task.id} className={`rounded-lg border p-3 ${statusStyle(task.status)}`}><div className="flex items-center justify-between gap-2"><p className="text-xs font-semibold">{LABELS[task.task_type] ?? task.task_type}</p><span className="rounded-full border px-2 py-0.5 text-[10px] font-mono">{task.status}</span></div><div className="mt-2 flex items-center justify-between text-[10px] font-mono opacity-70"><span>{task.queue} pool</span><span>attempt {task.attempt}/{task.max_retries + 1}</span></div>{task.error_reason && <p className="mt-2 text-[10px] leading-4 opacity-80">{task.error_reason}</p>}</div>)}
+        {(progress?.tasks ?? []).map((task) => <div key={task.id} className={`rounded-lg border p-3 ${statusStyle(task.status)}`}><div className="flex items-center justify-between gap-2"><p className="text-xs font-semibold">{LABELS[task.task_type] ?? task.task_type}</p><span className="rounded-full border px-2 py-0.5 text-[10px] font-mono">{task.status}</span></div><div className="mt-2 flex items-center justify-between text-[10px] font-mono opacity-70"><span>{task.queue} pool</span><span>attempt {task.attempt}/{task.max_retries + 1}</span></div>{task.event_requirements.length > 0 && <p className="mt-2 text-[10px] leading-4 opacity-70">Awaits: {task.event_requirements.map((requirement) => requirement.replace("event:", "").replaceAll(":", " · ").replaceAll("_", " ")).join(", ")}</p>}{task.deadline_at && !["SUCCEEDED", "FAILED", "CANCELLED"].includes(task.status) && <p className="mt-2 text-[10px] leading-4 opacity-70">Deadline: {new Date(task.deadline_at).toLocaleTimeString()}</p>}{task.error_reason && <p className="mt-2 text-[10px] leading-4 opacity-80">{task.error_reason}</p>}</div>)}
       </div>
       {progress && progress.events.length > 0 && (
         <details className="mt-5 rounded-xl border border-white/10 bg-black/20" open={!isTerminal}>

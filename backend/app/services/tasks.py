@@ -13,7 +13,7 @@ from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.models.scan import AgentEvent, AgentTask, Scan, Website
 from app.services.accessibility import AccessibilityEngine
-from app.services.assessment import append_audit_event
+from app.services.assessment import AssessmentPolicyError, append_audit_event, hostname_allowed, path_allowed, profile_policy
 from app.services.admission import AdmissionService
 from app.services.ai_synthesis import AISynthesisEngine
 from app.services.api_intelligence import ApiIntelligenceAgent
@@ -65,9 +65,27 @@ TASK_DEFINITIONS = {
     "accessibility": {"queue": "analysis", "max_retries": 2, "dependencies": []},
     "diagnosis": {"queue": "analysis", "max_retries": 1, "dependencies": ["technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "configuration", "api_agent", "security", "vulnerability", "secrets", "cve_intelligence", "evidence", "correlation", "risk", "performance", "accessibility", "content"]},
     "synthesis": {"queue": "ai", "max_retries": 1, "dependencies": ["diagnosis"]},
+    "report": {"queue": "analysis", "max_retries": 1, "dependencies": ["synthesis"]},
 }
 
-CORRELATION_SOURCE_TASKS = {"technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "configuration", "api_agent", "security", "vulnerability", "secrets", "cve_intelligence", "evidence", "recon", "content", "performance", "accessibility"}
+OUTPUT_READY = "AGENT_OUTPUT_READY"
+EVENT_REQUIREMENTS: dict[str, list[str]] = {
+    "configuration": ["event:http_agent:AGENT_OUTPUT_READY"],
+    "security": ["event:http_agent:AGENT_OUTPUT_READY"],
+    "secrets": ["event:http_agent:AGENT_OUTPUT_READY"],
+    "api_agent": ["event:api_intelligence:AGENT_OUTPUT_READY", "event:http_agent:AGENT_OUTPUT_READY", "event:recon:AGENT_OUTPUT_READY"],
+    "vulnerability": ["event:http_agent:AGENT_OUTPUT_READY", "event:security:AGENT_OUTPUT_READY", "event:configuration:AGENT_OUTPUT_READY", "event:api_agent:AGENT_OUTPUT_READY"],
+    "cve_intelligence": ["event:technology:AGENT_OUTPUT_READY"],
+    "evidence": ["event:technology:AGENT_OUTPUT_READY", "event:structure:AGENT_OUTPUT_READY", "event:api_intelligence:AGENT_OUTPUT_READY", "event:network_intelligence:AGENT_OUTPUT_READY", "event:http_agent:AGENT_OUTPUT_READY", "event:configuration:AGENT_OUTPUT_READY", "event:api_agent:AGENT_OUTPUT_READY", "event:security:AGENT_OUTPUT_READY", "event:vulnerability:AGENT_OUTPUT_READY", "event:secrets:AGENT_OUTPUT_READY", "event:cve_intelligence:AGENT_OUTPUT_READY"],
+    "correlation": ["event:evidence:AGENT_OUTPUT_READY"],
+    "risk": ["event:evidence:AGENT_OUTPUT_READY", "event:correlation:AGENT_OUTPUT_READY"],
+    "diagnosis": ["event:risk:AGENT_OUTPUT_READY"],
+    "report": ["event:synthesis:AGENT_OUTPUT_READY"],
+}
+
+
+class ScopePolicyViolation(RuntimeError):
+    """Raised when a persisted agent action no longer satisfies authorization or policy."""
 
 
 def utc_now() -> datetime:
@@ -82,6 +100,10 @@ def as_utc(value: datetime | None) -> datetime | None:
 
 def task_key(task_type: str, suffix: str | None = None) -> str:
     return f"{task_type}:{suffix}" if suffix else task_type
+
+
+def output_event_key(task_key_value: str) -> str:
+    return f"event:{task_key_value}:{OUTPUT_READY}"
 
 
 def check_scan_wall_clock_timeout(scan: Scan, timeout_seconds: int = 600) -> bool:
@@ -119,11 +141,13 @@ class TaskGraphCoordinator:
         cls.release_queued_scans(db)
 
     @classmethod
-    def _upsert_task(cls, db: Session, scan_id: UUID, task_type: str, *, key: str | None = None, dependencies: list[str] | None = None) -> AgentTask:
+    def _upsert_task(cls, db: Session, scan_id: UUID, task_type: str, *, key: str | None = None, dependencies: list[str] | None = None, event_requirements: list[str] | None = None) -> AgentTask:
         definition = TASK_DEFINITIONS[task_type]
         task_key_value = key or task_key(task_type)
         existing = db.query(AgentTask).filter(AgentTask.scan_id == scan_id, AgentTask.task_key == task_key_value).first()
         if existing:
+            if not existing.event_requirements and (event_requirements or EVENT_REQUIREMENTS.get(task_type)):
+                existing.event_requirements = event_requirements if event_requirements is not None else EVENT_REQUIREMENTS.get(task_type, [])
             return existing
         task = AgentTask(
             scan_id=scan_id,
@@ -133,12 +157,40 @@ class TaskGraphCoordinator:
             status="QUEUED",
             max_retries=definition["max_retries"],
             dependency_keys=dependencies if dependencies is not None else definition["dependencies"],
+            event_requirements=event_requirements if event_requirements is not None else EVENT_REQUIREMENTS.get(task_type, []),
             available_at=utc_now(),
         )
         db.add(task)
         db.flush()
-        cls._event(db, scan_id, task, "TASK_QUEUED", {"task_type": task_type, "dependencies": task.dependency_keys})
+        cls._event(db, scan_id, task, "TASK_QUEUED", {"task_type": task_type, "dependencies": task.dependency_keys, "event_requirements": task.event_requirements})
         return task
+
+    @classmethod
+    def _budget(cls, scan: Scan) -> dict[str, int]:
+        settings = get_settings()
+        current = dict(scan.orchestration_budget or {})
+        current.setdefault("task_dispatch_limit", max(settings.orchestration_min_task_dispatch_budget, int(scan.max_requests or scan.max_pages or 0)))
+        current.setdefault("task_dispatches_used", 0)
+        current.setdefault("per_queue_active_limit", max(1, min(int(scan.max_concurrency or 1), settings.max_concurrent_tasks_per_pool)))
+        current.setdefault("task_timeout_seconds", settings.orchestration_task_timeout_seconds)
+        scan.orchestration_budget = current
+        return current
+
+    @classmethod
+    def _refresh_orchestration_state(cls, db: Session, scan: Scan) -> None:
+        budget = cls._budget(scan)
+        tasks = db.query(AgentTask).filter(AgentTask.scan_id == scan.id).all()
+        event_count = db.query(AgentEvent).filter(AgentEvent.scan_id == scan.id).count()
+        scan.orchestration_state = {
+            "version": "extension13-v1",
+            "scan_state": scan.state,
+            "task_counts": dict(sorted({status: sum(item.status == status for item in tasks) for status in {item.status for item in tasks}}.items())),
+            "event_count": event_count,
+            "task_dispatches_used": budget["task_dispatches_used"],
+            "task_dispatch_limit": budget["task_dispatch_limit"],
+            "per_queue_active_limit": budget["per_queue_active_limit"],
+            "task_timeout_seconds": budget["task_timeout_seconds"],
+        }
 
     @classmethod
     def after_collection(cls, db: Session, scan_id: UUID) -> None:
@@ -197,7 +249,9 @@ class TaskGraphCoordinator:
             analysis_keys.append("recon")
         cls._upsert_task(db, scan_id, "diagnosis", dependencies=analysis_keys)
         cls._upsert_task(db, scan_id, "synthesis", dependencies=["diagnosis"])
+        cls._upsert_task(db, scan_id, "report", dependencies=["synthesis"])
         scan.state = "ANALYZING"
+        cls._refresh_orchestration_state(db, scan)
         db.commit()
 
     @classmethod
@@ -206,9 +260,15 @@ class TaskGraphCoordinator:
         if not scan or scan.cancel_requested or scan.pause_requested or scan.state == "PAUSED":
             return
         now = utc_now()
+        budget = cls._budget(scan)
         tasks = db.query(AgentTask).filter(AgentTask.scan_id == scan_id, AgentTask.status.in_(["QUEUED", "RETRYING"])).order_by(AgentTask.created_at, AgentTask.task_key).all()
         to_dispatch: list[AgentTask] = []
         task_map = {task.task_key: task for task in db.query(AgentTask).filter(AgentTask.scan_id == scan_id).all()}
+        event_keys = {item.event_key for item in db.query(AgentEvent).filter(AgentEvent.scan_id == scan_id, AgentEvent.event_type == OUTPUT_READY, AgentEvent.event_key.is_not(None)).all()}
+        active_by_queue: dict[str, int] = {}
+        for active in task_map.values():
+            if active.status in {"DISPATCHED", "RUNNING", "RETRYING"}:
+                active_by_queue[active.queue_name] = active_by_queue.get(active.queue_name, 0) + 1
         for task in tasks:
             available_at = as_utc(task.available_at)
             if available_at and available_at > now:
@@ -216,10 +276,25 @@ class TaskGraphCoordinator:
             deps = [task_map.get(key) for key in (task.dependency_keys or [])]
             if any(dep is None or dep.status not in TERMINAL_TASK_STATES for dep in deps):
                 continue
+            if any(requirement not in event_keys for requirement in (task.event_requirements or [])):
+                continue
+            if active_by_queue.get(task.queue_name, 0) >= budget["per_queue_active_limit"]:
+                continue
+            if budget["task_dispatches_used"] >= budget["task_dispatch_limit"]:
+                task.status = "FAILED"
+                task.finished_at = now
+                task.error_reason = "Per-scan task dispatch budget exhausted."
+                cls._event(db, scan_id, task, "TASK_BUDGET_EXHAUSTED", {"budget": budget})
+                continue
             task.status = "DISPATCHED"
             task.updated_at = now
-            cls._event(db, scan_id, task, "TASK_DISPATCHED", {"queue": task.queue_name})
+            task.deadline_at = now + timedelta(seconds=budget["task_timeout_seconds"])
+            budget["task_dispatches_used"] += 1
+            active_by_queue[task.queue_name] = active_by_queue.get(task.queue_name, 0) + 1
+            cls._event(db, scan_id, task, "TASK_DISPATCHED", {"queue": task.queue_name, "deadline_at": task.deadline_at.isoformat(), "event_requirements": task.event_requirements or []})
             to_dispatch.append(task)
+        scan.orchestration_budget = budget
+        cls._refresh_orchestration_state(db, scan)
         db.commit()
         dispatcher = get_dispatcher()
         for task in to_dispatch:
@@ -363,24 +438,30 @@ class TaskGraphCoordinator:
         now = utc_now()
         stale_after = max(60, settings.task_heartbeat_seconds * 4)
         stale_cutoff = now - timedelta(seconds=stale_after)
-        stale = db.query(AgentTask).filter(
-            AgentTask.status.in_(["DISPATCHED", "RUNNING"]),
-            AgentTask.updated_at < stale_cutoff,
-        ).all()
+        stale = [
+            task for task in db.query(AgentTask).filter(AgentTask.status.in_(["DISPATCHED", "RUNNING"])).all()
+            if (as_utc(task.updated_at) is not None and as_utc(task.updated_at) < stale_cutoff)
+            or (as_utc(task.deadline_at) is not None and as_utc(task.deadline_at) <= now)
+        ]
         affected: set[UUID] = set()
         for task in stale:
             affected.add(task.scan_id)
+            deadline_expired = as_utc(task.deadline_at) is not None and as_utc(task.deadline_at) <= now
             if task.attempt <= task.max_retries:
                 task.status = "RETRYING"
                 task.available_at = now
-                task.error_reason = "Worker heartbeat expired; task returned to the retry queue."
-                cls._event(db, task.scan_id, task, "TASK_ORPHAN_RECOVERED", {"attempt": task.attempt})
+                task.deadline_at = None
+                task.error_reason = "Task deadline expired; task returned to the retry queue." if deadline_expired else "Worker heartbeat expired; task returned to the retry queue."
+                cls._event(db, task.scan_id, task, "TASK_DEADLINE_RECOVERED" if deadline_expired else "TASK_ORPHAN_RECOVERED", {"attempt": task.attempt})
             else:
                 task.status = "FAILED"
                 task.finished_at = now
-                task.error_reason = "Worker heartbeat expired after retry budget was exhausted."
-                cls._event(db, task.scan_id, task, "TASK_ORPHAN_FAILED", {"attempt": task.attempt})
-        for scan in db.query(Scan).filter(Scan.state.in_(ACTIVE_SCAN_STATES), Scan.queued_at < now - timedelta(seconds=settings.scan_timeout_seconds)).all():
+                task.error_reason = "Task deadline expired after retry budget was exhausted." if deadline_expired else "Worker heartbeat expired after retry budget was exhausted."
+                cls._event(db, task.scan_id, task, "TASK_DEADLINE_FAILED" if deadline_expired else "TASK_ORPHAN_FAILED", {"attempt": task.attempt})
+        for scan in db.query(Scan).filter(Scan.state.in_(ACTIVE_SCAN_STATES)).all():
+            queued_at = as_utc(scan.queued_at)
+            if queued_at is None or queued_at >= now - timedelta(seconds=settings.scan_timeout_seconds):
+                continue
             affected.add(scan.id)
             scan.cancel_requested = True
             scan.state = "PARTIAL_FAILED"
@@ -397,8 +478,10 @@ class TaskGraphCoordinator:
                 cls.finalize_if_complete(db, scan_id)
 
     @staticmethod
-    def _event(db: Session, scan_id: UUID, task: AgentTask | None, event_type: str, payload: dict[str, Any]) -> None:
-        db.add(AgentEvent(scan_id=scan_id, task_id=task.id if task else None, event_type=event_type, payload=payload))
+    def _event(db: Session, scan_id: UUID, task: AgentTask | None, event_type: str, payload: dict[str, Any], *, event_key: str | None = None) -> None:
+        if event_key and db.query(AgentEvent).filter(AgentEvent.scan_id == scan_id, AgentEvent.event_key == event_key).first():
+            return
+        db.add(AgentEvent(scan_id=scan_id, task_id=task.id if task else None, event_type=event_type, event_key=event_key, payload=payload))
 
 
 class TaskRunner:
@@ -434,10 +517,8 @@ class TaskRunner:
             db.commit()
             TaskGraphCoordinator._event(db, task.scan_id, task, "TASK_STARTED", {"attempt": task.attempt})
             db.commit()
+            cls._assert_action_authorized(scan)
             result = cls._execute(db, task, scan)
-            if task.task_type in CORRELATION_SOURCE_TASKS:
-                result = result or {}
-                result["correlation_update"] = CorrelationAgent(db, scan.id).analyze(source_event=f"task:{task.task_type}")
             db.refresh(scan)
             task.status = "CANCELLED" if scan.cancel_requested else "SUCCEEDED"
             task.progress = 100
@@ -446,6 +527,9 @@ class TaskRunner:
             task.heartbeat_at = utc_now()
             task.updated_at = utc_now()
             TaskGraphCoordinator._event(db, task.scan_id, task, "TASK_CANCELLED" if task.status == "CANCELLED" else "TASK_SUCCEEDED", result or {})
+            if task.status == "SUCCEEDED":
+                TaskGraphCoordinator._event(db, task.scan_id, task, OUTPUT_READY, {"task_type": task.task_type, "task_key": task.task_key, "result_summary": result or {}}, event_key=output_event_key(task.task_key))
+            TaskGraphCoordinator._refresh_orchestration_state(db, scan)
             db.commit()
             TaskGraphCoordinator.after_terminal(db, task.scan_id)
         except Exception as exc:
@@ -455,7 +539,16 @@ class TaskRunner:
                 return
             task.error_reason = str(exc)
             task.heartbeat_at = utc_now()
-            if task.attempt <= task.max_retries:
+            if isinstance(exc, ScopePolicyViolation):
+                task.status = "FAILED"
+                task.finished_at = utc_now()
+                TaskGraphCoordinator._event(db, task.scan_id, task, "TASK_SCOPE_BLOCKED", {"error": str(exc)})
+                scan = db.query(Scan).filter(Scan.id == task.scan_id).first()
+                if scan:
+                    TaskGraphCoordinator._refresh_orchestration_state(db, scan)
+                db.commit()
+                TaskGraphCoordinator.after_terminal(db, task.scan_id)
+            elif task.attempt <= task.max_retries:
                 task.status = "RETRYING"
                 task.available_at = utc_now() + timedelta(seconds=get_settings().task_retry_backoff_seconds * max(1, task.attempt))
                 TaskGraphCoordinator._event(db, task.scan_id, task, "TASK_RETRYING", {"attempt": task.attempt, "error": str(exc)})
@@ -470,6 +563,31 @@ class TaskRunner:
                 TaskGraphCoordinator.after_terminal(db, task.scan_id)
         finally:
             db.close()
+
+    @staticmethod
+    def _assert_action_authorized(scan: Scan) -> None:
+        authorization = scan.assessment_authorization
+        if not authorization:
+            raise ScopePolicyViolation("No persisted authorization is available for this agent action.")
+        expires_at = as_utc(authorization.expires_at)
+        if expires_at and expires_at <= utc_now():
+            raise ScopePolicyViolation("Stored authorization has expired.")
+        if authorization.assessment_profile != scan.assessment_profile:
+            raise ScopePolicyViolation("Stored authorization profile does not match the scan profile.")
+        try:
+            profile_policy(
+                authorization.assessment_profile,
+                max_depth=authorization.max_depth,
+                max_requests=authorization.max_requests,
+                max_concurrency=authorization.max_concurrency,
+                rate_limit_per_host_ms=authorization.rate_limit_per_host_ms,
+            )
+        except AssessmentPolicyError as exc:
+            raise ScopePolicyViolation(f"Stored authorization no longer meets current policy: {exc}") from exc
+        parsed = urlsplit(scan.requested_url)
+        hostname = (parsed.hostname or "").lower().rstrip(".")
+        if not hostname or not hostname_allowed(hostname, authorization.allowed_domains) or not path_allowed(scan.requested_url, authorization.allowed_paths, authorization.excluded_paths):
+            raise ScopePolicyViolation("Stored authorization does not permit the current target hostname or path.")
 
     @classmethod
     def _execute(cls, db: Session, task: AgentTask, scan: Scan) -> dict[str, Any]:
@@ -550,4 +668,6 @@ class TaskRunner:
             db.commit()
             AISynthesisEngine(db, scan.id).synthesize()
             return {"status": "synthesized"}
+        if task.task_type == "report":
+            return {"status": "report_updated", "orchestration_version": "extension13-v1"}
         raise ValueError(f"Unknown task type: {task.task_type}")
