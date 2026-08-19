@@ -105,10 +105,8 @@ export default function ScanResultPage() {
         const scanData = await getScan(id);
         if (!mounted) return;
         setScan(scanData);
-        if (!id.startsWith("demo")) {
-          const authorizationData = await getAssessmentAuthorization(id).catch(() => null);
-          if (mounted) setAssessmentAuthorization(authorizationData);
-        }
+        const authorizationData = await getAssessmentAuthorization(id).catch(() => null);
+        if (mounted) setAssessmentAuthorization(authorizationData);
 
         if (scanData.state === "COMPLETED" || scanData.state === "PARTIAL_FAILED") {
           const diagnosisData = scanData.diagnosis ?? await getScanDiagnosis(id).catch(() => null);
@@ -203,27 +201,9 @@ export default function ScanResultPage() {
   const isFailed = scan.state === "FAILED" || scan.state === "PARTIAL_FAILED";
   const isCompleted = scan.state === "COMPLETED";
 
-  const isDemo = id === "demo-scan-autopsy" || id.startsWith("demo");
-
   return (
     <main className="min-h-screen bg-[#08110f] text-[#ecf4ee] px-6 py-12 sm:px-10">
       <div className="max-w-6xl mx-auto space-y-10">
-        {isDemo && (
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center justify-between text-amber-300">
-            <div className="flex items-center gap-3">
-              <span className="font-mono text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-500/40">
-                SAMPLE DEMO DATA
-              </span>
-              <p className="text-sm font-medium">
-                You are viewing a pre-analyzed demo autopsy report. No live infrastructure was contacted.
-              </p>
-            </div>
-            <Link href="/" className="text-xs underline hover:text-amber-100 font-mono">
-              Return Home
-            </Link>
-          </div>
-        )}
-
         {/* Header */}
         <header className="flex items-start justify-between border-b border-emerald-100/10 pb-8">
           <div>
@@ -273,7 +253,7 @@ export default function ScanResultPage() {
           </section>
         )}
 
-        {!isDemo && <ScanProgress scanId={scan.id} state={scan.state} />}
+        <ScanProgress scanId={scan.id} state={scan.state} />
 
         {isCompleted && (
           <nav aria-label="Report sections" className="rounded-2xl border border-emerald-900/30 bg-[#0b1714] p-4">
@@ -306,7 +286,7 @@ export default function ScanResultPage() {
         )}
 
         {/* Phase 11 History / Time Machine */}
-        {isCompleted && !isDemo && <section id="history"><HistoryPanel websiteId={scan.website_id} currentScanId={scan.id} /></section>}
+        {isCompleted && <section id="history"><HistoryPanel websiteId={scan.website_id} currentScanId={scan.id} /></section>}
 
         {riskPrioritization && <RiskPrioritization report={riskPrioritization} />}
         {attackSurfaceGraph && <AttackSurfaceGraph graph={attackSurfaceGraph} />}

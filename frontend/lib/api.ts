@@ -632,19 +632,6 @@ export async function createScan(
   return response.json() as Promise<ScanResponse>;
 }
 
-import {
-  DEMO_SCAN_ID,
-  DEMO_SCAN,
-  DEMO_DIAGNOSIS,
-  DEMO_EVIDENCE,
-  DEMO_TECHNOLOGIES,
-  DEMO_SECURITY,
-  DEMO_PERFORMANCE,
-  DEMO_PAGES,
-  DEMO_ATTACK_SURFACE_GRAPH,
-  DEMO_RISK_PRIORITIZATION,
-} from "./demo-data";
-
 export async function getAssessmentAuthorization(id: string): Promise<AssessmentAuthorization> {
   const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/assessment/authorization`, {
     headers: { Accept: "application/json" },
@@ -676,9 +663,6 @@ export async function resumeScan(id: string): Promise<ScanProgressResponse> {
 }
 
 export async function getScanDiagnosis(id: string): Promise<CauseOfDeathDiagnosis> {
-  if (id === DEMO_SCAN_ID || id.startsWith("demo")) {
-    return DEMO_DIAGNOSIS;
-  }
   const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/diagnosis`, {
     headers: { Accept: "application/json" },
     cache: "no-store",
@@ -688,9 +672,6 @@ export async function getScanDiagnosis(id: string): Promise<CauseOfDeathDiagnosi
 }
 
 export async function getScan(id: string): Promise<ScanResponse> {
-  if (id === DEMO_SCAN_ID || id.startsWith("demo")) {
-    return DEMO_SCAN;
-  }
   const response = await fetch(`${apiBaseUrl}/v1/scans/${id}`, {
     headers: { Accept: "application/json" },
     cache: "no-store",
@@ -704,9 +685,6 @@ export async function getScan(id: string): Promise<ScanResponse> {
 }
 
 export async function getScanEvidence(id: string): Promise<ObservationResponse[]> {
-  if (id === DEMO_SCAN_ID || id.startsWith("demo")) {
-    return DEMO_EVIDENCE;
-  }
   const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/evidence`, {
     headers: { Accept: "application/json" },
     cache: "no-store",
@@ -720,9 +698,6 @@ export async function getScanEvidence(id: string): Promise<ObservationResponse[]
 }
 
 export async function getScanTechnologies(id: string): Promise<TechnologyDetection[]> {
-  if (id === DEMO_SCAN_ID || id.startsWith("demo")) {
-    return DEMO_TECHNOLOGIES;
-  }
   const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/technologies`, {
     headers: { Accept: "application/json" },
     cache: "no-store",
@@ -736,9 +711,6 @@ export async function getScanTechnologies(id: string): Promise<TechnologyDetecti
 }
 
 export async function getScanSecurity(id: string): Promise<SecurityFinding[]> {
-  if (id === DEMO_SCAN_ID || id.startsWith("demo")) {
-    return DEMO_SECURITY;
-  }
   const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/security`, {
     headers: { Accept: "application/json" },
     cache: "no-store",
@@ -789,9 +761,6 @@ export async function getScanEvidenceReviews(id: string): Promise<EvidenceRespon
 }
 
 export async function getScanAttackSurfaceGraph(id: string): Promise<AttackSurfaceGraphResponse> {
-  if (id === DEMO_SCAN_ID || id.startsWith("demo")) {
-    return DEMO_ATTACK_SURFACE_GRAPH;
-  }
   const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/attack-surface-graph`, {
     headers: { Accept: "application/json" },
     cache: "no-store",
@@ -803,9 +772,6 @@ export async function getScanAttackSurfaceGraph(id: string): Promise<AttackSurfa
 }
 
 export async function getScanRiskPrioritization(id: string): Promise<RiskPrioritizationResponse> {
-  if (id === DEMO_SCAN_ID || id.startsWith("demo")) {
-    return DEMO_RISK_PRIORITIZATION;
-  }
   const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/risk-prioritization`, {
     headers: { Accept: "application/json" },
     cache: "no-store",
@@ -856,9 +822,6 @@ export async function getScanVulnerabilityAgent(id: string): Promise<Vulnerabili
 }
 
 export async function getScanPerformance(id: string): Promise<PerformanceResponse> {
-  if (id === DEMO_SCAN_ID || id.startsWith("demo")) {
-    return DEMO_PERFORMANCE;
-  }
   const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/performance`, {
     headers: { Accept: "application/json" },
     cache: "no-store",
@@ -872,9 +835,6 @@ export async function getScanPerformance(id: string): Promise<PerformanceRespons
 }
 
 export async function getScanPages(id: string): Promise<CrawledPage[]> {
-  if (id === DEMO_SCAN_ID || id.startsWith("demo")) {
-    return DEMO_PAGES;
-  }
   const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/pages`, {
     headers: { Accept: "application/json" },
     cache: "no-store",

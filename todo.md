@@ -35,3 +35,26 @@
 - [ ] Prepare a clean Phase 0 and Phase 1 source commit for the specified GitHub repository.
 - [ ] Push the prepared commit to Hassan-khan-5535/web-autopsy-network using the user’s collaborator access and verify the remote result.
 - [ ] Push the completed Phase 0 and Phase 1 source commit to atifkhani397/web-autopsy-network and verify the remote result.
+- [x] Restore and complete the preserved Extension 10 Correlation Agent and Attack Surface Graph implementation on top of the latest repository revision.
+- [x] Design Extension 10 Correlation Agent contracts, evidence boundary, graph entity taxonomy, relationship taxonomy, and prioritization-only escalation model.
+- [x] Add database persistence and Alembic migration support for incremental attack-surface graph nodes, edges, provenance, confidence, and update timestamps.
+- [x] Implement a deterministic Correlation Agent that incrementally derives graph updates from existing scan evidence, assets, endpoints, APIs, parameters, authentication boundaries, findings, and related agent outputs without active exploitation.
+- [x] Expose graph snapshots, graph-update metadata, and priority investigation paths through scan API endpoints.
+- [x] Add a report-level Attack Surface Graph investigation section with evidence provenance, filters, and prioritization-only escalation paths.
+- [x] Add focused tests and release verification for Extension 10 graph persistence, correlation behavior, API responses, and security boundaries.
+- [x] Create a focused professional commit for the verified Extension 10 implementation.
+- [x] Push the Extension 10 commit to atifkhani397/web-autopsy-network and verify the remote main branch.
+- [x] Design Extension 11 transparent deterministic risk scoring components, evidence safeguards, risk bands, and same-target trend contract.
+- [x] Add persistence and an Alembic migration for per-finding risk assessments, score components, evidence-quality records, and scan risk summaries.
+- [x] Implement a deterministic Risk & Heuristic Prioritization Agent that scores severity, confidence, exposure, exploitability indicators, asset criticality, business impact, and evidence quality without opaque-model overrides.
+- [x] Add historical same-target risk comparisons and trend summaries across completed scans.
+- [x] Expose transparent risk assessments, score components, trends, and safety contract through scan API endpoints.
+- [x] Add a report-level Risk Prioritization section with score breakdowns, priority ordering, and risk-trend comparisons.
+- [x] Add focused tests and release verification for Extension 11 persistence, scoring determinism, trend calculations, API responses, and UI interactions.
+- [x] Create a focused professional commit for the verified Extension 11 Risk Agent implementation.
+- [x] Push the Extension 11 commit to atifkhani397/web-autopsy-network and verify the remote main branch.
+- [x] Inventory and remove demo-only scan routes, static demo payloads, and assistant-created local verification artifacts that are not required for production operation.
+- [x] Ensure production report flows rely on persisted real scan IDs only and no longer special-case demo identifiers.
+- [x] Document and verify the standard that future testing uses real, user-authorized website URLs rather than demo URLs.
+- [ ] Create a focused professional commit for the demo removal and real authorized URL testing standard.
+- [ ] Push the cleanup commit to atifkhani397/web-autopsy-network and verify the remote main branch.

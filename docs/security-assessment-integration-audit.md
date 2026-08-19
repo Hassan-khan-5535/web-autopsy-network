@@ -4,7 +4,7 @@
 
 Web Autopsy Network already contains the core infrastructure required for a separate security-assessment layer: a FastAPI API, SQLAlchemy persistence, a scan/task lifecycle, bounded HTTP crawling, isolated browser rendering, deterministic analysis services, evidence-bearing findings, diagnosis/prioritization, SSE plus polling progress, and a Next.js report UI. The correct extension strategy is to add security-assessment metadata and task types to these existing abstractions rather than introduce a second queue, database, scan engine, or report system.
 
-The current public scan path is live and target-specific. `POST /api/v1/scans` validates and stores the submitted URL, creates a fresh `Scan`, and initializes the existing task graph. The report route loads data using the current scan UUID. The explicit demo data path is isolated to the `demo-scan-autopsy` route and IDs beginning with `demo`; it is not selected for normal UUID scans.
+The public scan path is target-specific. `POST /api/v1/scans` validates and stores the submitted URL, creates a fresh `Scan`, and initializes the existing task graph. The report route loads data using the current persisted scan UUID.
 
 ## Existing-system map
 
@@ -22,7 +22,7 @@ The current public scan path is live and target-specific. `POST /api/v1/scans` v
 | Diagnosis | `CauseOfDeathEngine`, `RiskImpactEngine` | Include assessment findings as inputs with provenance | Diagnosis remains prioritization, not a claim of compromise |
 | AI helpers | `AISynthesisEngine`, `AIDoctorEngine` | Optional explanation only; deterministic rules remain authoritative | LLM is not required for detection or severity |
 | Progress | `AgentTask`, `AgentEvent`, SSE stream, polling fallback | Add assessment task keys/events to existing timeline | Frontend already renders task cards and activity events |
-| Frontend API | `frontend/lib/api.ts` | Add typed assessment metadata/findings to current client | Preserve demo-ID fallback only for explicit demo routes |
+| Frontend API | `frontend/lib/api.ts` | Add typed assessment metadata/findings to current client | Use persisted production scan IDs only |
 | Frontend report | `frontend/app/scans/[id]/page.tsx` and report components | Add assessment summary, scope, authorization, rule version, and limitations sections | Existing report sections remain intact |
 | Configuration | `backend/app/core/config.py`, env template, Compose | Add explicit safe-policy defaults and caps | Fail closed for active/authenticated modes when policy is absent |
 | Logging | Structlog plus `AgentEvent` and request logs | Log authorization decision, scope check, action class, target URL, rate-limit result, and outcome | Never log passwords, tokens, cookies, or raw authorization headers |
@@ -54,7 +54,7 @@ Injection, XSS, SSRF, command-injection, file-upload, deserialization, RCE, IDOR
 
 ## Backward compatibility and migrations
 
-All new database columns should be nullable or have server-side defaults. New tables should be additive. Existing `POST /api/v1/scans` requests without an assessment profile must behave exactly as today and select the legacy passive profile. Existing report endpoints and demo routes must remain unchanged. New assessment endpoints should be additive, for example `GET /api/v1/scans/{scan_id}/assessment` and `GET /api/v1/scans/{scan_id}/assessment/findings`.
+All new database columns should be nullable or have server-side defaults. New tables should be additive. Existing `POST /api/v1/scans` requests without an assessment profile must behave exactly as today and select the legacy passive profile. Existing report endpoints must remain unchanged. New assessment endpoints should be additive, for example `GET /api/v1/scans/{scan_id}/assessment` and `GET /api/v1/scans/{scan_id}/assessment/findings`.
 
 The frontend should only render the assessment panel when assessment metadata exists. A normal legacy scan must continue to render the existing progress and report sections without requiring new fields.
 

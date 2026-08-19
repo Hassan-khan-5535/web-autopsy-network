@@ -86,16 +86,9 @@ export default function Home() {
             </button>
           </form>
 
-          {/* Quick Demo CTA */}
-          <div className="mt-4 flex items-center gap-3 text-xs font-mono text-emerald-100/60">
-            <span>Or explore instantly without waiting:</span>
-            <Link
-              href="/scans/demo-scan-autopsy"
-              className="text-amber-300 hover:text-amber-200 underline font-semibold flex items-center gap-1"
-            >
-              🚀 Launch Pre-Analyzed Demo Autopsy &rarr;
-            </Link>
-          </div>
+          <p className="mt-4 text-xs font-mono text-emerald-100/60">
+            Submit only a website you are authorized to assess. Every report is generated from a persisted real scan ID.
+          </p>
         </div>
 
         {/* 10-Second Concept Legend: 🟢 🟡 🔵 ⚫ */}
