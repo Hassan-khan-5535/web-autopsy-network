@@ -6,6 +6,7 @@
     "dev": "next dev -H 0.0.0.0",
     "dev:3001": "next dev -H 0.0.0.0 -p 3001",
     "build": "next build",
+    "postbuild": "rm -rf .next/standalone/.next/static && cp -r .next/static .next/standalone/.next/static",
     "start": "HOSTNAME=0.0.0.0 node .next/standalone/server.js",
     "start:3001": "HOSTNAME=0.0.0.0 PORT=3001 node .next/standalone/server.js",
     "lint": "eslint .",
