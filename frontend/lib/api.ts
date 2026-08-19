@@ -182,7 +182,7 @@ export type SecurityEvidence = {
 
 export type SecurityFinding = {
   id: string;
-  category: "security" | "SECURITY" | "configuration" | "api";
+  category: "security" | "SECURITY" | "configuration" | "api" | "vulnerability";
   subject: string;
   statement: string;
   classification: "OBSERVED" | "INFERRED";
@@ -222,6 +222,47 @@ export type ConfigurationResponse = {
     high_count: number;
     medium_count: number;
     low_count: number;
+  };
+};
+
+export type VulnerabilityRule = {
+  rule_id: string;
+  title: string;
+  risk_family: string;
+  prerequisites: string;
+  detection_logic: string;
+  validation_mode: string;
+  evidence_requirements: string;
+  severity: string;
+  confidence: number;
+  remediation_guidance: string;
+  cwe: string[];
+  owasp: string[];
+  rule_version: string;
+};
+
+export type VulnerabilityResponse = {
+  scan_id: string;
+  rule_version: string;
+  rules: VulnerabilityRule[];
+  findings: SecurityFinding[];
+  summary: {
+    rule_count: number;
+    detector_count: number;
+    finding_count: number;
+    high_count: number;
+    medium_count: number;
+    low_count: number;
+    info_count: number;
+    classification_counts: Record<string, number>;
+  };
+  safe_validation: {
+    mode: string;
+    network_requests_issued: number;
+    payloads_sent: number;
+    forms_submitted: number;
+    mutating_requests_issued: number;
+    authentication_attempts: number;
   };
 };
 
@@ -443,6 +484,19 @@ export async function getScanAPIAgent(id: string): Promise<APIAgentResponse> {
   }
 
   return response.json() as Promise<APIAgentResponse>;
+}
+
+export async function getScanVulnerabilityAgent(id: string): Promise<VulnerabilityResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/vulnerability-agent`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Vulnerability Agent report for scan ${id}`);
+  }
+
+  return response.json() as Promise<VulnerabilityResponse>;
 }
 
 export async function getScanPerformance(id: string): Promise<PerformanceResponse> {

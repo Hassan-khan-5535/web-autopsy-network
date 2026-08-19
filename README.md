@@ -8,15 +8,17 @@
 |---|---|
 | Live frontend | [Open the running Web Autopsy Network UI](https://3001-iuz98nix5x3egg8bbruc3-2761d934.us2.manus.computer) |
 | Repository | [atifkhani397/web-autopsy-network](https://github.com/atifkhani397/web-autopsy-network) |
-| Live verification record | [`docs/extension5-live-verification.md`](docs/extension5-live-verification.md) |
+| Extension 6 live verification record | [`docs/extension6-live-verification.md`](docs/extension6-live-verification.md) |
+| Extension 6 design | [`docs/extension6-vulnerability-agent-integration-design.md`](docs/extension6-vulnerability-agent-integration-design.md) |
+| Extension 5 live verification record | [`docs/extension5-live-verification.md`](docs/extension5-live-verification.md) |
 | API Agent design | [`docs/extension5-api-agent-integration-design.md`](docs/extension5-api-agent-integration-design.md) |
 | Configuration Agent design | [`docs/configuration-agent-integration-design.md`](docs/configuration-agent-integration-design.md) |
 
 ## Platform status
 
-Extensions 1 through 5 are implemented. Extension 5, the **API Agent**, is included in the `main` branch and has been verified against a fresh real bounded scan of `https://www.python.org/`. The verification scan completed at 100%, and its `api_agent` task reached `SUCCEEDED` after the existing API Intelligence, HTTP Agent, and Recon Agent dependencies completed.
+Extensions 1 through 6 are implemented. Extension 6, the **Vulnerability Agent**, is included in the `main` branch and has been verified with a fresh real bounded scan of `https://www.python.org/`. The verification scan completed at 100%, and its `vulnerability` task reached `SUCCEEDED` after the existing Security, Configuration Agent, API Agent, and HTTP Agent dependencies completed.
 
-The latest completed release before this extension was `431cdfd`; the Extension 5 implementation is pending its final release commit after validation.
+The latest completed release before this extension was `7396805`; the Extension 6 implementation is pending its final release commit after validation.
 
 ## Implemented capabilities
 
@@ -27,6 +29,7 @@ The latest completed release before this extension was `431cdfd`; the Extension 
 | Extension 3 | Central HTTP behavior analysis with bounded response capture, secret redaction, status and header observations, cookies, redirects, cache behavior, content type, TLS, CORS, compression, security policy, and anomalies | Complete |
 | Extension 4 | Configuration Agent with 11 independently testable, low-false-positive rules and a report UI backed by persisted `SecurityFinding` records | Complete |
 | Extension 5 | API Agent with normalized route/schema inventory, method and parameter analysis, authentication-boundary indicators, data-exposure and error checks, rate-limit and CORS indicators, and a typed report UI | Complete |
+| Extension 6 | Modular Vulnerability Agent with detection-only OWASP-style indicators for authentication/session, authorization, injection, reflected/stored/DOM XSS, CSRF, IDOR/BOLA, sensitive data, API weaknesses, misconfiguration, and information disclosure | Complete |
 
 The API Agent combines the existing API Intelligence catalog, normalized Recon endpoints and parameters, captured OpenAPI/Swagger documents, and persisted HTTP response evidence. It does not probe undocumented routes, send method-variation requests, authenticate, submit forms, or mutate target data. Its report endpoint is:
 
@@ -48,6 +51,31 @@ The API Agent rules are:
 | `API-ERROR-001` | High-signal API error detail markers |
 | `API-POLICY-001` | Wildcard CORS on JSON-like API responses |
 | `API-SCHEMA-001` | Captured public OpenAPI/Swagger schema metadata |
+
+Extension 6 uses independently testable detector templates registered through a plugin contract. Its report endpoint is:
+
+```text
+GET /v1/scans/{scan_id}/vulnerability-agent
+```
+
+The Vulnerability Agent requires persisted evidence and reports indicators rather than exploitability claims. It never sends payloads, probes routes, authenticates, submits forms, performs identifier substitution, replays requests, or mutates target state. The live response exposes 12 rule templates, 10 detector plugins, evidence-backed findings, remediation guidance, references, and safe-validation counters.
+
+The Vulnerability Agent rule families are:
+
+| Rule family | Detection area |
+|---|---|
+| `VULN-AUTH-001` | Broken authentication or session indicators |
+| `VULN-AUTHZ-001` | Access-control boundary indicators |
+| `VULN-INJECT-001` | Naturally observed injection error indicators |
+| `VULN-XSS-REFLECT-001` | Reflected input indicators |
+| `VULN-XSS-STORED-001` | High-signal stored-content script indicators |
+| `VULN-XSS-DOM-001` | Static DOM source/sink indicators |
+| `VULN-CSRF-001` | Missing recognized CSRF token surface on state-changing forms |
+| `VULN-IDOR-001` | IDOR/BOLA review indicators from object routes and parameters |
+| `VULN-DATA-001` | Sensitive-data exposure indicators |
+| `VULN-API-001` | Composition of API Agent weaknesses |
+| `VULN-MISCONFIG-001` | Composition of Configuration Agent weaknesses |
+| `VULN-DISCLOSURE-001` | Information-disclosure indicators |
 
 The Configuration Agent rules are:
 
@@ -76,15 +104,16 @@ The current task graph is:
 ```text
 admission → collection →
   [technology, structure, api_intelligence, network_intelligence,
-   http_agent, configuration, api_agent, security, content, recon]
+   http_agent, configuration, api_agent, security, vulnerability, content, recon]
   → performance → accessibility → diagnosis → synthesis
 ```
 
-The Configuration Agent waits for both `collection` and `http_agent`. The API Agent waits for `collection`, `api_intelligence`, `http_agent`, and, when enabled, `recon`. Both agents consume persisted evidence and do not perform a separate unbounded request pass. The API Agent response includes the complete rule catalog, normalized inventory, schemas, indicators, matched findings, a ruleset version, and severity counts:
+The Configuration Agent waits for both `collection` and `http_agent`. The API Agent waits for `collection`, `api_intelligence`, `http_agent`, and, when enabled, `recon`. The Vulnerability Agent waits for `collection`, `security`, `configuration`, `api_agent`, and `http_agent`. These agents consume persisted evidence and do not perform a separate unbounded request pass. Their read-only report endpoints are:
 
 ```text
 GET /v1/scans/{scan_id}/configuration
 GET /v1/scans/{scan_id}/api-agent
+GET /v1/scans/{scan_id}/vulnerability-agent
 ```
 
 ## What the platform observes
@@ -101,7 +130,7 @@ Admission validates canonical URLs and applies hostname, DNS, IP, path, and redi
 
 ## Honest coverage and limitations
 
-This is a security assessment foundation, not an unrestricted penetration-testing tool. It currently provides high-confidence passive and active-safe observations, but it does not verify SQL injection, reflected or stored XSS, CSRF, authentication or authorization flaws, IDOR/BOLA, SSRF exploitation, command injection, file-upload vulnerabilities, deserialization, RCE, authenticated API behavior, session weaknesses, dependency CVEs, port and service exposure, subdomain takeover, or meaningful open-redirect exploitability. It also does not log into targets or submit target forms.
+This is a security assessment foundation, not an unrestricted penetration-testing tool. It provides high-confidence passive and active-safe observations plus Vulnerability Agent indicators, but it does not confirm SQL injection, reflected or stored XSS, CSRF, authentication or authorization flaws, IDOR/BOLA, SSRF exploitation, command injection, file-upload vulnerabilities, deserialization, RCE, authenticated API behavior, session weaknesses, dependency CVEs, port and service exposure, subdomain takeover, or meaningful open-redirect exploitability. It does not log into targets, send exploit payloads, substitute object identifiers, or submit target forms. A Vulnerability Agent finding is a bounded review candidate unless controlled authorized validation establishes more.
 
 Those limitations are intentional. Any future active checks must preserve explicit consent, scope enforcement, rate limits, non-destructive behavior, audit logging, and evidence-based reporting.
 
@@ -117,7 +146,7 @@ Those limitations are intentional. Any future active checks must preserve explic
 | Evidence model | Shared observations, normalized assets/endpoints/parameters, `HTTPObservation`, and `SecurityFinding` records |
 | Optional AI | Citation-grounded synthesis may be enabled through deployment configuration; deterministic assessment and configuration rules do not require an LLM |
 
-Extension 5 does not require a new Alembic migration because it stores API findings in the existing `SecurityFinding` table using `category="api"`; the existing `/api-endpoints` inventory endpoint remains backward-compatible. The active database remains at Alembic head `20260819_extension3`.
+Extensions 5 and 6 do not require a new Alembic migration because API and vulnerability findings use the existing `SecurityFinding` table with `category="api"` and `category="vulnerability"`; legacy inventory and security endpoints remain backward-compatible. The active database remains at Alembic head `20260819_extension3`.
 
 ## Manual setup without Docker
 
@@ -249,7 +278,7 @@ curl "http://127.0.0.1:8000/v1/scans/${SCAN_ID}/configuration"
 curl "http://127.0.0.1:8000/v1/scans/${SCAN_ID}/diagnosis"
 ```
 
-The frontend report exposes Configuration, Security, HTTP Agent, Recon Agent, API Intelligence, performance, accessibility, content, evidence, diagnosis, and synthesis sections when the corresponding data is available.
+The frontend report exposes Configuration, Security, HTTP Agent, Recon Agent, API Intelligence, API Agent, Vulnerability Agent, performance, accessibility, content, evidence, diagnosis, and synthesis sections when the corresponding data is available.
 
 ## Testing and release verification
 
@@ -262,9 +291,9 @@ PYTHONPATH=backend backend/venv/bin/python -m pytest backend/tests -q
 (cd backend && DATABASE_URL=sqlite:///web-autopsy-demo.db PYTHONPATH=. ../backend/venv/bin/alembic current)
 ```
 
-The Extension 4 release was validated with **83 backend tests passing**, and Extension 5 raised the full backend regression total to **87 tests passing**. The combined release passed Python compilation, frontend linting, TypeScript checking, production build, and Alembic validation at `20260819_extension3 (head)`. A fresh bounded Python.org scan completed with `requests_used: 7`, `state: COMPLETED`, `status: completed`, and `api_agent: SUCCEEDED`; its API Agent report contained 10 rules, zero findings, and an empty route inventory because no API-like route or schema was captured.
+The Extension 4 release was validated with **83 backend tests passing**, Extension 5 raised the full backend regression total to **87 tests passing**, and Extension 6 raised it to **92 tests passing**. The combined release passed Python compilation, frontend linting, TypeScript checking, production build, and Alembic validation at `20260819_extension3 (head)`. A definitive bounded Python.org Extension 6 scan completed with `requests_used: 7`, `state: COMPLETED`, `status: completed`, `vulnerability: SUCCEEDED`, 22/22 terminal tasks, 12 Vulnerability Agent rules, zero findings, and zero unsafe-validation counters. An earlier run exposed and corrected an overbroad stored-XSS heuristic; the final run no longer reports ordinary `<script>` tags or generic `javascript:` links as stored XSS.
 
-The Extension 4 live verification details are recorded in [`docs/extension4-live-verification.md`](docs/extension4-live-verification.md). The Extension 5 live verification details are recorded in [`docs/extension5-live-verification.md`](docs/extension5-live-verification.md). The API Agent design and rule catalog are documented in [`docs/extension5-api-agent-integration-design.md`](docs/extension5-api-agent-integration-design.md), and the Configuration Agent design is documented in [`docs/configuration-agent-integration-design.md`](docs/configuration-agent-integration-design.md).
+The Extension 4 live verification details are recorded in [`docs/extension4-live-verification.md`](docs/extension4-live-verification.md). The Extension 5 live verification details are recorded in [`docs/extension5-live-verification.md`](docs/extension5-live-verification.md). The Extension 6 live verification details are recorded in [`docs/extension6-live-verification.md`](docs/extension6-live-verification.md). The API Agent design is documented in [`docs/extension5-api-agent-integration-design.md`](docs/extension5-api-agent-integration-design.md), the Vulnerability Agent design is documented in [`docs/extension6-vulnerability-agent-integration-design.md`](docs/extension6-vulnerability-agent-integration-design.md), and the Configuration Agent design is documented in [`docs/configuration-agent-integration-design.md`](docs/configuration-agent-integration-design.md).
 
 ## Repository documentation
 
@@ -272,7 +301,10 @@ The Extension 4 live verification details are recorded in [`docs/extension4-live
 |---|---|
 | [`LOCAL_VERIFICATION.md`](LOCAL_VERIFICATION.md) | Local verification notes and runtime checks |
 | [`docs/configuration-agent-integration-design.md`](docs/configuration-agent-integration-design.md) | Configuration Agent integration design and rule metadata |
-| [`docs/extension4-live-verification.md`](docs/extension4-live-verification.md) | Real-target live verification record |
+| [`docs/extension4-live-verification.md`](docs/extension4-live-verification.md) | Extension 4 real-target live verification record |
+| [`docs/extension5-live-verification.md`](docs/extension5-live-verification.md) | Extension 5 API Agent real-target live verification record |
+| [`docs/extension6-live-verification.md`](docs/extension6-live-verification.md) | Extension 6 Vulnerability Agent real-target live verification record |
+| [`docs/extension6-vulnerability-agent-integration-design.md`](docs/extension6-vulnerability-agent-integration-design.md) | Extension 6 modular detector architecture and safety contract |
 | [`PHASE11_IMPLEMENTATION.md`](PHASE11_IMPLEMENTATION.md) | Historical implementation notes for the existing platform |
 | [`PHASE12_IMPLEMENTATION.md`](PHASE12_IMPLEMENTATION.md) | Historical implementation notes for the existing platform |
 | [`PHASE13_IMPLEMENTATION.md`](PHASE13_IMPLEMENTATION.md) | Historical implementation notes for the existing platform |
