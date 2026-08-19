@@ -270,7 +270,9 @@ class CVEIntelligenceAgent:
         if not explicit:
             return None, 0.0, None, vendor, product
         version, source = explicit[0]
-        version_confidence = 90.0 if re.search(rf"{re.escape(canonical.split('.')[0])}[^\n]{{0,30}}{re.escape(version)}", " ".join(item.observation for item in evidence), re.IGNORECASE) else 70.0
+        neg_newline = "[^\n]"
+        pattern = rf"{re.escape(canonical.split('.')[0])}{neg_newline}{{0,30}}{re.escape(version)}"
+        version_confidence = 90.0 if re.search(pattern, " ".join(item.observation for item in evidence), re.IGNORECASE) else 70.0
         return version, version_confidence, source[:2048], vendor, product
 
     def _candidates(self, vendor: str, product: str) -> list[CVEIntelligence]:

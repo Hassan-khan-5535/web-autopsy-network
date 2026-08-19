@@ -382,7 +382,8 @@ class RiskAgent:
 
     @staticmethod
     def _key(rule_id: str, subject: str) -> str:
-        return f"{rule_id.strip().lower()}|{re.sub(r'\s+', ' ', subject.strip().lower())}"
+        normalized_subject = re.sub(r'\s+', ' ', subject.strip().lower())
+        return f"{rule_id.strip().lower()}|{normalized_subject}"
 
     def _finding_key(self, finding: SecurityFinding) -> str:
         return self._key(finding.rule_id, finding.subject)
