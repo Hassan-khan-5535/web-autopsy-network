@@ -195,3 +195,22 @@ def test_unavailable_response_does_not_create_missing_header_vulnerabilities(db:
     assert "Content-Security-Policy" not in subjects
     assert "X-Frame-Options" not in subjects
     assert all(finding.evidence for finding in findings)
+
+
+def test_safe_form_and_redirect_candidates_are_evidence_backed(db: Session) -> None:
+    body = """
+    <html><body>
+      <form method="post" action="/profile"><input name="email"></form>
+      <a href="/login?next=https%3A%2F%2Fexternal.example">Continue</a>
+    </body></html>
+    """
+    scan = make_scan_with_page(db, body=body)
+    findings = SecurityAnalysisService(db, scan.id).analyze()
+    by_rule = {finding.rule_id: finding for finding in findings}
+
+    assert "csrf_token_surface" in by_rule
+    assert "redirect_parameter_candidate" in by_rule
+    assert by_rule["csrf_token_surface"].classification == "INFERRED"
+    assert by_rule["redirect_parameter_candidate"].classification == "INFERRED"
+    assert "not proof" in by_rule["redirect_parameter_candidate"].limitations or "not confirmed" in by_rule["redirect_parameter_candidate"].statement
+    assert all(finding.evidence for finding in by_rule.values())

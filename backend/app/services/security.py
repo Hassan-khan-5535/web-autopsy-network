@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urljoin, urlsplit
 from uuid import uuid4
 
 from bs4 import BeautifulSoup, Comment
@@ -88,6 +88,8 @@ class SecurityAnalysisService:
             candidates.extend(self._cookie_findings(context))
             candidates.extend(self._cors_findings(context))
             candidates.extend(self._metadata_findings(context))
+            candidates.extend(self._form_findings(context))
+            candidates.extend(self._redirect_parameter_findings(context))
             candidates.extend(self._transport_findings(context))
 
         candidates.extend(self._cross_signal_findings(pages))
@@ -547,6 +549,95 @@ class SecurityAnalysisService:
                         self._evidence("html_comment", page.canonical_url, comment, page.id)
                         for comment in sensitive_comments
                     ],
+                )
+            )
+        return findings
+
+    def _form_findings(self, context: dict[str, Any]) -> list[FindingCandidate]:
+        page: Page = context["page"]
+        soup: BeautifulSoup = context["soup"]
+        findings: list[FindingCandidate] = []
+        csrf_names = {
+            "csrf",
+            "csrf_token",
+            "csrftoken",
+            "_csrf",
+            "_token",
+            "authenticity_token",
+            "xsrf-token",
+        }
+        for index, form in enumerate(soup.find_all("form")):
+            method = str(form.get("method", "get")).upper()
+            action = urljoin(page.canonical_url, str(form.get("action") or page.canonical_url))
+            if method == "POST":
+                input_names = {
+                    str(field.get("name", "")).strip().lower()
+                    for field in form.find_all(["input", "textarea"])
+                    if field.get("name")
+                }
+                token_present = bool(input_names & csrf_names)
+                if not token_present:
+                    findings.append(
+                        self._candidate(
+                            subject="Potential CSRF protection gap",
+                            statement=(
+                                f"A POST form at {page.canonical_url} targets `{action}` and did not expose a recognized CSRF token field. "
+                                "This is a passive candidate only; no form was submitted and exploitability was not tested."
+                            ),
+                            classification="INFERRED",
+                            confidence=70,
+                            severity="medium",
+                            rule_id="csrf_token_surface",
+                            page_id=page.id,
+                            evidence=[
+                                self._evidence(
+                                    "form_surface",
+                                    f"{page.canonical_url}#form-{index}",
+                                    f"POST form action={action}; recognized CSRF token present={token_present}.",
+                                    page.id,
+                                )
+                            ],
+                            limitations=PASSIVE_LIMITATIONS + " A dedicated authorized test account and safe token-validation workflow are required to confirm CSRF behavior.",
+                        )
+                    )
+        return findings
+
+    def _redirect_parameter_findings(self, context: dict[str, Any]) -> list[FindingCandidate]:
+        page: Page = context["page"]
+        soup: BeautifulSoup = context["soup"]
+        findings: list[FindingCandidate] = []
+        redirect_names = {"next", "return", "redirect", "redirect_uri", "url", "continue", "dest", "destination", "returnto"}
+        for index, element in enumerate(soup.find_all(["a", "form"])):
+            attribute = "href" if element.name == "a" else "action"
+            raw_target = element.get(attribute)
+            if not raw_target:
+                continue
+            target = urljoin(page.canonical_url, str(raw_target))
+            params = {key.lower() for key, _ in parse_qsl(urlsplit(target).query, keep_blank_values=True)}
+            matches = sorted(params & redirect_names)
+            if not matches:
+                continue
+            findings.append(
+                self._candidate(
+                    subject="Open redirect candidate",
+                    statement=(
+                        f"A {element.name} on {page.canonical_url} contains redirect-like parameter(s) {', '.join(matches)}. "
+                        "The destination was not followed or validated, so this is not a confirmed open redirect."
+                    ),
+                    classification="INFERRED",
+                    confidence=55,
+                    severity="low",
+                    rule_id="redirect_parameter_candidate",
+                    page_id=page.id,
+                    evidence=[
+                        self._evidence(
+                            "redirect_parameter",
+                            f"{page.canonical_url}#element-{index}",
+                            f"Observed target: {target}",
+                            page.id,
+                        )
+                    ],
+                    limitations=PASSIVE_LIMITATIONS + " Confirmation requires an explicitly authorized, non-destructive redirect validation against a controlled canary destination.",
                 )
             )
         return findings
