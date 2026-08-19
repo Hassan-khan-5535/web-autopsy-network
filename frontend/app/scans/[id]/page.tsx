@@ -17,6 +17,7 @@ import {
   getScanConfiguration,
   getScanAPIAgent,
   getScanVulnerabilityAgent,
+  getScanSecrets,
   getScanPerformance,
   getScanPageRendered,
   getScanAccessibility,
@@ -38,6 +39,7 @@ import {
   type ConfigurationResponse,
   type APIAgentResponse,
   type VulnerabilityResponse,
+  type SecretsResponse,
   type PerformanceResponse,
   type AccessibilityFinding,
   type ContentFinding,
@@ -66,6 +68,7 @@ export default function ScanResultPage() {
   const [configuration, setConfiguration] = useState<ConfigurationResponse | null>(null);
   const [apiAgent, setApiAgent] = useState<APIAgentResponse | null>(null);
   const [vulnerability, setVulnerability] = useState<VulnerabilityResponse | null>(null);
+  const [secrets, setSecrets] = useState<SecretsResponse | null>(null);
   const [performance, setPerformance] = useState<PerformanceResponse | null>(null);
   const [accessibilityFindings, setAccessibilityFindings] = useState<AccessibilityFinding[]>([]);
   const [contentFindings, setContentFindings] = useState<ContentFinding[]>([]);
@@ -99,7 +102,7 @@ export default function ScanResultPage() {
         }
 
         if (["COMPLETED", "FAILED", "PARTIAL_FAILED", "CANCELLED"].includes(scanData.state)) {
-          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, reconData, httpData, securityData, configurationData, apiAgentData, vulnerabilityData, performanceData, accessData, contentData] = await Promise.all([
+          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, reconData, httpData, securityData, configurationData, apiAgentData, vulnerabilityData, secretsData, performanceData, accessData, contentData] = await Promise.all([
             getScanPages(id).catch(() => []),
             getScanTechnologies(id).catch(() => []),
             getScanEvidence(id).catch(() => []),
@@ -112,6 +115,7 @@ export default function ScanResultPage() {
             getScanConfiguration(id).catch(() => null),
             getScanAPIAgent(id).catch(() => null),
             getScanVulnerabilityAgent(id).catch(() => null),
+            getScanSecrets(id).catch(() => null),
             getScanPerformance(id).catch(() => null),
             getScanAccessibility(id).catch(() => []),
             getScanContent(id).catch(() => []),
@@ -130,6 +134,7 @@ export default function ScanResultPage() {
             setConfiguration(configurationData);
             setApiAgent(apiAgentData);
             setVulnerability(vulnerabilityData);
+            setSecrets(secretsData);
             setPerformance(performanceData);
             setAccessibilityFindings(accessData);
             setContentFindings(contentData);
@@ -254,7 +259,7 @@ export default function ScanResultPage() {
               <span className="mr-2 text-xs font-mono uppercase tracking-wider text-emerald-100/45">Report sections</span>
               {[
                 ["cause-of-death", "Cause of Death"], ["ai-doctor", "AI Doctor"], ["history", "History"], ["dependencies", "Dependencies"],
-                ["architecture", "Architecture"], ["http-agent", "HTTP Agent"], ["recon", "Recon Agent"], ["api-intelligence", "API Intelligence"], ["api-agent", "API Agent"], ["vulnerability-agent", "Vulnerability Agent"], ["technology-dna", "Technology DNA"], ["performance", "Performance"],
+                ["architecture", "Architecture"], ["http-agent", "HTTP Agent"], ["recon", "Recon Agent"], ["api-intelligence", "API Intelligence"], ["api-agent", "API Agent"], ["vulnerability-agent", "Vulnerability Agent"], ["secrets", "Secrets & Sensitive Data"], ["technology-dna", "Technology DNA"], ["performance", "Performance"],
                 ["configuration", "Configuration"], ["security", "Security"], ["accessibility", "Accessibility"], ["content-seo", "Content & SEO"], ["raw-evidence", "Raw Evidence"],
               ].map(([anchor, label]) => <a key={anchor} href={`#${anchor}`} className="rounded-full border border-emerald-500/20 px-3 py-1.5 text-xs text-emerald-300 hover:border-emerald-400/50 hover:bg-emerald-500/10">{label}</a>)}
             </div>
@@ -507,6 +512,20 @@ export default function ScanResultPage() {
             <div className="rounded-xl border border-emerald-900/30 bg-[#050b09] p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold text-emerald-200">Safe validation contract</p><p className="mt-1 text-xs text-emerald-100/60">Mode: {vulnerability.safe_validation.mode}</p></div><div className="flex flex-wrap gap-2 text-[10px] font-mono text-emerald-300"><span>network {vulnerability.safe_validation.network_requests_issued}</span><span>payloads {vulnerability.safe_validation.payloads_sent}</span><span>forms {vulnerability.safe_validation.forms_submitted}</span><span>mutations {vulnerability.safe_validation.mutating_requests_issued}</span><span>auth attempts {vulnerability.safe_validation.authentication_attempts}</span></div></div></div>
             {vulnerability.findings.length > 0 ? <div className="space-y-3">{vulnerability.findings.map((finding) => { const rule = vulnerability.rules.find((item) => item.rule_id === finding.rule_id); return <details key={finding.id} className="rounded-xl border border-red-900/30 bg-[#050b09] p-4"><summary className="cursor-pointer list-none"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-red-200">{finding.statement}</p><p className="mt-1 text-xs font-mono text-emerald-100/50">{finding.rule_id} · {rule?.risk_family || "vulnerability"} · {finding.subject}</p></div><span className="rounded-full border border-red-500/20 px-3 py-1 text-xs font-mono text-red-300">{finding.severity} · {finding.classification} · {finding.confidence ?? "—"}%</span></div></summary><div className="mt-4 grid gap-3 border-t border-red-900/20 pt-4 text-xs text-emerald-100/65 md:grid-cols-2"><div><p className="font-mono uppercase tracking-wider text-emerald-100/40">Evidence</p><p className="mt-1">{finding.evidence?.map((item) => typeof item === "string" ? item : item.observation).join(" · ") || "Evidence recorded"}</p><p className="mt-3 font-mono uppercase tracking-wider text-emerald-100/40">Limitations</p><p className="mt-1">{finding.limitations || "Detection-only persisted evidence"}</p></div><div><p className="font-mono uppercase tracking-wider text-emerald-100/40">Remediation</p><p className="mt-1">{rule?.remediation_guidance || "Review the linked detector guidance."}</p><p className="mt-3 font-mono uppercase tracking-wider text-emerald-100/40">References</p><p className="mt-1">{rule ? [...rule.cwe, ...rule.owasp].join(", ") : "—"}</p></div></div></details>; })}</div> : <div className="rounded-xl border border-emerald-900/30 bg-[#050b09] p-5 text-sm text-emerald-100/65">No Vulnerability Agent detector met its prerequisites with the persisted evidence. This is not a guarantee that the target is secure.</div>}
             <details className="rounded-xl border border-red-900/20 bg-[#050b09] p-4"><summary className="cursor-pointer text-sm font-semibold text-red-200">View independently testable detector catalog</summary><div className="mt-3 space-y-3">{vulnerability.rules.map((rule) => <div key={rule.rule_id} className="border-t border-red-900/20 pt-3 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-mono text-red-300">{rule.rule_id} · {rule.title}</p><span className="text-emerald-100/45">{rule.risk_family} · {rule.severity} · {rule.confidence}%</span></div><p className="mt-1 text-emerald-100/60">{rule.detection_logic}</p><p className="mt-1 text-emerald-100/45">Validation: {rule.validation_mode}</p></div>)}</div></details>
+          </section>
+        )}
+
+        {/* Extension 7 Secrets & Sensitive Data analysis */}
+        {(isCompleted || isFailed) && secrets && (
+          <section id="secrets" className="space-y-5 rounded-2xl border border-amber-900/30 bg-[#0b1714] p-6">
+            <div className="flex flex-wrap items-end justify-between gap-4 border-b border-amber-900/20 pb-4">
+              <div><h2 className="text-xl font-semibold text-amber-300">Secrets &amp; Sensitive Data Agent</h2><p className="mt-1 text-sm text-emerald-100/50">High-confidence leakage detection over bounded persisted responses, JavaScript, source-map/configuration artifacts, and headers. Secret values are never displayed.</p></div>
+              <div className="flex gap-2 text-xs font-mono"><span className="rounded border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-amber-300">{secrets.rule_version}</span><span className="rounded border border-emerald-500/20 px-2.5 py-1 text-emerald-300">{secrets.summary.finding_count} findings</span></div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><div className="rounded-xl border border-red-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Critical</p><p className="mt-1 text-2xl font-semibold text-red-300">{secrets.summary.critical_count}</p></div><div className="rounded-xl border border-orange-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">High</p><p className="mt-1 text-2xl font-semibold text-orange-300">{secrets.summary.high_count}</p></div><div className="rounded-xl border border-amber-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Medium</p><p className="mt-1 text-2xl font-semibold text-amber-300">{secrets.summary.medium_count}</p></div><div className="rounded-xl border border-emerald-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Low</p><p className="mt-1 text-2xl font-semibold text-emerald-300">{secrets.summary.low_count}</p></div><div className="rounded-xl border border-amber-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">Rules</p><p className="mt-1 text-2xl font-semibold text-amber-200">{secrets.summary.rule_count}</p></div></div>
+            <div className="rounded-xl border border-emerald-900/30 bg-[#050b09] p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold text-emerald-200">Redaction contract</p><p className="mt-1 text-xs text-emerald-100/60">{secrets.redaction.stored_evidence_mode}</p></div><div className="flex flex-wrap gap-2 text-[10px] font-mono text-emerald-300"><span>persisted: {secrets.redaction.values_persisted ? "yes" : "no"}</span><span>logged: {secrets.redaction.values_logged ? "yes" : "no"}</span><span>returned: {secrets.redaction.values_returned ? "yes" : "no"}</span></div></div></div>
+            {secrets.findings.length > 0 ? <div className="space-y-3">{secrets.findings.map((finding) => { const rule = secrets.rules.find((item) => item.rule_id === finding.rule_id); return <details key={finding.id} className="rounded-xl border border-amber-900/30 bg-[#050b09] p-4"><summary className="cursor-pointer list-none"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-amber-200">{finding.statement}</p><p className="mt-1 text-xs font-mono text-emerald-100/50">{finding.rule_id} · {finding.subject}</p></div><span className="rounded-full border border-amber-500/20 px-3 py-1 text-xs font-mono text-amber-300">{finding.severity} · {finding.confidence ?? "—"}%</span></div></summary><div className="mt-4 grid gap-3 border-t border-amber-900/20 pt-4 text-xs text-emerald-100/65 md:grid-cols-2"><div><p className="font-mono uppercase tracking-wider text-emerald-100/40">Redacted evidence</p><p className="mt-1">{finding.evidence?.map((item) => typeof item === "string" ? item : item.observation).join(" · ") || "Redacted evidence recorded"}</p><p className="mt-3 font-mono uppercase tracking-wider text-emerald-100/40">Limitations</p><p className="mt-1">{finding.limitations || "Secret values are not retained"}</p></div><div><p className="font-mono uppercase tracking-wider text-emerald-100/40">Remediation</p><p className="mt-1">{rule?.remediation_guidance || "Review the linked secret-handling guidance."}</p><p className="mt-3 font-mono uppercase tracking-wider text-emerald-100/40">References</p><p className="mt-1">{rule ? [...rule.cwe, ...rule.owasp].join(", ") : "—"}</p></div></div></details>; })}</div> : <div className="rounded-xl border border-emerald-900/30 bg-[#050b09] p-5 text-sm text-emerald-100/65">No high-confidence secret or sensitive-identifier rule met its prerequisites in the bounded evidence. This is not proof that the target contains no secrets.</div>}
+            <details className="rounded-xl border border-amber-900/20 bg-[#050b09] p-4"><summary className="cursor-pointer text-sm font-semibold text-amber-200">View signature catalog and suppression rules</summary><div className="mt-3 space-y-3">{secrets.rules.map((rule) => <div key={rule.rule_id} className="border-t border-amber-900/20 pt-3 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-mono text-amber-300">{rule.rule_id} · {rule.title}</p><span className="text-emerald-100/45">{rule.confidence_tier} · {rule.confidence}%</span></div><p className="mt-1 text-emerald-100/60">{rule.detection_logic}</p><p className="mt-1 text-emerald-100/45">Suppression: {rule.suppression_logic}</p></div>)}</div></details>
           </section>
         )}
 

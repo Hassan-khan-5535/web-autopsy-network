@@ -182,7 +182,7 @@ export type SecurityEvidence = {
 
 export type SecurityFinding = {
   id: string;
-  category: "security" | "SECURITY" | "configuration" | "api" | "vulnerability";
+  category: "security" | "SECURITY" | "configuration" | "api" | "vulnerability" | "secrets";
   subject: string;
   statement: string;
   classification: "OBSERVED" | "INFERRED";
@@ -239,6 +239,45 @@ export type VulnerabilityRule = {
   cwe: string[];
   owasp: string[];
   rule_version: string;
+};
+
+export type SecretsRule = {
+  rule_id: string;
+  title: string;
+  source_types: string[];
+  prerequisites: string;
+  detection_logic: string;
+  suppression_logic: string;
+  evidence_requirements: string;
+  severity: string;
+  confidence_tier: string;
+  confidence: number;
+  remediation_guidance: string;
+  cwe: string[];
+  owasp: string[];
+  rule_version: string;
+};
+
+export type SecretsResponse = {
+  scan_id: string;
+  rule_version: string;
+  rules: SecretsRule[];
+  findings: SecurityFinding[];
+  summary: {
+    rule_count: number;
+    finding_count: number;
+    critical_count: number;
+    high_count: number;
+    medium_count: number;
+    low_count: number;
+    confidence_tiers: Record<string, number>;
+  };
+  redaction: {
+    values_persisted: boolean;
+    values_logged: boolean;
+    values_returned: boolean;
+    stored_evidence_mode: string;
+  };
 };
 
 export type VulnerabilityResponse = {
@@ -484,6 +523,19 @@ export async function getScanAPIAgent(id: string): Promise<APIAgentResponse> {
   }
 
   return response.json() as Promise<APIAgentResponse>;
+}
+
+export async function getScanSecrets(id: string): Promise<SecretsResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/secrets`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Secrets Agent report for scan ${id}`);
+  }
+
+  return response.json() as Promise<SecretsResponse>;
 }
 
 export async function getScanVulnerabilityAgent(id: string): Promise<VulnerabilityResponse> {
