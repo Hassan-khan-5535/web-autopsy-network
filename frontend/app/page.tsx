@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { HealthIndicator } from "@/components/health-indicator";
+import { PlatformPulse } from "@/components/platform-pulse";
 
 export default function Home() {
   const router = useRouter();
@@ -42,7 +43,7 @@ export default function Home() {
               System Architecture &rarr;
             </Link>
             <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-100">
-              Phase 15 · Portfolio Edition
+              Extension 15 · Continuous Security
             </span>
           </div>
         </header>
@@ -90,6 +91,8 @@ export default function Home() {
             Submit only a website you are authorized to assess. Every report is generated from a persisted real scan ID.
           </p>
         </div>
+
+        <PlatformPulse />
 
         {/* 10-Second Concept Legend: 🟢 🟡 🔵 ⚫ */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 py-8 border-t border-emerald-100/10">

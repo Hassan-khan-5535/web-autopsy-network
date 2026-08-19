@@ -1531,3 +1531,29 @@ export async function getSecurityReport(id: string): Promise<SecurityReportRespo
 export function getSecurityReportExportUrl(id: string, format: "pdf" | "json" | "sarif") {
   return `${apiBaseUrl}/v1/scans/${id}/report/export/${format}`;
 }
+
+export type PlatformDashboardScan = {
+  id: string;
+  website_id: string;
+  target_url: string;
+  canonical_origin: string | null;
+  state: string;
+  assessment_profile: string | null;
+  created_at: string;
+  finished_at: string | null;
+  risk_score: number | null;
+  risk_band: string | null;
+  posture_available: boolean;
+  page_count: number;
+};
+export type PlatformDashboardResponse = {
+  version: string;
+  summary: { scan_count: number; target_count: number; state_counts: Record<string, number>; active_scan_count: number };
+  scans: PlatformDashboardScan[];
+};
+
+export async function getPlatformDashboard(limit = 20): Promise<PlatformDashboardResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/platform/dashboard?limit=${limit}`, { headers: { Accept: "application/json" }, cache: "no-store" });
+  if (!response.ok) throw new Error("Failed to fetch the platform dashboard");
+  return response.json() as Promise<PlatformDashboardResponse>;
+}

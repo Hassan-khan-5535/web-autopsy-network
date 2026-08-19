@@ -81,3 +81,9 @@
 - [x] Add the reporting and export controls to the persisted report UI, including safe breakpoint visibility without exploit instructions.
 - [x] Add focused Extension 14 tests and run backend/frontend and real-authorized export verification.
 - [ ] Create and push the professional Extension 14 GitHub release commit.
+- [x] Assess current API endpoints, CLI tooling, scan setup/consent UI, live activity, finding/evidence views, posture/trend panels, and export controls for Extension 15.
+- [x] Define the Extension 15 public API discovery contract, scope-safe CLI command model, and premium continuous-security dashboard information architecture.
+- [x] Implement a discoverable API capability catalog and scope-safe CLI commands for creating scans, querying status/progress, assets, evidence, findings, graph, comparisons, and reports.
+- [x] Upgrade dashboard scan setup, live agent activity, attack-surface investigation, severity/confidence filtering, evidence drill-down, posture/trend, regression, and export workflows.
+- [x] Add focused Extension 15 API and CLI tests, verify premium dashboard behavior, and run full regression/build checks.
+- [ ] Create and push the professional Extension 15 GitHub release commit.

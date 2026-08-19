@@ -14,8 +14,8 @@ logger = logging.getLogger("web_autopsy.api")
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.1.0",
-    description="Phase 1 control-plane foundation. No scan or analysis operations are available.",
+    version="0.15.0",
+    description="Authorization-gated continuous web security assessment platform with persisted evidence, posture reporting, and export controls.",
 )
 
 app.add_middleware(
