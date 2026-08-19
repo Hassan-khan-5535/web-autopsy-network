@@ -254,6 +254,9 @@ class TaskGraphCoordinator:
         scan.finished_at = utc_now()
         cls._event(db, scan_id, None, "SCAN_TERMINAL", {"state": scan.state})
         db.commit()
+        if scan.state == "COMPLETED":
+            from app.services.continuous import PostureTimelineService
+            PostureTimelineService(db).refresh_snapshot(scan_id)
         cls.release_queued_scans(db)
 
     @classmethod

@@ -4,7 +4,7 @@ import hashlib
 import json
 import time
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
@@ -36,6 +36,7 @@ from app.models.scan import (
     ReconAsset,
     ReconEndpoint,
     ReconParameter,
+    RecurringScanSchedule,
     Scan,
     ScanDifference,
     SecurityFinding,
@@ -68,6 +69,7 @@ from app.services.configuration import CONFIGURATION_RULES, RULE_VERSION as CONF
 from app.services.correlation import CorrelationAgent
 from app.services.risk import RiskAgent
 from app.services.content import ContentEngine
+from app.services.continuous import PostureTimelineService, RecurringScheduleError, RecurringScheduleService, as_utc
 from app.services.diff import DiffEngine, DiffValidationError
 from app.services.diff_ai import DiffExplanationEngine
 from app.services.diagnosis import CauseOfDeathEngine, CauseOfDeathNarrative
@@ -111,6 +113,10 @@ class ScanCreate(BaseModel):
 class ScanCompareRequest(BaseModel):
     scan_a: UUID
     scan_b: UUID
+
+
+class RecurringScheduleUpdate(BaseModel):
+    enabled: bool
 
 
 class ScanResponse(BaseModel):
@@ -175,6 +181,24 @@ def _scan_response(scan: Scan) -> dict[str, object]:
     }
 
 
+def _schedule_response(schedule: RecurringScanSchedule) -> dict[str, object]:
+    return {
+        "id": str(schedule.id),
+        "website_id": str(schedule.website_id),
+        "source_scan_id": str(schedule.source_scan_id),
+        "target_url": schedule.target_url,
+        "cadence": schedule.cadence,
+        "enabled": schedule.enabled,
+        "next_run_at": as_utc(schedule.next_run_at).isoformat(),
+        "last_run_at": as_utc(schedule.last_run_at).isoformat() if schedule.last_run_at else None,
+        "last_scan_id": str(schedule.last_scan_id) if schedule.last_scan_id else None,
+        "blocked_at": as_utc(schedule.blocked_at).isoformat() if schedule.blocked_at else None,
+        "last_block_reason": schedule.last_block_reason,
+        "created_by": schedule.created_by,
+        "created_at": as_utc(schedule.created_at).isoformat(),
+    }
+
+
 @router.post("/compare")
 def compare_scans(req: ScanCompareRequest, db: Session = Depends(get_db)):
     try:
@@ -184,6 +208,60 @@ def compare_scans(req: ScanCompareRequest, db: Session = Depends(get_db)):
     summary = DiffExplanationEngine(db).explain(UUID(diff["difference_id"]))
     diff["ai_summary"] = summary
     return diff
+
+
+@router.get("/{scan_id}/posture-timeline")
+def get_scan_posture_timeline(scan_id: UUID, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return PostureTimelineService(db).timeline(scan.website_id)
+
+
+@router.post("/{scan_id}/recurring-schedule")
+def create_weekly_recurring_schedule(
+    scan_id: UUID,
+    db: Session = Depends(get_db),
+    actor_id: str | None = Header(default=None, alias="X-Actor-ID"),
+):
+    try:
+        schedule = RecurringScheduleService(db).create_weekly(scan_id, actor_id.strip() if actor_id and actor_id.strip() else "anonymous")
+    except RecurringScheduleError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _schedule_response(schedule)
+
+
+@router.get("/{scan_id}/recurring-schedule")
+def get_recurring_schedule(scan_id: UUID, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    schedule = db.query(RecurringScanSchedule).filter(
+        (RecurringScanSchedule.source_scan_id == scan_id)
+        | (RecurringScanSchedule.id == scan.recurring_schedule_id)
+    ).order_by(RecurringScanSchedule.created_at.desc()).first()
+    return _schedule_response(schedule) if schedule else None
+
+
+@router.patch("/recurring-schedules/{schedule_id}")
+def update_recurring_schedule(
+    schedule_id: UUID,
+    update: RecurringScheduleUpdate,
+    db: Session = Depends(get_db),
+    actor_id: str | None = Header(default=None, alias="X-Actor-ID"),
+):
+    schedule = db.query(RecurringScanSchedule).filter(RecurringScanSchedule.id == schedule_id).first()
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Recurring schedule not found")
+    schedule.enabled = update.enabled
+    if update.enabled:
+        schedule.blocked_at = None
+        schedule.last_block_reason = None
+        if as_utc(schedule.next_run_at) < datetime.now(UTC):
+            schedule.next_run_at = datetime.now(UTC) + timedelta(days=7)
+    db.commit()
+    db.refresh(schedule)
+    return _schedule_response(schedule)
 
 
 @router.post("", response_model=ScanResponse, status_code=202)

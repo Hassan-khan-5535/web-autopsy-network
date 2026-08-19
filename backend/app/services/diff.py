@@ -10,9 +10,13 @@ from sqlalchemy.orm import Session
 
 from app.models.scan import (
     AccessibilityFinding,
+    ApiEndpoint,
     ContentFinding,
     Dependency,
+    HTTPObservation,
     PerformanceMetric,
+    ReconAsset,
+    ReconEndpoint,
     Scan,
     ScanDifference,
     SecurityFinding,
@@ -47,9 +51,16 @@ class DiffEngine:
 
         categories = {
             "structure": self._structure(scan_a, scan_b),
+            "assets": self._assets(scan_a, scan_b),
+            "endpoints": self._endpoints(scan_a, scan_b),
             "technology": self._technologies(scan_a, scan_b),
             "dependencies": self._dependencies(scan_a, scan_b),
             "security": self._security(scan_a, scan_b),
+            "security_headers": self._security_headers(scan_a, scan_b),
+            "vulnerabilities": self._finding_subset(scan_a, scan_b, "vulnerability", ("vulnerability", "cve")),
+            "configuration": self._finding_subset(scan_a, scan_b, "configuration", ("configuration", "config")),
+            "secrets": self._finding_subset(scan_a, scan_b, "secret", ("secret",)),
+            "risk": self._risk(scan_a, scan_b),
             "performance": self._performance(scan_a, scan_b),
             "content": self._content(scan_a, scan_b),
         }
@@ -134,6 +145,35 @@ class DiffEngine:
                 items.append(self._item("structure", f"depth:{url}", change="depth_changed", before=left.depth, after=right.depth, evidence=[str(left.id), str(right.id)]))
         return {"page_count": {"before": len(before), "after": len(after), "delta": len(after) - len(before)}, "max_depth": {"before": max((p.depth for p in before.values()), default=0), "after": max((p.depth for p in after.values()), default=0)}, "items": items}
 
+    def _assets(self, scan_a: Scan, scan_b: Scan) -> dict[str, Any]:
+        before = {(item.asset_type, item.value): item for item in self.db.query(ReconAsset).filter(ReconAsset.scan_id == scan_a.id).all()}
+        after = {(item.asset_type, item.value): item for item in self.db.query(ReconAsset).filter(ReconAsset.scan_id == scan_b.id).all()}
+        items: list[dict[str, Any]] = []
+        for key in sorted(after.keys() - before.keys()):
+            item = after[key]
+            items.append(self._item("assets", f"added:{key}", change="asset_added", after={"asset_type": item.asset_type, "value": item.value, "scope_status": item.scope_status}, evidence=[str(item.id)]))
+        for key in sorted(before.keys() - after.keys()):
+            item = before[key]
+            items.append(self._item("assets", f"removed:{key}", change="asset_no_longer_observed", before={"asset_type": item.asset_type, "value": item.value, "scope_status": item.scope_status}, classification="INFERRED", evidence=[str(item.id)], note="The asset was not observed in scan B; this is not proof that it was removed or decommissioned."))
+        return {"asset_count": {"before": len(before), "after": len(after), "delta": len(after) - len(before)}, "items": items}
+
+    def _endpoints(self, scan_a: Scan, scan_b: Scan) -> dict[str, Any]:
+        def records(scan_id: UUID) -> dict[tuple[str, str, str], Any]:
+            recon = {("recon", item.http_method, item.url_or_path): item for item in self.db.query(ReconEndpoint).filter(ReconEndpoint.scan_id == scan_id).all()}
+            api = {("api", item.http_method, item.url_or_path): item for item in self.db.query(ApiEndpoint).filter(ApiEndpoint.scan_id == scan_id).all()}
+            return {**recon, **api}
+        before, after = records(scan_a.id), records(scan_b.id)
+        items: list[dict[str, Any]] = []
+        for key in sorted(after.keys() - before.keys()):
+            source, method, path = key
+            item = after[key]
+            items.append(self._item("endpoints", f"added:{key}", change="endpoint_added", after={"source": source, "method": method, "url_or_path": path, "status_code": getattr(item, "status_code", None)}, evidence=[str(item.id)]))
+        for key in sorted(before.keys() - after.keys()):
+            source, method, path = key
+            item = before[key]
+            items.append(self._item("endpoints", f"removed:{key}", change="endpoint_no_longer_observed", before={"source": source, "method": method, "url_or_path": path, "status_code": getattr(item, "status_code", None)}, classification="INFERRED", evidence=[str(item.id)], note="The endpoint was not observed in scan B; this is not proof it was removed or access-controlled."))
+        return {"endpoint_count": {"before": len(before), "after": len(after), "delta": len(after) - len(before)}, "items": items}
+
     def _technologies(self, scan_a: Scan, scan_b: Scan) -> dict[str, Any]:
         before = {t.canonical_name: t for t in scan_a.technologies}
         after = {t.canonical_name: t for t in scan_b.technologies}
@@ -183,9 +223,55 @@ class DiffEngine:
             items.append(self._item("security", f"removed:{finding_key}", change="security_finding_no_longer_observed", before={"subject": finding.subject, "statement": finding.statement, "severity": finding.severity}, classification="INFERRED", evidence=[str(finding.id)], note="The prior finding was not observed in scan B."))
         for finding_key in sorted(before.keys() & after.keys(), key=str):
             left, right = before[finding_key], after[finding_key]
-            if (left.statement, left.severity, left.classification) != (right.statement, right.severity, right.classification):
-                items.append(self._item("security", f"changed:{finding_key}", change="security_finding_changed", before={"statement": left.statement, "severity": left.severity, "classification": left.classification}, after={"statement": right.statement, "severity": right.severity, "classification": right.classification}, evidence=[str(left.id), str(right.id)]))
+            if left.severity != right.severity:
+                items.append(self._item("security", f"severity:{finding_key}", change="severity_changed", before={"subject": left.subject, "severity": left.severity}, after={"subject": right.subject, "severity": right.severity}, evidence=[str(left.id), str(right.id)]))
+            if (left.statement, left.classification) != (right.statement, right.classification):
+                items.append(self._item("security", f"changed:{finding_key}", change="security_finding_changed", before={"statement": left.statement, "classification": left.classification}, after={"statement": right.statement, "classification": right.classification}, evidence=[str(left.id), str(right.id)]))
         return {"finding_count": {"before": len(before), "after": len(after), "delta": len(after) - len(before)}, "items": items}
+
+    def _security_headers(self, scan_a: Scan, scan_b: Scan) -> dict[str, Any]:
+        def records(scan_id: UUID) -> dict[str, HTTPObservation]:
+            return {item.subject.lower(): item for item in self.db.query(HTTPObservation).filter(HTTPObservation.scan_id == scan_id, HTTPObservation.observation_type == "header").all()}
+        before, after = records(scan_a.id), records(scan_b.id)
+        items: list[dict[str, Any]] = []
+        for key in sorted(after.keys() - before.keys()):
+            item = after[key]
+            items.append(self._item("security_headers", f"added:{key}", change="security_header_observed", after={"header": item.subject, "redacted": item.redacted}, evidence=[str(item.id)]))
+        for key in sorted(before.keys() - after.keys()):
+            item = before[key]
+            items.append(self._item("security_headers", f"removed:{key}", change="security_header_no_longer_observed", before={"header": item.subject, "redacted": item.redacted}, classification="INFERRED", evidence=[str(item.id)], note="The header observation was not reproduced in scan B; this is not proof that the header was removed."))
+        for key in sorted(before.keys() & after.keys()):
+            left, right = before[key], after[key]
+            if left.value != right.value:
+                items.append(self._item("security_headers", f"changed:{key}", change="security_header_changed", before={"header": left.subject, "redacted": left.redacted}, after={"header": right.subject, "redacted": right.redacted}, evidence=[str(left.id), str(right.id)], note="Header values are not included in the diff summary."))
+        return {"header_count": {"before": len(before), "after": len(after), "delta": len(after) - len(before)}, "items": items}
+
+    def _finding_subset(self, scan_a: Scan, scan_b: Scan, category: str, tokens: tuple[str, ...]) -> dict[str, Any]:
+        select = lambda scan: { (item.rule_id, item.subject): item for item in scan.security_findings if any(token in (item.category or "").lower() for token in tokens) }
+        before, after = select(scan_a), select(scan_b)
+        items: list[dict[str, Any]] = []
+        for key in sorted(after.keys() - before.keys(), key=str):
+            item = after[key]
+            change = "newly_exposed_secret" if category == "secret" else f"{category}_added"
+            items.append(self._item(category, f"added:{key}", change=change, after={"subject": item.subject, "severity": item.severity, "rule_id": item.rule_id}, evidence=[str(item.id)]))
+        for key in sorted(before.keys() - after.keys(), key=str):
+            item = before[key]
+            change = "secret_no_longer_observed" if category == "secret" else f"{category}_no_longer_observed"
+            items.append(self._item(category, f"removed:{key}", change=change, before={"subject": item.subject, "severity": item.severity, "rule_id": item.rule_id}, classification="INFERRED", evidence=[str(item.id)], note="No current observation is not proof that this finding has been resolved."))
+        for key in sorted(before.keys() & after.keys(), key=str):
+            left, right = before[key], after[key]
+            if left.severity != right.severity:
+                change = "configuration_regression" if category == "configuration" and str(right.severity).lower() > str(left.severity).lower() else f"{category}_severity_changed"
+                items.append(self._item(category, f"severity:{key}", change=change, before={"subject": left.subject, "severity": left.severity}, after={"subject": right.subject, "severity": right.severity}, evidence=[str(left.id), str(right.id)]))
+        return {"finding_count": {"before": len(before), "after": len(after), "delta": len(after) - len(before)}, "items": items}
+
+    def _risk(self, scan_a: Scan, scan_b: Scan) -> dict[str, Any]:
+        left, right = scan_a.risk_summary, scan_b.risk_summary
+        if not left or not right:
+            return {"available": False, "items": [], "limitation": "Risk summary is unavailable for one or both scans."}
+        if left.overall_score == right.overall_score and left.risk_band == right.risk_band:
+            return {"available": True, "items": []}
+        return {"available": True, "items": [self._item("risk", f"overall:{scan_a.id}:{scan_b.id}", change="risk_score_changed", before={"overall_score": left.overall_score, "risk_band": left.risk_band}, after={"overall_score": right.overall_score, "risk_band": right.risk_band}, evidence=[str(left.id), str(right.id)])]}
 
     def _performance(self, scan_a: Scan, scan_b: Scan) -> dict[str, Any]:
         def metric_key(metric: PerformanceMetric) -> tuple[str, str, str | None]:

@@ -56,5 +56,14 @@
 - [x] Inventory and remove demo-only scan routes, static demo payloads, and assistant-created local verification artifacts that are not required for production operation.
 - [x] Ensure production report flows rely on persisted real scan IDs only and no longer special-case demo identifiers.
 - [x] Document and verify the standard that future testing uses real, user-authorized website URLs rather than demo URLs.
-- [ ] Create a focused professional commit for the demo removal and real authorized URL testing standard.
-- [ ] Push the cleanup commit to atifkhani397/web-autopsy-network and verify the remote main branch.
+- [x] Create a focused professional commit for the demo removal and real authorized URL testing standard.
+- [x] Push the cleanup commit to atifkhani397/web-autopsy-network and verify the remote main branch.
+- [x] Inspect and document Extension 12 integration points for existing same-target diffs, risk summaries, authorization records, and job infrastructure.
+- [x] Confirm the recurring-scan execution model, frequency, and authorization-expiry behavior before enabling scheduled jobs.
+- [x] Implement the approved Option A weekly persisted schedule checker that revalidates authorization and current scope before dispatching a scan through the existing queue.
+- [x] Implement evidence-backed differential posture analysis for assets, technologies, endpoints, headers, vulnerabilities, severities, configuration, secrets, and risk-score changes.
+- [x] Add persistent historical security-posture timeline records and same-target comparison summaries.
+- [x] Implement authorization- and current-scope-gated recurring scan schedules using the existing job infrastructure.
+- [x] Add report views for differential changes, security-posture timeline, and schedule status.
+- [x] Add focused tests and build validation for Extension 12 differentials and scheduling safeguards.
+- [ ] Complete a terminal-state real authorized W3Schools scan observation for the Extension 12 report sections; the local inline worker test run did not transition its persisted analysis tasks after dispatch.

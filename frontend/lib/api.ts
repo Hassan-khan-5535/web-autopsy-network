@@ -487,6 +487,55 @@ export type RiskPrioritizationResponse = {
   };
 };
 
+export type PostureTimelineSnapshot = {
+  scan_id: string;
+  overall_risk_score: number;
+  risk_band: string;
+  posture_summary: {
+    asset_count: number;
+    endpoint_count: number;
+    header_observation_count: number;
+    technology_count: number;
+    security_finding_count: number;
+    vulnerability_count: number;
+    configuration_finding_count: number;
+    secret_finding_count: number;
+    severity_counts: Record<string, number>;
+  };
+  comparison_summary: {
+    baseline: boolean;
+    prior_scan_id: string | null;
+    difference_id: string | null;
+    change_counts: Record<string, number>;
+    item_count?: number;
+    limitation?: string;
+  };
+  created_at: string;
+};
+
+export type PostureTimelineResponse = {
+  website_id: string;
+  posture_version: string;
+  snapshots: PostureTimelineSnapshot[];
+  limitation: string;
+};
+
+export type RecurringScheduleResponse = {
+  id: string;
+  website_id: string;
+  source_scan_id: string;
+  target_url: string;
+  cadence: "weekly" | string;
+  enabled: boolean;
+  next_run_at: string;
+  last_run_at: string | null;
+  last_scan_id: string | null;
+  blocked_at: string | null;
+  last_block_reason: string | null;
+  created_by: string;
+  created_at: string;
+};
+
 export type CVEIntelligenceResponse = {
   scan_id: string;
   rule_version: string;
@@ -780,6 +829,51 @@ export async function getScanRiskPrioritization(id: string): Promise<RiskPriorit
     throw new Error(`Failed to fetch Risk Prioritization for scan ${id}`);
   }
   return response.json() as Promise<RiskPrioritizationResponse>;
+}
+
+export async function getScanPostureTimeline(id: string): Promise<PostureTimelineResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/posture-timeline`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Failed to fetch security posture timeline for scan ${id}`);
+  return response.json() as Promise<PostureTimelineResponse>;
+}
+
+export async function getRecurringSchedule(id: string): Promise<RecurringScheduleResponse | null> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/recurring-schedule`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Failed to fetch recurring schedule for scan ${id}`);
+  return response.json() as Promise<RecurringScheduleResponse | null>;
+}
+
+export async function createWeeklySchedule(id: string): Promise<RecurringScheduleResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/recurring-schedule`, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(apiErrorMessage(payload, `Failed to create recurring schedule for scan ${id}`));
+  }
+  return response.json() as Promise<RecurringScheduleResponse>;
+}
+
+export async function updateRecurringSchedule(id: string, enabled: boolean): Promise<RecurringScheduleResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/recurring-schedules/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ enabled }),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(apiErrorMessage(payload, `Failed to update recurring schedule ${id}`));
+  }
+  return response.json() as Promise<RecurringScheduleResponse>;
 }
 
 export async function getScanCVEIntelligence(id: string): Promise<CVEIntelligenceResponse> {

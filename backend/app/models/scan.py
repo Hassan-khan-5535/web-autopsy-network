@@ -27,6 +27,12 @@ class Website(Base):
     scans: Mapped[list["Scan"]] = relationship(
         back_populates="website", cascade="all, delete-orphan"
     )
+    posture_snapshots: Mapped[list["SecurityPostureSnapshot"]] = relationship(
+        back_populates="website", cascade="all, delete-orphan"
+    )
+    recurring_scan_schedules: Mapped[list["RecurringScanSchedule"]] = relationship(
+        back_populates="website", cascade="all, delete-orphan"
+    )
 
 
 class Scan(Base):
@@ -47,6 +53,9 @@ class Scan(Base):
     assessment_profile: Mapped[str | None] = mapped_column(String(30), nullable=True, default="legacy_passive", index=True)
     max_requests: Mapped[int | None] = mapped_column(Integer, nullable=True, default=30)
     recon_mode: Mapped[str] = mapped_column(String(30), default="passive_only", index=True)
+    recurring_schedule_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("recurring_scan_schedules.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     requests_used: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, index=True
@@ -125,6 +134,12 @@ class Scan(Base):
     )
     risk_summary: Mapped[Optional["ScanRiskSummary"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan", uselist=False
+    )
+    posture_snapshot: Mapped[Optional["SecurityPostureSnapshot"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan", uselist=False
+    )
+    recurring_schedule: Mapped[Optional["RecurringScanSchedule"]] = relationship(
+        back_populates="scans", foreign_keys=[recurring_schedule_id]
     )
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     pause_requested: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
@@ -811,6 +826,51 @@ class ScanDifference(Base):
     website: Mapped["Website"] = relationship()
     scan_a: Mapped["Scan"] = relationship(foreign_keys=[scan_a_id])
     scan_b: Mapped["Scan"] = relationship(foreign_keys=[scan_b_id])
+
+
+class SecurityPostureSnapshot(Base):
+    __tablename__ = "security_posture_snapshots"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    website_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("websites.id", ondelete="CASCADE"), index=True)
+    scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), unique=True, index=True)
+    posture_version: Mapped[str] = mapped_column(String(50), index=True)
+    overall_risk_score: Mapped[float] = mapped_column(Float, default=0.0, index=True)
+    risk_band: Mapped[str] = mapped_column(String(30), default="info", index=True)
+    posture_summary: Mapped[dict] = mapped_column(JSON)
+    comparison_summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    website: Mapped["Website"] = relationship(back_populates="posture_snapshots")
+    scan: Mapped["Scan"] = relationship(back_populates="posture_snapshot")
+
+
+class RecurringScanSchedule(Base):
+    __tablename__ = "recurring_scan_schedules"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    website_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("websites.id", ondelete="CASCADE"), index=True)
+    source_scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
+    source_authorization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assessment_authorizations.id", ondelete="CASCADE"), index=True)
+    target_url: Mapped[str] = mapped_column(String(2048))
+    cadence: Mapped[str] = mapped_column(String(30), default="weekly", index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    next_run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_scan_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("scans.id", ondelete="SET NULL"), nullable=True, index=True)
+    blocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_block_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    authorization_snapshot: Mapped[dict] = mapped_column(JSON)
+    created_by: Mapped[str] = mapped_column(String(255), default="system")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    website: Mapped["Website"] = relationship(back_populates="recurring_scan_schedules")
+    source_scan: Mapped["Scan"] = relationship(foreign_keys=[source_scan_id])
+    source_authorization: Mapped["AssessmentAuthorization"] = relationship(foreign_keys=[source_authorization_id])
+    last_scan: Mapped[Optional["Scan"]] = relationship(foreign_keys=[last_scan_id])
+    scans: Mapped[list["Scan"]] = relationship(back_populates="recurring_schedule", foreign_keys="Scan.recurring_schedule_id")
 
 
 class CauseOfDeathDiagnosis(Base):
