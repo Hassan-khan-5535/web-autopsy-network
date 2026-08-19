@@ -7,6 +7,33 @@ export type HealthResponse = {
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
 
+function apiErrorMessage(payload: unknown, fallback: string): string {
+  if (typeof payload === "string" && payload.trim()) return payload;
+  if (payload && typeof payload === "object") {
+    const value = payload as { detail?: unknown; message?: unknown };
+    const detail = value.detail ?? value.message;
+    if (typeof detail === "string" && detail.trim()) return detail;
+    if (Array.isArray(detail)) {
+      const messages = detail.map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "msg" in item && typeof item.msg === "string") return item.msg;
+        try {
+          return JSON.stringify(item);
+        } catch {
+          return String(item);
+        }
+      }).filter(Boolean);
+      if (messages.length > 0) return messages.join("; ");
+    }
+    try {
+      return JSON.stringify(detail ?? payload);
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
 export async function getHealth(): Promise<HealthResponse> {
   const response = await fetch(`${apiBaseUrl}/health`, {
     headers: { Accept: "application/json" },
@@ -476,7 +503,7 @@ export async function createScan(
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Scan creation failed with ${response.status}`);
+    throw new Error(apiErrorMessage(errorData, `Scan creation failed with ${response.status}`));
   }
 
   return response.json() as Promise<ScanResponse>;
@@ -1119,7 +1146,7 @@ export async function askScanQuestion(
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Question failed with status ${response.status}`);
+    throw new Error(apiErrorMessage(errorData, `Question failed with status ${response.status}`));
   }
 
   return response.json() as Promise<AIInterpretationResponse>;

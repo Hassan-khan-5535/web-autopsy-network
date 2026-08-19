@@ -294,7 +294,7 @@ export default function ScanResultPage() {
         )}
 
         {/* Phase 11 History / Time Machine */}
-        {isCompleted && <section id="history"><HistoryPanel websiteId={scan.website_id} currentScanId={scan.id} /></section>}
+        {isCompleted && !isDemo && <section id="history"><HistoryPanel websiteId={scan.website_id} currentScanId={scan.id} /></section>}
 
         {/* Phase 5 Interactive Dependency Graph */}
         {(isCompleted || isFailed) && dependencies.length > 0 && (
