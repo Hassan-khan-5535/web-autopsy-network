@@ -99,3 +99,9 @@
 - [x] Harden browser-worker boundaries and add dedicated Extension 17 security regression tests for SSRF, rebinding, redirects, hostile content, resource exhaustion, leakage, and unsafe-file boundaries.
 - [x] Run full backend/frontend verification and persisted-report compatibility review.
 - [ ] Create and push the professional Extension 17 GitHub release commit.
+- [x] Assess existing test fixtures, authorized targets, scan metrics, agent outputs, and persisted artifacts suitable for controlled Extension 18 benchmark ground truth.
+- [x] Define Extension 18 benchmark protocol, metrics, ground-truth schema, concurrency and resource measurement controls, reproducibility requirements, and claims boundary.
+- [x] Implement controlled intentionally vulnerable and synthetic benchmark fixtures, benchmark runners, metric calculations, and reproducible result artifacts.
+- [x] Execute benchmark scenarios and complete regression validation across scanner, differential, reporting, update, and multi-agent orchestration layers.
+- [x] Publish measured benchmark baselines and methodology without unsupported state-of-the-art claims.
+- [ ] Create and push the professional Extension 18 GitHub release commit.

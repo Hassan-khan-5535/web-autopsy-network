@@ -1,0 +1,35 @@
+{
+  "schema_version": "web-autopsy-benchmark-v1",
+  "suite_id": "wan-controlled-validation",
+  "suite_revision": "2026-08-19",
+  "authorization": "All cases are synthetic local fixtures or explicitly authorized persisted data. No benchmark case may target an unapproved host.",
+  "cases": [
+    {
+      "id": "metric-contract-fixture-v1",
+      "ground_truth_revision": "fixture-1",
+      "description": "Deterministic ground-truth contract fixture for metric arithmetic and report reproducibility. It validates the evaluator, not broad scanner capability.",
+      "ground_truth": {
+        "assets": ["asset:root", "asset:script", "asset:api"],
+        "assets_universe": ["asset:root", "asset:script", "asset:api", "asset:decoy"],
+        "endpoints": ["endpoint:/", "endpoint:/api/status"],
+        "endpoints_universe": ["endpoint:/", "endpoint:/api/status", "endpoint:/admin"],
+        "findings": ["finding:header", "finding:secret"],
+        "findings_universe": ["finding:header", "finding:secret", "finding:decoy"],
+        "cve_matches": [],
+        "secrets": ["secret:contextual"],
+        "secrets_universe": ["secret:contextual", "secret:placeholder"],
+        "differential_changes": ["diff:header-removed"]
+      },
+      "observed": {
+        "assets": ["asset:root", "asset:script", "asset:api"],
+        "endpoints": ["endpoint:/", "endpoint:/api/status"],
+        "findings": ["finding:header", "finding:decoy"],
+        "cve_matches": [],
+        "secrets": ["secret:contextual"],
+        "differential_changes": ["diff:header-removed"],
+        "resources": {"scan_duration_ms": null, "requests_used": null, "max_concurrency_observed": null, "reliability": "not_applicable_metric-contract-fixture"}
+      },
+      "limitations": ["This case is intentionally synthetic and evaluates metric correctness only.", "Scanner coverage, CVE accuracy, duration, requests, and concurrency require a separately executed authorized target fixture with recorded raw outputs."]
+    }
+  ]
+}

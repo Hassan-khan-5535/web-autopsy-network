@@ -1,0 +1,135 @@
+{
+  "cases": [
+    {
+      "case_id": "metric-contract-fixture-v1",
+      "ground_truth_revision": "fixture-1",
+      "limitations": [
+        "This case is intentionally synthetic and evaluates metric correctness only.",
+        "Scanner coverage, CVE accuracy, duration, requests, and concurrency require a separately executed authorized target fixture with recorded raw outputs."
+      ],
+      "metrics": {
+        "assets": {
+          "false_negative": 0,
+          "false_negative_rate": 0.0,
+          "false_positive": 0,
+          "false_positive_rate": 0.0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "status": "measured",
+          "true_positive": 3
+        },
+        "cve_matches": {
+          "reason": "No positive or negative ground-truth cases were supplied for this category.",
+          "status": "not_measured"
+        },
+        "differential_changes": {
+          "false_negative": 0,
+          "false_negative_rate": 0.0,
+          "false_positive": 0,
+          "false_positive_rate": null,
+          "precision": 1.0,
+          "recall": 1.0,
+          "status": "measured",
+          "true_positive": 1
+        },
+        "endpoints": {
+          "false_negative": 0,
+          "false_negative_rate": 0.0,
+          "false_positive": 0,
+          "false_positive_rate": 0.0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "status": "measured",
+          "true_positive": 2
+        },
+        "execution": {
+          "max_concurrency_observed": null,
+          "reliability": null,
+          "requests_used": null,
+          "scan_duration_ms": null,
+          "status": "not_measured"
+        },
+        "findings": {
+          "false_negative": 1,
+          "false_negative_rate": 0.5,
+          "false_positive": 1,
+          "false_positive_rate": 1.0,
+          "precision": 0.5,
+          "recall": 0.5,
+          "status": "measured",
+          "true_positive": 1
+        },
+        "secrets": {
+          "false_negative": 0,
+          "false_negative_rate": 0.0,
+          "false_positive": 0,
+          "false_positive_rate": 0.0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "status": "measured",
+          "true_positive": 1
+        }
+      }
+    },
+    {
+      "case_id": "local-intentionally-vulnerable-discovery-v1",
+      "ground_truth_revision": "fixture-1",
+      "limitations": [
+        "In-process synthetic benchmark target only.",
+        "No external or unauthorized network request was issued.",
+        "The synthetic marker is inert and is not a credential."
+      ],
+      "metrics": {
+        "assets": {
+          "false_negative": 0,
+          "false_negative_rate": 0.0,
+          "false_positive": 0,
+          "false_positive_rate": null,
+          "precision": 1.0,
+          "recall": 1.0,
+          "status": "measured",
+          "true_positive": 2
+        },
+        "cve_matches": {
+          "reason": "No versioned CVE fixture is included.",
+          "status": "not_measured"
+        },
+        "differential_changes": {
+          "reason": "Differential accuracy requires paired fixture executions.",
+          "status": "not_measured"
+        },
+        "endpoints": {
+          "false_negative": 0,
+          "false_negative_rate": 0.0,
+          "false_positive": 0,
+          "false_positive_rate": null,
+          "precision": 1.0,
+          "recall": 1.0,
+          "status": "measured",
+          "true_positive": 3
+        },
+        "execution": {
+          "max_concurrency_observed": 2,
+          "reliability": "completed",
+          "requests_used": 4,
+          "scan_duration_ms": 319.06,
+          "status": "measured"
+        },
+        "findings": {
+          "reason": "This passive discovery target does not assert a vulnerability-check ground truth.",
+          "status": "not_measured"
+        },
+        "secrets": {
+          "reason": "The target contains only an inert synthetic marker; secret-agent accuracy requires a dedicated redaction oracle.",
+          "status": "not_measured"
+        }
+      }
+    }
+  ],
+  "claims_boundary": "Controlled-case measurements only; not a state-of-the-art or general-production claim.",
+  "generated_at": "2026-08-19T15:57:22.488361+00:00",
+  "runner": "backend/scripts/run_benchmark.py",
+  "schema_version": "web-autopsy-benchmark-result-v1",
+  "suite_id": "wan-controlled-validation",
+  "suite_revision": "2026-08-19"
+}
