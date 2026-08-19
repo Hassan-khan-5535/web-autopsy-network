@@ -1,5 +1,5 @@
 {
-  "version": "phase4-v1",
+  "version": "phase4-v2",
   "rules": [
     {"id": "next_static", "technology": "Next.js", "category": "frontend_framework", "signal_type": "script_pattern", "pattern": "_next/static", "weight": 55, "field": "resource_url"},
     {"id": "next_data", "technology": "Next.js", "category": "frontend_framework", "signal_type": "dom_pattern", "pattern": "__next_data__", "weight": 45, "field": "html"},
@@ -11,6 +11,10 @@
     {"id": "angular_marker", "technology": "Angular", "category": "frontend_framework", "signal_type": "dom_pattern", "pattern": "ng-version|ng-app", "weight": 45, "field": "html"},
     {"id": "angular_bundle", "technology": "Angular", "category": "frontend_framework", "signal_type": "script_pattern", "pattern": "angular(?:\\.min)?\\.js|main\\.[a-f0-9]+\\.js", "weight": 20, "field": "resource_url"},
     {"id": "svelte_bundle", "technology": "Svelte", "category": "frontend_framework", "signal_type": "script_pattern", "pattern": "svelte", "weight": 30, "field": "resource_url"},
+    {"id": "sveltekit_immutable", "technology": "SvelteKit", "category": "frontend_framework", "signal_type": "script_pattern", "pattern": "_app/immutable|__svelte", "weight": 65, "field": "resource_url"},
+    {"id": "vite_client", "technology": "Vite", "category": "build_tool", "signal_type": "script_pattern", "pattern": "@vite/client|vite/client", "weight": 70, "field": "resource_url"},
+    {"id": "nuxt_bundle", "technology": "Nuxt", "category": "frontend_framework", "signal_type": "script_pattern", "pattern": "_nuxt/", "weight": 65, "field": "resource_url"},
+    {"id": "astro_island", "technology": "Astro", "category": "frontend_framework", "signal_type": "dom_pattern", "pattern": "astro-island|astro\"", "weight": 65, "field": "html"},
     {"id": "bootstrap_css", "technology": "Bootstrap", "category": "css_framework", "signal_type": "stylesheet_pattern", "pattern": "bootstrap(?:\\.min)?\\.css|bootstrapcdn.com", "weight": 60, "field": "resource_url"},
     {"id": "bootstrap_dom", "technology": "Bootstrap", "category": "css_framework", "signal_type": "dom_pattern", "pattern": "class=[^>]*(?:container-fluid|btn btn-|navbar navbar-)", "weight": 30, "field": "html"},
     {"id": "tailwind_marker", "technology": "Tailwind CSS", "category": "css_framework", "signal_type": "stylesheet_pattern", "pattern": "tailwind", "weight": 60, "field": "resource_url"},
@@ -33,6 +37,7 @@
     {"id": "intercom_script", "technology": "Intercom", "category": "third_party_integration", "signal_type": "script_pattern", "pattern": "widget\\.intercom\\.io|intercom", "weight": 75, "field": "resource_url"},
     {"id": "auth0_script", "technology": "Auth0", "category": "authentication_provider", "signal_type": "script_pattern", "pattern": "cdn\\.auth0\\.com|auth0", "weight": 75, "field": "resource_url"},
     {"id": "firebase_auth", "technology": "Firebase Auth", "category": "authentication_provider", "signal_type": "script_pattern", "pattern": "firebaseapp\\.com|firebase(?:-auth)?(?:\\.min)?\\.js", "weight": 70, "field": "resource_url"},
+    {"id": "openapi_document", "technology": "OpenAPI/Swagger", "category": "api_documentation", "signal_type": "resource_pattern", "pattern": "(?:openapi|swagger)(?:\\.json|\\.yaml|\\.yml)?", "weight": 65, "field": "resource_url"},
     {"id": "wordpress_cookie", "technology": "WordPress", "category": "cms", "signal_type": "cookie_name", "pattern": "wordpress_logged_in_|wordpress_", "weight": 50, "field": "cookies"},
     {"id": "shopify_cookie", "technology": "Shopify", "category": "cms", "signal_type": "cookie_name", "pattern": "_shopify_s|_shopify_y", "weight": 45, "field": "cookies"},
     {"id": "wordpress_comment", "technology": "WordPress", "category": "cms", "signal_type": "comment_marker", "pattern": "<!--[^>]*wordpress", "weight": 30, "field": "html"}

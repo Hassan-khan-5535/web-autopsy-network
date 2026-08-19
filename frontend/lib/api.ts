@@ -68,6 +68,8 @@ export type ScanResponse = {
   same_domain_mode?: string;
   assessment_profile?: string | null;
   max_requests?: number | null;
+  recon_mode?: "disabled" | "passive_only" | "active_safe" | string;
+  requests_used?: number;
   created_at?: string;
   updated_at?: string;
   diagnosis?: CauseOfDeathDiagnosis | null;
@@ -92,6 +94,7 @@ export type ScanOptions = {
   authentication?: ScanAuthentication;
   test_account_ref?: string;
   expires_at?: string;
+  recon_mode?: "passive_only" | "active_safe";
 };
 
 export type AssessmentAuthorization = {
@@ -491,6 +494,73 @@ export type ApiEndpointItem = {
   created_at: string;
 };
 
+export type ReconAsset = {
+  id: string;
+  asset_type: string;
+  value: string;
+  hostname: string | null;
+  source: string;
+  discovery_mode: string;
+  classification: string;
+  scope_status: string;
+  confidence: number;
+  attributes: Record<string, unknown>;
+  evidence: string[];
+  created_at: string;
+};
+
+export type ReconEndpoint = {
+  id: string;
+  endpoint_kind: string;
+  url_or_path: string;
+  http_method: string;
+  source: string;
+  discovery_mode: string;
+  classification: string;
+  confidence: number;
+  scope_status: string;
+  status_code: number | null;
+  content_type: string | null;
+  page_id: string | null;
+  attributes: Record<string, unknown>;
+  evidence: string[];
+  created_at: string;
+};
+
+export type ReconParameter = {
+  id: string;
+  endpoint_id: string | null;
+  page_id: string | null;
+  name: string;
+  location: string;
+  source: string;
+  discovery_mode: string;
+  classification: string;
+  confidence: number;
+  scope_status: string;
+  example_value: string | null;
+  evidence: string[];
+  created_at: string;
+};
+
+export type ReconResponse = {
+  scan_id: string;
+  mode: string;
+  requests_used: number;
+  max_requests: number;
+  assets: ReconAsset[];
+  endpoints: ReconEndpoint[];
+  parameters: ReconParameter[];
+  summary: {
+    asset_count: number;
+    endpoint_count: number;
+    parameter_count: number;
+    cloud_asset_candidates: number;
+    subdomain_count: number;
+    login_admin_sensitive_count: number;
+  };
+};
+
 export async function getScanArchitecture(id: string): Promise<SiteArchitecture> {
   const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/architecture`, {
     headers: { Accept: "application/json" },
@@ -528,6 +598,19 @@ export async function getScanApiEndpoints(id: string): Promise<ApiEndpointItem[]
   }
 
   return response.json() as Promise<ApiEndpointItem[]>;
+}
+
+export async function getScanRecon(id: string): Promise<ReconResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/recon`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch recon data for scan ${id}`);
+  }
+
+  return response.json() as Promise<ReconResponse>;
 }
 
 export type PageRenderedResponse = {

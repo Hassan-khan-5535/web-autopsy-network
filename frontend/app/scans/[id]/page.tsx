@@ -11,6 +11,7 @@ import {
   getScanArchitecture,
   getScanDependencies,
   getScanApiEndpoints,
+  getScanRecon,
   getScanSecurity,
   getScanPerformance,
   getScanPageRendered,
@@ -26,6 +27,7 @@ import {
   type SiteArchitecture,
   type DependencyItem,
   type ApiEndpointItem,
+  type ReconResponse,
   type PageRenderedResponse,
   type SecurityFinding,
   type PerformanceResponse,
@@ -50,6 +52,7 @@ export default function ScanResultPage() {
   const [architecture, setArchitecture] = useState<SiteArchitecture | null>(null);
   const [dependencies, setDependencies] = useState<DependencyItem[]>([]);
   const [apiEndpoints, setApiEndpoints] = useState<ApiEndpointItem[]>([]);
+  const [recon, setRecon] = useState<ReconResponse | null>(null);
   const [securityFindings, setSecurityFindings] = useState<SecurityFinding[]>([]);
   const [performance, setPerformance] = useState<PerformanceResponse | null>(null);
   const [accessibilityFindings, setAccessibilityFindings] = useState<AccessibilityFinding[]>([]);
@@ -84,13 +87,14 @@ export default function ScanResultPage() {
         }
 
         if (["COMPLETED", "FAILED", "PARTIAL_FAILED", "CANCELLED"].includes(scanData.state)) {
-          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, securityData, performanceData, accessData, contentData] = await Promise.all([
+          const [pagesData, technologiesData, evidenceData, archData, depsData, apiData, reconData, securityData, performanceData, accessData, contentData] = await Promise.all([
             getScanPages(id).catch(() => []),
             getScanTechnologies(id).catch(() => []),
             getScanEvidence(id).catch(() => []),
             getScanArchitecture(id).catch(() => null),
             getScanDependencies(id).catch(() => []),
             getScanApiEndpoints(id).catch(() => []),
+            getScanRecon(id).catch(() => null),
             getScanSecurity(id).catch(() => []),
             getScanPerformance(id).catch(() => null),
             getScanAccessibility(id).catch(() => []),
@@ -104,6 +108,7 @@ export default function ScanResultPage() {
             setArchitecture(archData);
             setDependencies(depsData);
             setApiEndpoints(apiData);
+            setRecon(reconData);
             setSecurityFindings(securityData);
             setPerformance(performanceData);
             setAccessibilityFindings(accessData);
@@ -229,7 +234,7 @@ export default function ScanResultPage() {
               <span className="mr-2 text-xs font-mono uppercase tracking-wider text-emerald-100/45">Report sections</span>
               {[
                 ["cause-of-death", "Cause of Death"], ["ai-doctor", "AI Doctor"], ["history", "History"], ["dependencies", "Dependencies"],
-                ["architecture", "Architecture"], ["api-intelligence", "API Intelligence"], ["technology-dna", "Technology DNA"], ["performance", "Performance"],
+                ["architecture", "Architecture"], ["recon", "Recon Agent"], ["api-intelligence", "API Intelligence"], ["technology-dna", "Technology DNA"], ["performance", "Performance"],
                 ["security", "Security"], ["accessibility", "Accessibility"], ["content-seo", "Content & SEO"], ["raw-evidence", "Raw Evidence"],
               ].map(([anchor, label]) => <a key={anchor} href={`#${anchor}`} className="rounded-full border border-emerald-500/20 px-3 py-1.5 text-xs text-emerald-300 hover:border-emerald-400/50 hover:bg-emerald-500/10">{label}</a>)}
             </div>
@@ -338,6 +343,26 @@ export default function ScanResultPage() {
                 </div>
               </div>
             )}
+          </section>
+        )}
+
+        {/* Extension 2 normalized Recon Agent catalog */}
+        {(isCompleted || isFailed) && recon && scan.recon_mode !== "disabled" && (
+          <section id="recon" className="space-y-5 bg-[#0b1714] border border-cyan-900/30 rounded-2xl p-6">
+            <div className="flex flex-wrap items-end justify-between gap-4 border-b border-cyan-900/20 pb-4">
+              <div>
+                <h2 className="text-xl font-semibold text-cyan-300">Recon Agent</h2>
+                <p className="mt-1 text-sm text-emerald-100/50">Normalized assets, endpoints, and parameters collected from stored evidence and bounded public sources.</p>
+              </div>
+              <div className="flex gap-2 text-xs font-mono"><span className="rounded border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-cyan-300">{recon.mode}</span><span className="rounded border border-emerald-500/20 px-2.5 py-1 text-emerald-300">{recon.requests_used}/{recon.max_requests} requests</span></div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              {[["Assets", recon.summary.asset_count], ["Endpoints", recon.summary.endpoint_count], ["Parameters", recon.summary.parameter_count], ["Subdomains", recon.summary.subdomain_count], ["Cloud candidates", recon.summary.cloud_asset_candidates], ["Classified paths", recon.summary.login_admin_sensitive_count]].map(([label, value]) => <div key={String(label)} className="rounded-xl border border-cyan-900/30 bg-[#050b09] p-4"><p className="text-[10px] font-mono uppercase tracking-wider text-emerald-100/40">{label}</p><p className="mt-1 text-2xl font-semibold text-cyan-200">{value}</p></div>)}
+            </div>
+            {recon.assets.length > 0 && <div className="overflow-x-auto rounded-xl border border-cyan-900/30 bg-[#050b09]"><table className="w-full text-left text-xs font-mono"><thead className="bg-cyan-950/40 text-cyan-300/70"><tr><th className="px-4 py-3">TYPE</th><th className="px-4 py-3">VALUE</th><th className="px-4 py-3">CLASSIFICATION</th><th className="px-4 py-3">SOURCE</th><th className="px-4 py-3">SCOPE</th></tr></thead><tbody className="divide-y divide-cyan-900/20">{recon.assets.slice(0, 40).map((asset) => <tr key={asset.id} className="hover:bg-cyan-900/10"><td className="px-4 py-3 text-cyan-300">{asset.asset_type}</td><td className="max-w-[360px] truncate px-4 py-3 text-emerald-100/80" title={asset.value}>{asset.value}</td><td className="px-4 py-3 text-amber-200/80">{asset.classification}</td><td className="px-4 py-3 text-emerald-100/55">{asset.source}</td><td className="px-4 py-3 text-emerald-100/55">{asset.scope_status}</td></tr>)}</tbody></table></div>}
+            {recon.endpoints.length > 0 && <div className="overflow-x-auto rounded-xl border border-cyan-900/30 bg-[#050b09]"><table className="w-full text-left text-xs font-mono"><thead className="bg-cyan-950/40 text-cyan-300/70"><tr><th className="px-4 py-3">KIND</th><th className="px-4 py-3">METHOD</th><th className="px-4 py-3">URL / PATH</th><th className="px-4 py-3">CLASSIFICATION</th><th className="px-4 py-3">STATUS</th></tr></thead><tbody className="divide-y divide-cyan-900/20">{recon.endpoints.slice(0, 40).map((endpoint) => <tr key={endpoint.id} className="hover:bg-cyan-900/10"><td className="px-4 py-3 text-cyan-300">{endpoint.endpoint_kind}</td><td className="px-4 py-3 text-emerald-300">{endpoint.http_method}</td><td className="max-w-[400px] truncate px-4 py-3 text-emerald-100/80" title={endpoint.url_or_path}>{endpoint.url_or_path}</td><td className="px-4 py-3 text-amber-200/80">{endpoint.classification}</td><td className="px-4 py-3 text-emerald-100/55">{endpoint.status_code ?? "—"}</td></tr>)}</tbody></table></div>}
+            {recon.parameters.length > 0 && <p className="text-xs text-emerald-100/55">Parameters: {recon.parameters.slice(0, 24).map((parameter) => `${parameter.name} (${parameter.location})`).join(", ")}{recon.parameters.length > 24 ? " …" : ""}</p>}
+            <p className="text-xs text-emerald-100/45">Cloud asset candidates are pattern-based observations only; they do not prove public read access. CT and DNS results are passive public-source observations, and active-safe requests are limited to scope-checked GET discovery.</p>
           </section>
         )}
 

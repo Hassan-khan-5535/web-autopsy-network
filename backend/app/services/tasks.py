@@ -23,6 +23,7 @@ from app.services.crawler import CrawlerService
 from app.services.diagnosis import CauseOfDeathEngine, CauseOfDeathNarrative
 from app.services.network_intelligence import NetworkIntelligenceAgent
 from app.services.performance import PerformanceEngine
+from app.services.recon import ReconAgent
 from app.services.queue import get_dispatcher
 from app.services.security import SecurityAnalysisService
 from app.services.structure import StructureAgent
@@ -39,6 +40,7 @@ TASK_DEFINITIONS = {
     "structure": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection"]},
     "api_intelligence": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection"]},
     "network_intelligence": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection"]},
+    "recon": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection"]},
     "security": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection"]},
     "content": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection"]},
     "performance": {"queue": "analysis", "max_retries": 2, "dependencies": []},
@@ -142,11 +144,16 @@ class TaskGraphCoordinator:
                 db.flush()
                 cls._event(db, scan_id, task, "TASK_QUEUED", {"task_type": "browser_analysis", "page_id": str(page.id)})
             page_tasks.append(page_key)
-        for task_type in ("technology", "structure", "api_intelligence", "network_intelligence", "security", "content"):
+        analysis_types = ["technology", "structure", "api_intelligence", "network_intelligence", "security", "content"]
+        if scan.recon_mode in {"passive_only", "active_safe"}:
+            analysis_types.append("recon")
+        for task_type in analysis_types:
             cls._upsert_task(db, scan_id, task_type, dependencies=["collection"])
         cls._upsert_task(db, scan_id, "performance", dependencies=page_tasks or ["collection"])
         cls._upsert_task(db, scan_id, "accessibility", dependencies=page_tasks or ["collection"])
         analysis_keys = ["technology", "structure", "api_intelligence", "network_intelligence", "security", "performance", "accessibility", "content"]
+        if scan.recon_mode in {"passive_only", "active_safe"}:
+            analysis_keys.append("recon")
         cls._upsert_task(db, scan_id, "diagnosis", dependencies=analysis_keys)
         cls._upsert_task(db, scan_id, "synthesis", dependencies=["diagnosis"])
         scan.state = "ANALYZING"
@@ -450,6 +457,8 @@ class TaskRunner:
             return {"findings": len(ApiIntelligenceAgent(db, scan.id).analyze())}
         if task.task_type == "network_intelligence":
             return {"findings": len(NetworkIntelligenceAgent(db, scan.id).analyze())}
+        if task.task_type == "recon":
+            return ReconAgent(db, scan.id).run()
         if task.task_type == "security":
             return {"findings": len(SecurityAnalysisService(db, scan.id).analyze())}
         if task.task_type == "performance":

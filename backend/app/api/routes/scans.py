@@ -31,6 +31,9 @@ from app.models.scan import (
     Page,
     PerformanceMetric,
     Resource,
+    ReconAsset,
+    ReconEndpoint,
+    ReconParameter,
     Scan,
     ScanDifference,
     SecurityFinding,
@@ -92,6 +95,7 @@ class ScanCreate(BaseModel):
     authentication: AuthenticationConfig | None = None
     test_account_ref: str | None = Field(default=None, max_length=255)
     expires_at: datetime | None = None
+    recon_mode: Literal["passive_only", "active_safe"] = "passive_only"
 
 
 class ScanCompareRequest(BaseModel):
@@ -113,6 +117,8 @@ class ScanResponse(BaseModel):
     same_domain_mode: str | None = None
     assessment_profile: str | None = None
     max_requests: int | None = None
+    recon_mode: str | None = None
+    requests_used: int | None = None
     diagnosis: dict[str, object] | None = None
 
 
@@ -153,6 +159,8 @@ def _scan_response(scan: Scan) -> dict[str, object]:
         "same_domain_mode": scan.same_domain_mode,
         "assessment_profile": scan.assessment_profile or "legacy_passive",
         "max_requests": scan.max_requests or scan.max_pages,
+        "recon_mode": scan.recon_mode or "passive_only",
+        "requests_used": scan.requests_used,
         "diagnosis": _diagnosis_response(scan),
     }
 
@@ -239,6 +247,7 @@ def create_scan(
         same_domain_mode=settings.crawl_same_domain_mode,
         assessment_profile=scan_req.assessment_profile,
         max_requests=policy["max_requests"],
+        recon_mode=scan_req.recon_mode,
     )
     db.add(scan)
     db.flush()
@@ -260,6 +269,7 @@ def create_scan(
         "max_requests": policy["max_requests"],
         "max_concurrency": policy["max_concurrency"],
         "rate_limit_per_host_ms": policy["rate_limit_per_host_ms"],
+        "recon_mode": scan_req.recon_mode,
     }
     consent_payload = {
         **scope_json,
@@ -1066,3 +1076,101 @@ def resume_scan(scan_id: UUID, db: Session = Depends(get_db), actor_id: str | No
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
     return _progress_payload(scan_id, db)
+
+
+@router.get("/{scan_id}/recon")
+def get_scan_recon(scan_id: UUID, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    assets = (
+        db.query(ReconAsset)
+        .filter(ReconAsset.scan_id == scan_id)
+        .order_by(ReconAsset.asset_type, ReconAsset.value)
+        .all()
+    )
+    endpoints = (
+        db.query(ReconEndpoint)
+        .filter(ReconEndpoint.scan_id == scan_id)
+        .order_by(ReconEndpoint.endpoint_kind, ReconEndpoint.url_or_path, ReconEndpoint.http_method)
+        .all()
+    )
+    parameters = (
+        db.query(ReconParameter)
+        .filter(ReconParameter.scan_id == scan_id)
+        .order_by(ReconParameter.location, ReconParameter.name)
+        .all()
+    )
+    return {
+        "scan_id": str(scan_id),
+        "mode": scan.recon_mode or "disabled",
+        "requests_used": scan.requests_used,
+        "max_requests": scan.max_requests or scan.max_pages,
+        "assets": [
+            {
+                "id": str(item.id),
+                "asset_type": item.asset_type,
+                "value": item.value,
+                "hostname": item.hostname,
+                "source": item.source,
+                "discovery_mode": item.discovery_mode,
+                "classification": item.classification,
+                "scope_status": item.scope_status,
+                "confidence": item.confidence,
+                "attributes": item.attributes or {},
+                "evidence": item.evidence or [],
+                "created_at": item.created_at.isoformat(),
+            }
+            for item in assets
+        ],
+        "endpoints": [
+            {
+                "id": str(item.id),
+                "endpoint_kind": item.endpoint_kind,
+                "url_or_path": item.url_or_path,
+                "http_method": item.http_method,
+                "source": item.source,
+                "discovery_mode": item.discovery_mode,
+                "classification": item.classification,
+                "confidence": item.confidence,
+                "scope_status": item.scope_status,
+                "status_code": item.status_code,
+                "content_type": item.content_type,
+                "page_id": str(item.page_id) if item.page_id else None,
+                "attributes": item.attributes or {},
+                "evidence": item.evidence or [],
+                "created_at": item.created_at.isoformat(),
+            }
+            for item in endpoints
+        ],
+        "parameters": [
+            {
+                "id": str(item.id),
+                "endpoint_id": str(item.endpoint_id) if item.endpoint_id else None,
+                "page_id": str(item.page_id) if item.page_id else None,
+                "name": item.name,
+                "location": item.location,
+                "source": item.source,
+                "discovery_mode": item.discovery_mode,
+                "classification": item.classification,
+                "confidence": item.confidence,
+                "scope_status": item.scope_status,
+                "example_value": item.example_value,
+                "evidence": item.evidence or [],
+                "created_at": item.created_at.isoformat(),
+            }
+            for item in parameters
+        ],
+        "summary": {
+            "asset_count": len(assets),
+            "endpoint_count": len(endpoints),
+            "parameter_count": len(parameters),
+            "cloud_asset_candidates": sum(item.asset_type == "cloud_public_asset" for item in assets),
+            "subdomain_count": sum(item.asset_type == "subdomain" for item in assets),
+            "login_admin_sensitive_count": sum(
+                item.classification in {"LOGIN_PATH", "ADMIN_PATH", "SENSITIVE_PATH"}
+                for item in assets + endpoints
+            ),
+        },
+    }

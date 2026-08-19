@@ -38,6 +38,7 @@ type AuthType = "none" | "cookie" | "header" | "basic";
 export default function NewScanPage() {
   const [url, setUrl] = useState("");
   const [profile, setProfile] = useState<Profile>("safe");
+  const [reconMode, setReconMode] = useState<"passive_only" | "active_safe">("passive_only");
   const [maxDepth, setMaxDepth] = useState("2");
   const [maxPages, setMaxPages] = useState("30");
   const [maxConcurrency, setMaxConcurrency] = useState("2");
@@ -95,6 +96,7 @@ export default function NewScanPage() {
         max_depth: Number(maxDepth),
         max_pages: Number(maxPages),
         assessment_profile: profile,
+        recon_mode: reconMode,
         allowed_domains: commaSeparated(allowedDomains),
         allowed_paths: commaSeparated(allowedPaths),
         excluded_paths: commaSeparated(excludedPaths),
@@ -138,6 +140,15 @@ export default function NewScanPage() {
               <option value="aggressive">Aggressive</option>
             </select>
             <p className="mt-2 text-xs text-emerald-100/60">{copy.title}: {copy.description}</p>
+          </div>
+
+          <div>
+            <label htmlFor="recon-mode" className="block text-sm font-medium text-emerald-100/80 mb-2">Recon Agent mode</label>
+            <select id="recon-mode" value={reconMode} onChange={(e) => setReconMode(e.target.value as "passive_only" | "active_safe")} className={fieldClass}>
+              <option value="passive_only">Passive-only</option>
+              <option value="active_safe">Active-safe</option>
+            </select>
+            <p className="mt-2 text-xs text-emerald-100/60">Passive-only uses stored crawl evidence plus public Certificate Transparency and DNS observations. Active-safe adds bounded, scope-checked GET requests for robots/sitemaps and a small path list; it never submits forms or mutates target state.</p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

@@ -70,7 +70,7 @@ class CrawlerService:
         self.allowed_paths = list(self.authorization.allowed_paths or []) if self.authorization else []
         self.excluded_paths = list(self.authorization.excluded_paths or []) if self.authorization else []
         self.max_requests = int((self.authorization.max_requests if self.authorization else None) or scan.max_requests or scan.max_pages)
-        self.request_count = 0
+        self.request_count = min(int(scan.requests_used or 0), self.max_requests)
         self.request_count_lock = Lock()
         self.auth_headers = credentials_headers(get_credentials(db, scan.id))
         self.rate_limiter = RequestRateLimiter(
@@ -188,6 +188,7 @@ class CrawlerService:
                                 continue
                             queue.append((admitted_url, next_depth, page.id))
 
+                self.scan.requests_used = self.request_count
                 self.db.commit()
 
             if queue and scheduled_pages >= self.scan.max_pages:
@@ -202,10 +203,12 @@ class CrawlerService:
                 f"Fetched {scheduled_pages} page(s), consumed {self.request_count} request slot(s), with max depth {self.scan.max_depth}.",
             )
             self.scan.state = "COMPLETED"
+            self.scan.requests_used = self.request_count
             self.db.commit()
         except Exception as exc:
             self.scan.state = "FAILED"
             self.scan.error_reason = str(exc)
+            self.scan.requests_used = self.request_count
             self.db.commit()
 
     def _validate_and_resolve(self, url: str) -> tuple[str, str]:

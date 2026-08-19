@@ -46,6 +46,8 @@ class Scan(Base):
     same_domain_mode: Mapped[str] = mapped_column(String(30), default="hostname")
     assessment_profile: Mapped[str | None] = mapped_column(String(30), nullable=True, default="legacy_passive", index=True)
     max_requests: Mapped[int | None] = mapped_column(Integer, nullable=True, default=30)
+    recon_mode: Mapped[str] = mapped_column(String(30), default="passive_only", index=True)
+    requests_used: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, index=True
     )
@@ -96,6 +98,15 @@ class Scan(Base):
     )
     assessment_audit_events: Mapped[list["AssessmentAuditEvent"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan", order_by="AssessmentAuditEvent.sequence_number"
+    )
+    recon_assets: Mapped[list["ReconAsset"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
+    recon_endpoints: Mapped[list["ReconEndpoint"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
+    recon_parameters: Mapped[list["ReconParameter"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
     )
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     pause_requested: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
@@ -159,6 +170,80 @@ class AssessmentAuditEvent(Base):
 
     scan: Mapped["Scan"] = relationship(back_populates="assessment_audit_events")
     authorization: Mapped[Optional["AssessmentAuthorization"]] = relationship(back_populates="audit_events")
+
+
+class ReconAsset(Base):
+    __tablename__ = "recon_assets"
+    __table_args__ = (UniqueConstraint("scan_id", "dedupe_key", name="uq_recon_assets_scan_dedupe"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
+    asset_type: Mapped[str] = mapped_column(String(50), index=True)
+    value: Mapped[str] = mapped_column(String(2048), index=True)
+    hostname: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    source: Mapped[str] = mapped_column(String(2048))
+    discovery_mode: Mapped[str] = mapped_column(String(30), default="passive_only", index=True)
+    classification: Mapped[str] = mapped_column(String(50), default="OBSERVED", index=True)
+    scope_status: Mapped[str] = mapped_column(String(30), default="in_scope", index=True)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    attributes: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
+    evidence: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
+    dedupe_key: Mapped[str] = mapped_column(String(255), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+    scan: Mapped["Scan"] = relationship(back_populates="recon_assets")
+
+
+class ReconEndpoint(Base):
+    __tablename__ = "recon_endpoints"
+    __table_args__ = (UniqueConstraint("scan_id", "dedupe_key", name="uq_recon_endpoints_scan_dedupe"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
+    endpoint_kind: Mapped[str] = mapped_column(String(50), index=True)
+    url_or_path: Mapped[str] = mapped_column(String(2048), index=True)
+    http_method: Mapped[str] = mapped_column(String(20), default="UNKNOWN")
+    source: Mapped[str] = mapped_column(String(2048))
+    discovery_mode: Mapped[str] = mapped_column(String(30), default="passive_only", index=True)
+    classification: Mapped[str] = mapped_column(String(50), default="INFERRED", index=True)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    scope_status: Mapped[str] = mapped_column(String(30), default="in_scope", index=True)
+    status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    page_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pages.id", ondelete="SET NULL"), nullable=True, index=True)
+    attributes: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
+    evidence: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
+    dedupe_key: Mapped[str] = mapped_column(String(255), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+    scan: Mapped["Scan"] = relationship(back_populates="recon_endpoints")
+    page: Mapped[Optional["Page"]] = relationship()
+    parameters: Mapped[list["ReconParameter"]] = relationship(back_populates="endpoint", cascade="all, delete-orphan")
+
+
+class ReconParameter(Base):
+    __tablename__ = "recon_parameters"
+    __table_args__ = (UniqueConstraint("scan_id", "dedupe_key", name="uq_recon_parameters_scan_dedupe"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
+    endpoint_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("recon_endpoints.id", ondelete="CASCADE"), nullable=True, index=True)
+    page_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pages.id", ondelete="SET NULL"), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), index=True)
+    location: Mapped[str] = mapped_column(String(30), index=True)
+    source: Mapped[str] = mapped_column(String(2048))
+    discovery_mode: Mapped[str] = mapped_column(String(30), default="passive_only", index=True)
+    classification: Mapped[str] = mapped_column(String(50), default="INFERRED", index=True)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    scope_status: Mapped[str] = mapped_column(String(30), default="in_scope", index=True)
+    example_value: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    evidence: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
+    dedupe_key: Mapped[str] = mapped_column(String(255), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+    scan: Mapped["Scan"] = relationship(back_populates="recon_parameters")
+    endpoint: Mapped[Optional["ReconEndpoint"]] = relationship(back_populates="parameters")
+    page: Mapped[Optional["Page"]] = relationship()
 
 
 class Page(Base):

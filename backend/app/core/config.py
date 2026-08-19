@@ -43,6 +43,15 @@ class Settings(BaseSettings):
     assessment_aggressive_max_concurrency: int = 4
     assessment_aggressive_min_rate_limit_ms: int = 250
 
+    # Extension 2: bounded passive and active-safe recon controls.
+    recon_passive_timeout_seconds: float = 8.0
+    recon_ct_max_records: int = 200
+    recon_dns_record_types: str = "A,AAAA,CNAME,MX,NS,TXT"
+    recon_active_safe_max_candidates: int = 24
+    recon_active_safe_max_sitemap_urls: int = 10
+    recon_active_safe_max_body_bytes: int = 1048576
+    recon_active_safe_path_wordlist: str = "/.well-known/security.txt,/sitemap.xml,/sitemap_index.xml,/manifest.json,/openapi.json,/swagger.json,/api,/graphql,/login,/admin,/health,/status,/docs"
+
     queue_backend_url: str = "redis://localhost:6379/0"
     queue_mode: str = "auto"
     max_concurrent_scans: int = 5
