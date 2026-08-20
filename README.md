@@ -8,12 +8,13 @@ The project is intentionally **detection- and reporting-oriented**. It does not 
 
 > **Core safety contract:** every assessment records authorization, target scope, profile limits, and audit events; every agent operates within those persisted boundaries; every report distinguishes observation from inference and interpretation; and no scanner signature alone is treated as proof of a vulnerability.
 
-**Navigate:** [Capabilities](#capability-map) · [Safety boundaries](#safety-boundaries) · [Architecture](#architecture) · [Quick start](#quick-start--manual-no-docker-required) · [API](#api-surface-at-a-glance) · [Verification](#verification-and-benchmarks) · [Contributing](#contributing-safely)
+**Navigate:** [Capabilities](#capability-map) · [Resolved bugs](#recently-resolved-bugs) · [Safety boundaries](#safety-boundaries) · [Architecture](#architecture) · [Quick start](#quick-start--manual-no-docker-required) · [API](#api-surface-at-a-glance) · [Verification](#verification-and-benchmarks) · [Contributing](#contributing-safely)
 
 ## Contents
 
 - [Project status](#project-status)
 - [What the platform does](#what-the-platform-does)
+- [Recently resolved bugs](#recently-resolved-bugs)
 - [Capability map](#capability-map)
 - [Extension map](#extension-map)
 - [Evidence model](#evidence-model)
@@ -38,10 +39,27 @@ The project is intentionally **detection- and reporting-oriented**. It does not 
 | Primary interface | Next.js dashboard, versioned FastAPI API, and scope-safe CLI |
 | Local runtime | Manual startup supported with SQLite, inline task execution, and a private Playwright worker |
 | Production posture | Targeted production review completed; production deployment still requires infrastructure-level egress, resource, secrets, monitoring, and migration controls |
-| Latest recorded validation | 143 backend tests passing, focused security/reliability regressions passing, frontend production build passing, and controlled benchmark artifacts published [1] [2] |
+| Latest recorded validation | 153 backend tests passing, frontend lint and typecheck passing, production build passing, and controlled benchmark artifacts published [1] [2] |
 | Security posture | Authorized, non-destructive, bounded assessment only |
 
 This status describes the current engineering boundary; it is **not** a claim of universal detection coverage, absence of defects, or independent production readiness.
+
+## Recently resolved bugs
+
+The latest repair cycle removed the following confirmed defects:
+
+| Area | Resolved issue |
+|---|---|
+| Reconnaissance | Duplicate parameter records caused by repeated discovery paths; parameter writes are now cached and idempotent. |
+| Task orchestration | Failed or cancelled dependencies could leave descendants in the wrong state or block finalization; descendants now terminate as `SKIPPED` with clear reasons. |
+| Task lifecycle | Terminal orchestration state could become stale, and successful retries could retain old error messages; both are refreshed and cleared correctly. |
+| Reporting and risk | Completed scans could show incorrect limitations, coverage, screenshots, posture counts, or duplicate findings; summaries now reflect persisted evidence consistently. |
+| Authorization and egress | Authorized lab targets using nonstandard ports were rejected; approved ports now flow through crawler, recon, browser, and worker checks. |
+| Browser evidence | Safe screenshots were not reliably persisted; bounded screenshot capture and database storage are now enabled. |
+| Configuration safety | Null observation collections could trigger runtime errors; configuration analysis now handles missing collections safely. |
+| Local reliability | SQLite write contention could fail inline task dispatch; WAL mode, busy timeout, and serialized dispatch reduce local-development lock failures. |
+
+These fixes improve correctness and reliability; they do not imply universal vulnerability-detection coverage or permission to perform destructive testing.
 
 ## What the platform does
 
