@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import logging
 from uuid import UUID
 
@@ -5,7 +7,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.models.scan import HTTPResponse, Observation, Page, Resource
+from app.models.scan import BrowserScreenshot, HTTPResponse, Observation, Page, Resource
 
 from app.services.admission import validate_admission_url
 from app.services.assessment import credentials_headers, get_authorization, get_credentials, hostname_allowed, path_allowed
@@ -46,6 +48,8 @@ class BrowserWorkerClient:
                 raise ValueError("Browser worker endpoint is not in the configured internal allowlist.")
             authorization = get_authorization(self.db, scan_id)
             headers = credentials_headers(get_credentials(self.db, scan_id)) if self.settings.browser_worker_forward_credentials else {}
+            scope_json = authorization.scope_json if authorization and isinstance(authorization.scope_json, dict) else {}
+            allowed_ports = [int(port) for port in (scope_json.get("allowed_ports") or []) if 1 <= int(port) <= 65535]
             response = httpx.post(
                 f"{self.settings.browser_worker_url}/render",
                 json={
@@ -54,13 +58,14 @@ class BrowserWorkerClient:
                     "page_id": str(page_id),
                     "timeout_ms": self.settings.browser_worker_timeout_ms,
                     "headers": headers,
-                    "egress_policy": {"allowed_domains": (authorization.allowed_domains if authorization else []), "allowed_paths": (authorization.allowed_paths if authorization else []), "blocked_private_networks": True},
+                    "egress_policy": {"allowed_domains": (authorization.allowed_domains if authorization else []), "allowed_paths": (authorization.allowed_paths if authorization else []), "blocked_private_networks": True, "allowed_ports": allowed_ports},
                     "resource_limits": {
                         "max_cpu_seconds": self.settings.browser_worker_max_cpu_seconds,
                         "max_memory_mb": self.settings.browser_worker_max_memory_mb,
                         "max_rendered_bytes": self.settings.browser_worker_max_rendered_bytes,
                         "max_network_events": self.settings.browser_worker_max_network_events,
                         "max_console_events": self.settings.browser_worker_max_console_events,
+                        "max_screenshot_bytes": 1024 * 1024,
                     },
                 },
                 timeout=(self.settings.browser_worker_timeout_ms / 1000) + 5,
@@ -94,6 +99,21 @@ class BrowserWorkerClient:
                 resp.rendered_body = rendered[: self.settings.browser_worker_max_rendered_bytes]
                 resp.timing_data = data.get("timing_data")
                 self.db.commit()
+
+            screenshot_b64 = data.get("screenshot_png_base64")
+            if screenshot_b64 and not headers:
+                try:
+                    screenshot_bytes = base64.b64decode(str(screenshot_b64), validate=True)
+                    if len(screenshot_bytes) <= 1024 * 1024:
+                        self.db.add(BrowserScreenshot(
+                            scan_id=scan_id,
+                            page_id=page_id,
+                            image_base64=str(screenshot_b64),
+                            sha256=hashlib.sha256(screenshot_bytes).hexdigest(),
+                            redaction_status="safe_public_page",
+                        ))
+                except (ValueError, TypeError):
+                    logger.warning("Browser worker returned an invalid screenshot payload for %s", url)
 
             for req in data.get("network_requests", [])[: self.settings.browser_worker_max_network_events]:
                 request_url = str(req.get("url") or "")

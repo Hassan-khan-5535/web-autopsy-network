@@ -15,7 +15,13 @@ class ScannerSecurityError(AdmissionError):
     """A scanner isolation or resource boundary was violated."""
 
 
-def revalidate_egress(url: str, *, assessment_profile: str | None, explicit_allowlist: bool) -> str:
+def revalidate_egress(
+    url: str,
+    *,
+    assessment_profile: str | None,
+    explicit_allowlist: bool,
+    allowed_ports: set[int] | None = None,
+) -> str:
     """Resolve immediately before every outbound attempt to detect unsafe DNS changes."""
     try:
         canonical, _ = AdmissionService.validate_and_resolve(
@@ -29,8 +35,9 @@ def revalidate_egress(url: str, *, assessment_profile: str | None, explicit_allo
     settings = get_settings()
     permitted_ports = {int(item) for item in settings.scanner_allowed_egress_ports.split(",") if item.strip().isdigit()}
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
-    if assessment_profile in {"safe", "normal", "aggressive"} and port not in permitted_ports:
-        raise ScannerSecurityError(f"Outbound port {port} is not permitted by scanner egress policy.")
+    authorized_extra_ports = {int(item) for item in (allowed_ports or set()) if 1 <= int(item) <= 65535}
+    if assessment_profile in {"safe", "normal", "aggressive"} and port not in permitted_ports | authorized_extra_ports:
+        raise ScannerSecurityError(f"Outbound port {port} is not permitted by scanner egress policy; explicit authorized ports are required for nonstandard lab ports.")
     return canonical
 
 

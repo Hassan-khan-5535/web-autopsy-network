@@ -45,6 +45,7 @@ export default function NewScanPage() {
   const [maxRequests, setMaxRequests] = useState("30");
   const [rateLimit, setRateLimit] = useState("1000");
   const [allowedDomains, setAllowedDomains] = useState("");
+  const [allowedPorts, setAllowedPorts] = useState("");
   const [allowedPaths, setAllowedPaths] = useState("");
   const [excludedPaths, setExcludedPaths] = useState("");
   const [robotsOverride, setRobotsOverride] = useState(false);
@@ -62,6 +63,7 @@ export default function NewScanPage() {
   const router = useRouter();
 
   const commaSeparated = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
+  const numericCommaSeparated = (value: string) => commaSeparated(value).map(Number).filter((port) => Number.isInteger(port) && port >= 1 && port <= 65535);
   const handleProfileChange = (nextProfile: Profile) => {
     const next = PROFILE_COPY[nextProfile];
     setProfile(nextProfile);
@@ -98,6 +100,7 @@ export default function NewScanPage() {
         assessment_profile: profile,
         recon_mode: reconMode,
         allowed_domains: commaSeparated(allowedDomains),
+        allowed_ports: numericCommaSeparated(allowedPorts),
         allowed_paths: commaSeparated(allowedPaths),
         excluded_paths: commaSeparated(excludedPaths),
         max_requests: Number(maxRequests),
@@ -162,6 +165,7 @@ export default function NewScanPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div><label htmlFor="allowed-domains" className="block text-sm font-medium text-emerald-100/80 mb-2">Allowed domains</label><input id="allowed-domains" type="text" placeholder="example.com, static.example.com" value={allowedDomains} onChange={(e) => setAllowedDomains(e.target.value)} className={fieldClass} /><p className="mt-2 text-xs text-emerald-100/45">Comma-separated. Empty means the submitted hostname only, except aggressive requires explicit confirmation.</p></div>
             <div><label htmlFor="allowed-paths" className="block text-sm font-medium text-emerald-100/80 mb-2">Allowed paths</label><input id="allowed-paths" type="text" placeholder="/, /docs, /jobs/*" value={allowedPaths} onChange={(e) => setAllowedPaths(e.target.value)} className={fieldClass} /><p className="mt-2 text-xs text-emerald-100/45">Comma-separated prefixes or simple wildcard patterns.</p></div>
+            <div><label htmlFor="allowed-ports" className="block text-sm font-medium text-emerald-100/80 mb-2">Additional authorized ports</label><input id="allowed-ports" type="text" inputMode="numeric" placeholder="8102" value={allowedPorts} onChange={(e) => setAllowedPorts(e.target.value)} className={fieldClass} /><p className="mt-2 text-xs text-emerald-100/45">Optional comma-separated lab ports. Default HTTP/HTTPS ports remain allowed; every additional port is recorded in the signed scope.</p></div>
           </div>
           <div><label htmlFor="excluded-paths" className="block text-sm font-medium text-emerald-100/80 mb-2">Excluded paths</label><input id="excluded-paths" type="text" placeholder="/logout, /admin, /checkout/*" value={excludedPaths} onChange={(e) => setExcludedPaths(e.target.value)} className={fieldClass} /></div>
 

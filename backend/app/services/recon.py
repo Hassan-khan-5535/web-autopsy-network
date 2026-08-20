@@ -80,6 +80,8 @@ class ReconAgent:
         self.allowed_domains = list(self.authorization.allowed_domains or []) if self.authorization else []
         self.allowed_paths = list(self.authorization.allowed_paths or []) if self.authorization else []
         self.excluded_paths = list(self.authorization.excluded_paths or []) if self.authorization else []
+        scope_json = self.authorization.scope_json if self.authorization and isinstance(self.authorization.scope_json, dict) else {}
+        self.allowed_ports = {int(port) for port in (scope_json.get("allowed_ports") or []) if 1 <= int(port) <= 65535}
         self.profile = self.scan.assessment_profile or "legacy_passive"
         self.mode = self.scan.recon_mode or "passive_only"
         self.max_requests = int((self.authorization.max_requests if self.authorization else None) or self.scan.max_requests or self.scan.max_pages)
@@ -117,6 +119,9 @@ class ReconAgent:
         self.db.query(ReconParameter).filter(ReconParameter.scan_id == self.scan_id).delete(synchronize_session=False)
         self.db.query(ReconEndpoint).filter(ReconEndpoint.scan_id == self.scan_id).delete(synchronize_session=False)
         self.db.query(ReconAsset).filter(ReconAsset.scan_id == self.scan_id).delete(synchronize_session=False)
+        self._asset_cache.clear()
+        self._endpoint_cache.clear()
+        self._parameter_cache.clear()
         self.db.query(Observation).filter(
             Observation.scan_id == self.scan_id,
             Observation.category.in_({"RECON_MODE", "RECON_SOURCE", "RECON_DNS", "RECON_CLASSIFICATION", "RECON_SCOPE", "RECON_CLOUD"}),
@@ -368,6 +373,7 @@ class ReconAgent:
                 normalized,
                 assessment_profile=self.profile if self.profile in {"safe", "normal", "aggressive"} else None,
                 explicit_allowlist=bool(self.allowed_domains),
+                allowed_ports=self.allowed_ports,
             )
         except (AdmissionError, ScannerSecurityError) as exc:
             self._observe("RECON_SCOPE", normalized, f"Active-safe candidate blocked at egress boundary: {redact_sensitive_text(exc)}")
@@ -529,6 +535,7 @@ class ReconAgent:
             dedupe_key=dedupe,
         )
         self.db.add(parameter)
+        self.db.flush()
         self._parameter_cache[dedupe] = parameter
         return parameter
 

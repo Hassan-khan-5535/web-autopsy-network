@@ -102,6 +102,7 @@ class ScanCreate(BaseModel):
     allowed_paths: list[str] = Field(default_factory=list)
     excluded_paths: list[str] = Field(default_factory=list)
     allowed_domains: list[str] = Field(default_factory=list)
+    allowed_ports: list[int] = Field(default_factory=list, max_length=20)
     max_requests: int | None = Field(default=None, ge=1)
     max_concurrency: int | None = Field(default=None, ge=1)
     rate_limit_per_host_ms: int | None = Field(default=None, ge=100)
@@ -282,6 +283,7 @@ def create_scan(
         parsed = urlsplit(canonical_url)
         hostname = (parsed.hostname or "").lower().rstrip(".")
         allowed_domains = normalize_domains(scan_req.allowed_domains) or [hostname]
+        allowed_ports = sorted({int(port) for port in scan_req.allowed_ports if 1 <= int(port) <= 65535})
         allowed_paths = normalize_paths(scan_req.allowed_paths)
         excluded_paths = normalize_paths(scan_req.excluded_paths)
         if not hostname_allowed(hostname, allowed_domains):
@@ -349,6 +351,7 @@ def create_scan(
     scope_json = {
         "target_url": canonical_url,
         "allowed_domains": allowed_domains,
+        "allowed_ports": allowed_ports,
         "allowed_paths": allowed_paths,
         "excluded_paths": excluded_paths,
         "assessment_profile": scan_req.assessment_profile,

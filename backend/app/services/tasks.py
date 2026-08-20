@@ -38,7 +38,7 @@ from app.services.security import SecurityAnalysisService
 from app.services.structure import StructureAgent
 from app.services.technology import TechnologyDetectionService
 
-TERMINAL_TASK_STATES = {"SUCCEEDED", "FAILED", "CANCELLED"}
+TERMINAL_TASK_STATES = {"SUCCEEDED", "FAILED", "CANCELLED", "SKIPPED"}
 ACTIVE_SCAN_STATES = {"QUEUED", "VALIDATING", "COLLECTING", "ANALYZING", "SYNTHESIZING", "CANCELLING"}
 PAUSABLE_SCAN_STATES = {"QUEUED", "COLLECTING", "ANALYZING", "SYNTHESIZING"}
 
@@ -267,17 +267,15 @@ class TaskGraphCoordinator:
                 if task.status not in {"QUEUED", "RETRYING"}:
                     continue
                 dependencies = [task_map.get(key) for key in (task.dependency_keys or [])]
-                failed = [dependency for dependency in dependencies if dependency and dependency.status == "FAILED"]
-                cancelled = [dependency for dependency in dependencies if dependency and dependency.status == "CANCELLED"]
-                if not failed and not cancelled:
+                blockers = [dependency for dependency in dependencies if dependency and dependency.status in TERMINAL_TASK_STATES - {"SUCCEEDED"}]
+                if not blockers:
                     continue
-                blockers = failed or cancelled
-                task.status = "FAILED" if failed else "CANCELLED"
+                task.status = "SKIPPED"
+                task.progress = 100
                 task.finished_at = now
+                task.updated_at = now
                 task.available_at = None
-                task.error_reason = (
-                    "Blocked by failed dependency: " if failed else "Cancelled because dependency was cancelled: "
-                ) + ", ".join(dependency.task_key for dependency in blockers)
+                task.error_reason = "Skipped because dependency did not produce usable output: " + ", ".join(dependency.task_key for dependency in blockers)
                 cls._event(
                     db,
                     scan_id,
@@ -312,7 +310,18 @@ class TaskGraphCoordinator:
             if available_at and available_at > now:
                 continue
             deps = [task_map.get(key) for key in (task.dependency_keys or [])]
-            if any(dep is None or dep.status != "SUCCEEDED" for dep in deps):
+            failed_deps = [dep for dep in deps if dep is not None and dep.status in {"FAILED", "CANCELLED", "SKIPPED"}]
+            missing_deps = [key for key, dep in zip(task.dependency_keys or [], deps) if dep is None]
+            if failed_deps or missing_deps:
+                task.status = "SKIPPED"
+                task.progress = 100
+                task.finished_at = now
+                task.updated_at = now
+                reason = ", ".join(dep.task_key for dep in failed_deps) or ", ".join(missing_deps)
+                task.error_reason = f"Skipped because dependency did not produce usable output: {reason}."
+                cls._event(db, scan_id, task, "TASK_SKIPPED", {"reason": task.error_reason})
+                continue
+            if any(dep.status not in TERMINAL_TASK_STATES for dep in deps):
                 continue
             if any(requirement not in event_keys for requirement in (task.event_requirements or [])):
                 continue
@@ -365,6 +374,7 @@ class TaskGraphCoordinator:
             scan.state = "COMPLETED"
             scan.error_reason = None
         scan.finished_at = utc_now()
+        cls._refresh_orchestration_state(db, scan)
         cls._event(db, scan_id, None, "SCAN_TERMINAL", {"state": scan.state})
         db.commit()
         if scan.state == "COMPLETED":
@@ -562,6 +572,7 @@ class TaskRunner:
             task.status = "CANCELLED" if scan.cancel_requested else "SUCCEEDED"
             task.progress = 100
             task.result = result or {}
+            task.error_reason = None
             task.finished_at = utc_now()
             task.heartbeat_at = utc_now()
             task.updated_at = utc_now()

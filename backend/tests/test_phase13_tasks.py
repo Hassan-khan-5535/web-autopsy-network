@@ -251,11 +251,12 @@ def test_failed_dependency_is_never_dispatch_ready(db, monkeypatch):
     TaskGraphCoordinator.dispatch_ready(db, scan.id)
     db.refresh(dependent)
 
-    assert dependent.status == "FAILED"
+    assert dependent.status == "SKIPPED"
+    assert "configuration" in (dependent.error_reason or "")
     assert dispatcher.dispatched == []
 
 
-def test_failed_dependency_propagates_to_partial_failed_scan(db, monkeypatch):
+def test_failed_dependency_skips_descendants_and_scan_can_finalize(db, monkeypatch):
     dispatcher = FakeDispatcher()
     monkeypatch.setattr("app.services.tasks.get_dispatcher", lambda: dispatcher)
     scan = make_scan(db, "dependency-failure.example")
@@ -272,11 +273,12 @@ def test_failed_dependency_propagates_to_partial_failed_scan(db, monkeypatch):
     TaskGraphCoordinator.dispatch_ready(db, scan.id)
     for task in (vulnerability, evidence, correlation):
         db.refresh(task)
+    assert vulnerability.status == "SKIPPED"
+    assert evidence.status == "SKIPPED"
+    assert correlation.status == "SKIPPED"
+    assert "configuration" in (vulnerability.error_reason or "")
+
     TaskGraphCoordinator.finalize_if_complete(db, scan.id)
     db.refresh(scan)
-
-    assert vulnerability.status == "FAILED"
-    assert evidence.status == "FAILED"
-    assert correlation.status == "FAILED"
     assert scan.state == "PARTIAL_FAILED"
-    assert "configuration" in (vulnerability.error_reason or "")
+    assert scan.orchestration_state["scan_state"] == "PARTIAL_FAILED"

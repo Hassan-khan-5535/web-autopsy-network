@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 from typing import Protocol
 from uuid import UUID
 
@@ -17,9 +18,22 @@ class TaskDispatcher(Protocol):
 
 
 class InlineTaskDispatcher:
-    """Non-blocking local fallback used when Redis/Celery is unavailable."""
+    """Non-blocking local fallback used when Redis/Celery is unavailable.
 
-    _executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="web-autopsy-task")
+    SQLite is intentionally serialized because it permits only one writer at a time;
+    PostgreSQL-backed inline deployments retain bounded parallelism.
+    """
+
+    _executors: dict[int, ThreadPoolExecutor] = {}
+    _executor_lock = Lock()
+
+    def __init__(self) -> None:
+        workers = 1 if get_settings().database_url.startswith("sqlite") else 8
+        with self._executor_lock:
+            self._executor = self._executors.setdefault(
+                workers,
+                ThreadPoolExecutor(max_workers=workers, thread_name_prefix="web-autopsy-task"),
+            )
 
     def dispatch(self, task_id: UUID, queue_name: str) -> None:
         from app.services.tasks import TaskRunner

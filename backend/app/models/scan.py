@@ -95,6 +95,9 @@ class Scan(Base):
     http_observations: Mapped[list["HTTPObservation"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan"
     )
+    browser_screenshots: Mapped[list["BrowserScreenshot"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
     ai_interpretations: Mapped[list["AIInterpretation"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan"
     )
@@ -349,6 +352,24 @@ class HTTPResponse(Base):
     headers: Mapped[list["Header"]] = relationship(
         back_populates="http_response", cascade="all, delete-orphan"
     )
+
+
+class BrowserScreenshot(Base):
+    __tablename__ = "browser_screenshots"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
+    page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pages.id", ondelete="CASCADE"), index=True)
+    image_base64: Mapped[str] = mapped_column(Text)
+    sha256: Mapped[str] = mapped_column(String(64), index=True)
+    content_type: Mapped[str] = mapped_column(String(50), default="image/png")
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    redaction_status: Mapped[str] = mapped_column(String(50), default="safe_public_page")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+    scan: Mapped["Scan"] = relationship(back_populates="browser_screenshots")
+    page: Mapped["Page"] = relationship()
 
 
 class HTTPObservation(Base):

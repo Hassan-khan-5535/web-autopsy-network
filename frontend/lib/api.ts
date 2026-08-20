@@ -114,6 +114,7 @@ export type ScanOptions = {
   allowed_paths?: string[];
   excluded_paths?: string[];
   allowed_domains?: string[];
+  allowed_ports?: number[];
   max_requests?: number;
   max_concurrency?: number;
   rate_limit_per_host_ms?: number;
@@ -133,6 +134,7 @@ export type AssessmentAuthorization = {
   allowed_paths: string[];
   excluded_paths: string[];
   allowed_domains: string[];
+  allowed_ports: number[];
   assessment_profile: string;
   robots_override: boolean;
   max_depth: number;

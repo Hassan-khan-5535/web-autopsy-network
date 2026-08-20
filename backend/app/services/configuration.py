@@ -214,7 +214,7 @@ class ConfigurationAgent:
             value = item.value if isinstance(item.value, dict) else {}
             name = str(value.get("name", "")).lower()
             if name:
-                raw_values = value.get("values", [])
+                raw_values = value.get("values") or []
                 values = raw_values if isinstance(raw_values, list) else [raw_values]
                 for safe_value in values:
                     if safe_value is not None:
@@ -263,8 +263,8 @@ class ConfigurationAgent:
 
     def _cors_rule(self, ctx: dict[str, Any]) -> dict[str, Any] | None:
         values = ctx["cors"].get("headers", {}) if isinstance(ctx["cors"], dict) else {}
-        origins = [str(x).strip() for x in values.get("access-control-allow-origin", [])]
-        credentials = [str(x).strip().lower() for x in values.get("access-control-allow-credentials", [])]
+        origins = [str(x).strip() for x in (values.get("access-control-allow-origin") or [])]
+        credentials = [str(x).strip().lower() for x in (values.get("access-control-allow-credentials") or [])]
         if "*" not in origins or "true" not in credentials:
             return None
         return self._candidate("CFG-CORS-001", ctx, "The response allows all origins while also allowing credentials.", "Observed Access-Control-Allow-Origin: * together with Access-Control-Allow-Credentials: true.", severity="high", confidence=99)
@@ -283,7 +283,8 @@ class ConfigurationAgent:
             return None
         if not 200 <= int(ctx["status"].get("status_code") or 0) < 400:
             return None
-        hsts_values = ctx["policies"].get("strict-transport-security", {}).get("values", [])
+        hsts_policy = ctx["policies"].get("strict-transport-security") or {}
+        hsts_values = hsts_policy.get("values") or [] if isinstance(hsts_policy, dict) else []
         match = re.search(r"max-age=(\d+)", " ".join(map(str, hsts_values)), re.I)
         if match and int(match.group(1)) >= 31536000:
             return None
@@ -322,7 +323,7 @@ class ConfigurationAgent:
 
     def _cache_rule(self, ctx: dict[str, Any]) -> dict[str, Any] | None:
         cookies = [cookie for cookie in ctx["cookies"] if SESSION_RE.search(str(cookie.get("name", "")))]
-        directives = ctx["cache"].get("cache_control_directives", {}) if isinstance(ctx["cache"], dict) else {}
+        directives = (ctx["cache"].get("cache_control_directives") or {}) if isinstance(ctx["cache"], dict) else {}
         if not cookies or not ("public" in directives or "s-maxage" in directives):
             return None
         return self._candidate("CFG-CACHE-001", ctx, "A session-like cookie was set on a response with explicit shared-cache metadata.", f"Observed {len(cookies)} session-like cookie(s) together with cache directives containing public or s-maxage.", severity="high", confidence=98)
@@ -365,7 +366,7 @@ class ConfigurationAgent:
 
     def _policy_present(self, ctx: dict[str, Any], name: str) -> bool:
         policy = ctx["policies"].get(name)
-        return bool(policy and policy.get("present"))
+        return bool(isinstance(policy, dict) and policy.get("present"))
 
     def _candidate(self, rule_id: str, ctx: dict[str, Any], subject: str, observation: str, *, severity: str | None = None, confidence: int | None = None) -> dict[str, Any]:
         rule = CONFIGURATION_RULES[rule_id]

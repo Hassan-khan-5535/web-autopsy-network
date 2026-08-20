@@ -71,6 +71,8 @@ class CrawlerService:
         self.allowed_domains = list(self.authorization.allowed_domains or []) if self.authorization else []
         self.allowed_paths = list(self.authorization.allowed_paths or []) if self.authorization else []
         self.excluded_paths = list(self.authorization.excluded_paths or []) if self.authorization else []
+        scope_json = self.authorization.scope_json if self.authorization and isinstance(self.authorization.scope_json, dict) else {}
+        self.allowed_ports = {int(port) for port in (scope_json.get("allowed_ports") or []) if 1 <= int(port) <= 65535}
         self.max_requests = int((self.authorization.max_requests if self.authorization else None) or scan.max_requests or scan.max_pages)
         self.request_count = min(int(scan.requests_used or 0), self.max_requests)
         self.request_count_lock = Lock()
@@ -328,7 +330,7 @@ class CrawlerService:
             for _ in range(self.max_redirects + 1):
                 current_url = revalidate_egress(
                     current_url, assessment_profile=self.assessment_profile if self.assessment_profile in {"safe", "normal", "aggressive"} else None,
-                    explicit_allowlist=bool(self.allowed_domains),
+                    explicit_allowlist=bool(self.allowed_domains), allowed_ports=self.allowed_ports,
                 )
                 with httpx.Client(
                     timeout=self.timeout,
@@ -344,7 +346,7 @@ class CrawlerService:
                         redirect_url = urljoin(current_url, response.headers["location"])
                         redirect_url = revalidate_egress(
                             redirect_url, assessment_profile=self.assessment_profile if self.assessment_profile in {"safe", "normal", "aggressive"} else None,
-                            explicit_allowlist=bool(self.allowed_domains),
+                            explicit_allowlist=bool(self.allowed_domains), allowed_ports=self.allowed_ports,
                         )
                         if not self._is_same_domain(domain_root, redirect_url) or not self._in_scope(redirect_url):
                             raise AdmissionError("Redirect leaves the allowed crawl scope and was not fetched.")
@@ -359,7 +361,7 @@ class CrawlerService:
                     final_url = AdmissionService.normalize_url(str(response.url))
                     final_url = revalidate_egress(
                         final_url, assessment_profile=self.assessment_profile if self.assessment_profile in {"safe", "normal", "aggressive"} else None,
-                        explicit_allowlist=bool(self.allowed_domains),
+                        explicit_allowlist=bool(self.allowed_domains), allowed_ports=self.allowed_ports,
                     )
                     if not self._in_scope(final_url):
                         raise AdmissionError("Response final URL is outside the allowed crawl scope.")

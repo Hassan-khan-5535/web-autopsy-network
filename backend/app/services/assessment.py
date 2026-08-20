@@ -307,6 +307,7 @@ def authorization_public(authorization: AssessmentAuthorization | None) -> dict[
         "allowed_paths": authorization.allowed_paths or [],
         "excluded_paths": authorization.excluded_paths or [],
         "allowed_domains": authorization.allowed_domains or [],
+        "allowed_ports": scope.get("allowed_ports", []),
         "assessment_profile": authorization.assessment_profile,
         "robots_override": bool(authorization.robots_override),
         "max_depth": authorization.max_depth,

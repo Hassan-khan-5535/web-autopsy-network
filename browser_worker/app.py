@@ -1,5 +1,5 @@
 import asyncio
-import asyncio
+import base64
 import ipaddress
 import os
 import logging
@@ -70,7 +70,7 @@ def _path_allowed(path: str, allowed_paths: list[str], excluded_paths: list[str]
     return not allowed_paths or any(path.startswith(prefix) for prefix in allowed_paths)
 
 
-def is_url_allowed(url: str, *, allowed_domains: list[str] | None = None, allowed_paths: list[str] | None = None, excluded_paths: list[str] | None = None) -> bool:
+def is_url_allowed(url: str, *, allowed_domains: list[str] | None = None, allowed_paths: list[str] | None = None, excluded_paths: list[str] | None = None, allowed_ports: list[int] | None = None) -> bool:
     parsed = urlsplit(url)
     if parsed.scheme not in ("http", "https"):
         return False
@@ -83,6 +83,11 @@ def is_url_allowed(url: str, *, allowed_domains: list[str] | None = None, allowe
     if allowed_domains and not _hostname_allowed(hostname, allowed_domains):
         return False
     if not _path_allowed(parsed.path or "/", allowed_paths or [], excluded_paths or []):
+        return False
+    default_ports = {80, 443}
+    explicit_ports = {int(port) for port in (allowed_ports or []) if 1 <= int(port) <= 65535}
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    if port not in default_ports | explicit_ports:
         return False
 
     try:
@@ -103,6 +108,7 @@ class EgressPolicy(BaseModel):
     allowed_paths: list[str] = Field(default_factory=list, max_length=100)
     excluded_paths: list[str] = Field(default_factory=list, max_length=100)
     blocked_private_networks: bool = True
+    allowed_ports: list[int] = Field(default_factory=list, max_length=20)
 
 
 class ResourceLimits(BaseModel):
@@ -113,6 +119,7 @@ class ResourceLimits(BaseModel):
     max_rendered_bytes: int = Field(default=2 * 1024 * 1024, ge=1024, le=8 * 1024 * 1024)
     max_network_events: int = Field(default=250, ge=1, le=1000)
     max_console_events: int = Field(default=250, ge=1, le=1000)
+    max_screenshot_bytes: int = Field(default=1024 * 1024, ge=65536, le=2 * 1024 * 1024)
 
 
 class RenderRequest(BaseModel):
@@ -144,6 +151,8 @@ class RenderResponse(BaseModel):
     network_requests: list[NetworkRequestItem] = []
     timing_data: dict[str, Any] | None = None
     console_logs: list[dict[str, str]] = []
+    screenshot_png_base64: str | None = None
+    screenshot_skipped_reason: str | None = None
     error: str | None = None
 
 
@@ -156,7 +165,7 @@ def health_check():
 async def render_page(req: RenderRequest):
     policy = req.egress_policy
     limits = req.resource_limits
-    if not is_url_allowed(req.url, allowed_domains=policy.allowed_domains, allowed_paths=policy.allowed_paths, excluded_paths=policy.excluded_paths):
+    if not is_url_allowed(req.url, allowed_domains=policy.allowed_domains, allowed_paths=policy.allowed_paths, excluded_paths=policy.excluded_paths, allowed_ports=policy.allowed_ports):
         return RenderResponse(
             status="failed",
             error=f"SSRF Check blocked target URL: {req.url}"
@@ -188,7 +197,7 @@ async def render_page(req: RenderRequest):
             page.on("console", lambda msg: console_logs.append({"type": msg.type, "text": _redact(msg.text)[:2048]}) if len(console_logs) < limits.max_console_events else None)
 
             async def route_interceptor(route, request):
-                if not is_url_allowed(request.url, allowed_domains=policy.allowed_domains, allowed_paths=policy.allowed_paths, excluded_paths=policy.excluded_paths):
+                if not is_url_allowed(request.url, allowed_domains=policy.allowed_domains, allowed_paths=policy.allowed_paths, excluded_paths=policy.excluded_paths, allowed_ports=policy.allowed_ports):
                     await route.abort("blockedbyclient")
                 elif len(captured_requests) >= limits.max_network_events:
                     await route.abort("blockedbyclient")
@@ -203,17 +212,32 @@ async def render_page(req: RenderRequest):
             await page.route("**/*", route_interceptor)
 
             try:
-                response = await page.goto(req.url, timeout=req.timeout_ms, wait_until="domcontentloaded")
+                response = await page.goto(req.url, timeout=req.timeout_ms, wait_until="commit")
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=min(req.timeout_ms, 5000))
+                except Exception as load_state_error:
+                    logger.info("DOM content load did not complete before the bounded wait: %s", _redact(load_state_error))
                 await asyncio.sleep(min(1.0, max(0.1, req.timeout_ms / 10000)))
 
                 rendered_html = await page.content()
                 final_url = page.url
-                if not is_url_allowed(final_url, allowed_domains=policy.allowed_domains, allowed_paths=policy.allowed_paths, excluded_paths=policy.excluded_paths):
+                if not is_url_allowed(final_url, allowed_domains=policy.allowed_domains, allowed_paths=policy.allowed_paths, excluded_paths=policy.excluded_paths, allowed_ports=policy.allowed_ports):
                     await browser.close()
                     return RenderResponse(status="failed", error="Browser final URL was blocked by current egress policy.")
                 if len(rendered_html.encode("utf-8", errors="ignore")) > limits.max_rendered_bytes:
                     rendered_html = rendered_html.encode("utf-8", errors="ignore")[: limits.max_rendered_bytes].decode("utf-8", errors="ignore")
                 status_code = response.status if response else 200
+
+                screenshot_b64 = None
+                screenshot_skipped_reason = None
+                if req.headers:
+                    screenshot_skipped_reason = "Screenshot skipped because forwarded authorization headers could expose authenticated content."
+                else:
+                    screenshot_bytes = await page.screenshot(type="png", full_page=False, animations="disabled")
+                    if len(screenshot_bytes) <= limits.max_screenshot_bytes:
+                        screenshot_b64 = base64.b64encode(screenshot_bytes).decode("ascii")
+                    else:
+                        screenshot_skipped_reason = "Screenshot exceeded the bounded screenshot-size limit."
 
                 timing_json = await page.evaluate("""() => {
                     const nav = performance.getEntriesByType('navigation')[0] || {};
@@ -240,7 +264,9 @@ async def render_page(req: RenderRequest):
                         ) for item in captured_requests
                     ],
                     timing_data={"navigation": timing_json},
-                    console_logs=console_logs[: limits.max_console_events]
+                    console_logs=console_logs[: limits.max_console_events],
+                    screenshot_png_base64=screenshot_b64,
+                    screenshot_skipped_reason=screenshot_skipped_reason,
                 )
             except Exception as exc:
                 await browser.close()

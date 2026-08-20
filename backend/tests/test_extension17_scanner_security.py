@@ -91,3 +91,16 @@ def test_browser_request_uses_no_credentials_by_default_and_binds_budget_payload
         assert request["resource_limits"]["max_cpu_seconds"] > 0
         assert request["resource_limits"]["max_memory_mb"] > 0
         assert request["resource_limits"]["max_network_events"] > 0
+
+
+def test_explicit_authorized_nonstandard_port_is_allowed(monkeypatch):
+    def resolver(url, **kwargs):
+        return url, "93.184.216.34"
+
+    monkeypatch.setattr(AdmissionService, "validate_and_resolve", staticmethod(resolver))
+    assert revalidate_egress(
+        "https://example.com:8443/path",
+        assessment_profile="safe",
+        explicit_allowlist=True,
+        allowed_ports={8443},
+    ) == "https://example.com:8443/path"

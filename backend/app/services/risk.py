@@ -200,11 +200,16 @@ class RiskAgent:
         self.db.query(RiskAssessment).filter(RiskAssessment.scan_id == scan.id).delete(synchronize_session=False)
         self.db.flush()
         reviews = {item.security_finding_id: item for item in self.db.query(EvidenceReview).filter(EvidenceReview.scan_id == scan.id, EvidenceReview.security_finding_id.is_not(None)).all()}
+        coverage_limited = self._analysis_unavailable(scan)
         graph_assets = self._graph_assets()
         assessments: list[RiskAssessment] = []
         for finding in self.db.query(SecurityFinding).filter(SecurityFinding.scan_id == scan.id).order_by(SecurityFinding.created_at, SecurityFinding.id).all():
             review = reviews.get(finding.id)
             components, notes, eligible, evidence_state = self._score_components(finding, review, graph_assets.get(self._finding_key(finding), []))
+            if coverage_limited:
+                eligible = False
+                evidence_state = "not_analyzed"
+                notes.append("Risk prioritization was suppressed because security analysis was unavailable; this scan does not establish a vulnerability conclusion.")
             raw_score = round(sum(component["weighted_contribution"] for component in components.values()), 2)
             score, cap_note = self._apply_evidence_cap(raw_score, review, eligible)
             if cap_note:
@@ -303,17 +308,26 @@ class RiskAgent:
         return result
 
     def _save_summary(self, scan: Scan, assessments: list[RiskAssessment]) -> None:
-        eligible = sorted((item for item in assessments if item.eligible_for_prioritization), key=lambda item: item.risk_score, reverse=True)
+        unique_eligible: dict[tuple[str, str], RiskAssessment] = {}
+        for item in assessments:
+            if not item.eligible_for_prioritization or not item.security_finding:
+                continue
+            key = self._semantic_key(item.security_finding)
+            prior = unique_eligible.get(key)
+            if prior is None or item.risk_score > prior.risk_score:
+                unique_eligible[key] = item
+        eligible = sorted(unique_eligible.values(), key=lambda item: item.risk_score, reverse=True)
         top_scores = [item.risk_score for item in eligible[:5]]
         overall = round(0.6 * top_scores[0] + 0.4 * sum(top_scores) / len(top_scores), 2) if top_scores else 0.0
+        coverage_limited = self._analysis_unavailable(scan)
         data = {
             "website_id": scan.website_id,
             "deterministic_version": RISK_VERSION,
-            "overall_score": overall,
-            "risk_band": self._band(overall),
+            "overall_score": 0.0 if coverage_limited else overall,
+            "risk_band": "not_analyzed" if coverage_limited else self._band(overall),
             "eligible_assessment_count": len(eligible),
             "assessment_count": len(assessments),
-            "summary": {"band_counts": dict(Counter(item.risk_band for item in assessments)), "top_assessment_ids": [str(item.id) for item in eligible[:5]], "overall_formula": "0.6 × highest eligible score + 0.4 × mean of highest five eligible scores"},
+            "summary": {"band_counts": dict(Counter(item.risk_band for item in assessments)), "top_assessment_ids": [str(item.id) for item in eligible[:5]], "overall_formula": "0.6 × highest eligible score + 0.4 × mean of highest five eligible scores", "coverage_state": "analysis_unavailable" if coverage_limited else "analyzed"},
         }
         summary = self.db.query(ScanRiskSummary).filter(ScanRiskSummary.scan_id == scan.id).first()
         if summary:
@@ -349,6 +363,16 @@ class RiskAgent:
     def _component(name: str, score: float, explanation: str) -> dict[str, Any]:
         value = round(max(0.0, min(100.0, score)), 2)
         return {"weight": RISK_COMPONENT_WEIGHTS[name], "score": value, "weighted_contribution": round(RISK_COMPONENT_WEIGHTS[name] * value / 100.0, 2), "explanation": explanation}
+
+    @staticmethod
+    def _semantic_key(finding: SecurityFinding) -> tuple[str, str]:
+        canonical_rule = "cors_wildcard_credentials" if finding.rule_id in {"cors_wildcard_credentials", "CFG-CORS-001"} else finding.rule_id
+        location = finding.page.canonical_url if finding.page else finding.subject
+        return canonical_rule, location
+
+    @staticmethod
+    def _analysis_unavailable(scan: Scan) -> bool:
+        return any(finding.rule_id == "security_analysis_unavailable" for finding in scan.security_findings)
 
     @staticmethod
     def _apply_evidence_cap(raw_score: float, review: EvidenceReview | None, eligible: bool) -> tuple[float, str | None]:

@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.models.scan import (
     AttackSurfaceGraphEdge,
     AttackSurfaceGraphNode,
+    BrowserScreenshot,
     ApiEndpoint,
     CVEIntelligence,
     EvidenceReview,
@@ -68,30 +69,52 @@ class SecurityReportService:
             if review.security_finding_id:
                 evidence_by_finding.setdefault(review.security_finding_id, []).append(review)
         cves = self._cves(scan.id)
-        technical_findings = [
-            self._finding_payload(finding, risk_by_finding.get(finding.id), evidence_by_finding.get(finding.id, []), cves)
-            for finding in sorted(findings, key=lambda item: self._finding_sort_key(item, risk_by_finding.get(item.id)))
-        ]
+        technical_findings = []
+        seen_semantic_findings: set[tuple[str, str]] = set()
+        for finding in sorted(findings, key=lambda item: self._finding_sort_key(item, risk_by_finding.get(item.id))):
+            payload = self._finding_payload(finding, risk_by_finding.get(finding.id), evidence_by_finding.get(finding.id, []), cves)
+            semantic_key = self._semantic_key(payload)
+            if semantic_key in seen_semantic_findings:
+                continue
+            seen_semantic_findings.add(semantic_key)
+            technical_findings.append(payload)
         risk_summary = self.db.query(ScanRiskSummary).filter(ScanRiskSummary.scan_id == scan.id).first()
         posture = self.db.query(SecurityPostureSnapshot).filter(SecurityPostureSnapshot.scan_id == scan.id).first()
         trend = self._trend(scan, posture)
         attack_surface = self._attack_surface(scan.id)
         severity_counts = dict(sorted(Counter(item["severity"] for item in technical_findings).items()))
         actionable = [item for item in technical_findings if item["eligible_for_prioritization"]]
+        analysis_unavailable = self._analysis_unavailable(scan)
+        screenshot_count = self.db.query(BrowserScreenshot).filter(BrowserScreenshot.scan_id == scan.id).count()
         executive = {
-            "overall_risk_score": round(risk_summary.overall_score, 1) if risk_summary else 0.0,
-            "risk_band": risk_summary.risk_band if risk_summary else "info",
+            "overall_risk_score": 0.0 if analysis_unavailable else (round(risk_summary.overall_score, 1) if risk_summary else 0.0),
+            "risk_band": "not_analyzed" if analysis_unavailable else (risk_summary.risk_band if risk_summary else "info"),
+            "coverage_state": "analysis_unavailable" if analysis_unavailable else "analyzed",
             "scan_state": scan.state,
             "finding_count": len(technical_findings),
             "prioritized_finding_count": len(actionable),
             "severity_counts": severity_counts,
-            "summary": self._executive_summary(scan, actionable, risk_summary, severity_counts),
-            "limitations": [
-                "Findings are evidence-backed observations and prioritization signals, not proof of exploitability.",
-                "No active exploitation, credential guessing, or scope expansion was performed by this report.",
-                "A missing later observation is not evidence that an issue or asset has been resolved.",
-            ],
+            "summary": self._executive_summary(scan, actionable, risk_summary, severity_counts, analysis_unavailable=analysis_unavailable),
+            "limitations": self._limitations(scan, analysis_unavailable),
         }
+        security_posture = self._posture(posture, risk_summary)
+        posture_summary = dict(security_posture.get("summary") or {})
+        posture_summary.update({
+            "security_finding_count": len(technical_findings),
+            "vulnerability_count": sum(1 for item in technical_findings if item["category"] == "vulnerability"),
+            "configuration_finding_count": sum(1 for item in technical_findings if item["category"] == "configuration"),
+            "secret_finding_count": sum(1 for item in technical_findings if item["category"] == "secrets"),
+            "severity_counts": severity_counts,
+        })
+        security_posture = {**security_posture, "summary": posture_summary}
+        if analysis_unavailable:
+            security_posture = {
+                **security_posture,
+                "overall_risk_score": 0.0,
+                "risk_band": "not_analyzed",
+                "summary": {**(security_posture.get("summary") or {}), "coverage_state": "analysis_unavailable"},
+                "limitation": "Security analysis was unavailable; posture is not a vulnerability verdict.",
+            }
         return {
             "report_version": REPORT_VERSION,
             "generated_at": utc_now().isoformat(),
@@ -104,13 +127,13 @@ class SecurityReportService:
             "executive_summary": executive,
             "technical_findings": technical_findings,
             "exploitation_breakpoints": self._breakpoints(actionable),
-            "security_posture": self._posture(posture, risk_summary),
+            "security_posture": security_posture,
             "trend_comparison": trend,
             "attack_surface_summary": attack_surface,
             "safe_screenshot_summary": {
-                "captured_screenshot_count": 0,
-                "status": "not_available",
-                "note": "This deployment stores rendered response text but does not persist screenshot image artifacts. The report does not synthesize or capture screenshots during export.",
+                "captured_screenshot_count": screenshot_count,
+                "status": "available" if screenshot_count else "not_available",
+                "note": "Screenshots are bounded viewport captures from public pages; authenticated pages are skipped to avoid persisting private content." if screenshot_count else "No safe public-page screenshot was persisted for this scan.",
             },
         }
 
@@ -173,6 +196,7 @@ class SecurityReportService:
             report["executive_summary"]["summary"],
             f"Overall risk: {report['executive_summary']['overall_risk_score']} ({report['executive_summary']['risk_band']})",
             f"Severity counts: {json.dumps(report['executive_summary']['severity_counts'], sort_keys=True)}", "",
+            *( ["COVERAGE NOTES", *report["executive_summary"]["limitations"], ""] if report["executive_summary"]["limitations"] else [] ),
             "TECHNICAL FINDINGS",
         ]
         for index, finding in enumerate(report["technical_findings"], start=1):
@@ -225,6 +249,24 @@ class SecurityReportService:
         return {"baseline": prior_difference is None, "difference": self._redact(prior_difference.diff_data) if prior_difference else {}, "limitation": "No completed posture snapshot is available for this scan."}
 
     @staticmethod
+    def _semantic_key(finding: dict[str, Any]) -> tuple[str, str]:
+        canonical_rule = "cors_wildcard_credentials" if finding.get("rule_id") in {"cors_wildcard_credentials", "CFG-CORS-001"} else str(finding.get("rule_id") or "unknown")
+        return canonical_rule, str(finding.get("affected_url") or finding.get("subject") or "unknown")
+
+    @staticmethod
+    def _analysis_unavailable(scan: Scan) -> bool:
+        return any(finding.rule_id == "security_analysis_unavailable" for finding in scan.security_findings)
+
+    @staticmethod
+    def _limitations(scan: Scan, analysis_unavailable: bool) -> list[str]:
+        notes: list[str] = []
+        if scan.state != "COMPLETED":
+            notes.append(f"Coverage is incomplete because the scan ended in {scan.state.lower()} state.")
+        if analysis_unavailable:
+            notes.append("Security analysis was unavailable for the collected evidence; the report does not make a vulnerability or clean-result conclusion.")
+        return notes
+
+    @staticmethod
     def _posture(posture: SecurityPostureSnapshot | None, risk: ScanRiskSummary | None) -> dict[str, Any]:
         return {"overall_risk_score": posture.overall_risk_score if posture else (risk.overall_score if risk else 0.0), "risk_band": posture.risk_band if posture else (risk.risk_band if risk else "info"), "summary": posture.posture_summary if posture else {}, "posture_version": posture.posture_version if posture else None}
 
@@ -237,9 +279,11 @@ class SecurityReportService:
         return [{"cve_id": cve.cve_id, "cwe": cve.cwe or [], "source_url": cve.source_url, "applicability_state": match.applicability_state, "confidence": round(match.applicability_confidence, 1)} for match, cve in rows if cve]
 
     @staticmethod
-    def _executive_summary(scan: Scan, findings: list[dict[str, Any]], risk: ScanRiskSummary | None, severity_counts: dict[str, int]) -> str:
+    def _executive_summary(scan: Scan, findings: list[dict[str, Any]], risk: ScanRiskSummary | None, severity_counts: dict[str, int], *, analysis_unavailable: bool = False) -> str:
         highest = findings[0] if findings else None
-        score = round(risk.overall_score, 1) if risk else 0.0
+        score = 0.0 if analysis_unavailable else (round(risk.overall_score, 1) if risk else 0.0)
+        if analysis_unavailable:
+            return "Security analysis was unavailable for this scan. No vulnerability conclusion or clean-result claim is made from the collected evidence."
         if highest:
             return f"The {scan.assessment_profile or 'configured'} assessment recorded {len(findings)} prioritized evidence-backed findings. Overall deterministic risk is {score} ({risk.risk_band if risk else 'info'}); the highest-priority item is {highest['rule_id']} affecting {highest['subject']}."
         return f"The assessment recorded no eligible prioritized findings. Overall deterministic risk is {score} ({risk.risk_band if risk else 'info'}); this does not establish the absence of security risk."
