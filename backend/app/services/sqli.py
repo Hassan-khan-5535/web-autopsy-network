@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import statistics
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -113,6 +114,12 @@ BASELINE_SAMPLES = 5
 DIFFERENTIAL_PAIRS = 3
 DIFFERENTIAL_LENGTH_THRESHOLD = 0.10
 MAX_UNION_COLUMNS = 3
+TIMING_VALUES_SECONDS: tuple[int, ...] = (1, 3, 5)
+TIMING_BASELINE_SAMPLES = 10
+TIMING_MAX_DELAY_SECONDS = 5
+TIMING_MULTIPLIER = 2.0
+TIMING_DATABASES: tuple[str, ...] = ("mysql", "postgresql", "mssql", "oracle")
+TIMING_UNSUPPORTED_DATABASES: tuple[str, ...] = ("sqlite",)
 
 
 @dataclass(frozen=True)
@@ -167,6 +174,7 @@ class SQLiDetectionAgent:
             "mode": "authorized_get_only" if self.enabled else "disabled_by_default",
             "extended_enabled": self.extended_enabled,
             "differential_validation": {"baseline_samples_required": BASELINE_SAMPLES, "pairs_required": DIFFERENTIAL_PAIRS, "length_threshold": DIFFERENTIAL_LENGTH_THRESHOLD, "noise_suppressed": 0},
+            "timing_validation": {"baseline_samples_required": TIMING_BASELINE_SAMPLES, "timing_values_seconds": list(TIMING_VALUES_SECONDS), "max_delay_seconds": TIMING_MAX_DELAY_SECONDS, "delay_multiplier": TIMING_MULTIPLIER, "noise_suppressed": 0},
             "stages": {"error_based": 0, "differential": 0, "timing_safe": 0, "union_safe": 0},
             "surfaces": {"query_tested": 0, "get_forms_tested": 0, "post_forms_not_tested": 0, "headers_not_tested": 0, "cookies_not_tested": 0, "json_xml_not_tested": 0},
             "requests_issued": 0,
@@ -274,7 +282,7 @@ class SQLiDetectionAgent:
         if stage2:
             return stage2
         if self.extended_enabled:
-            stage3 = self._stage3(surface, baseline)
+            stage3 = self._stage3(surface, baseline_samples)
             if stage3:
                 return stage3
             stage4 = self._stage4(surface, baseline)
@@ -352,32 +360,85 @@ class SQLiDetectionAgent:
             )
         return None
 
-    def _stage3(self, surface: InputSurface, baseline: ProbeResponse) -> SecurityFinding | None:
-        """Run a strictly capped timing canary; never issue heavy or unbounded delays."""
-        timing_payloads = (
-            "' AND IF(1=1,SLEEP(0.2),0)-- ",
-            "' AND CASE WHEN 1=1 THEN pg_sleep(0.2) ELSE NULL END-- ",
-            "'; WAITFOR DELAY '0:0:0.2'-- ",
+    def _stage3(self, surface: InputSurface, _prior_baseline_samples: list[ProbeResponse]) -> SecurityFinding | None:
+        """Validate timing correlation with bounded 1/3/5-second canaries only."""
+        baseline_samples = [self._request(surface.url, f"timing_baseline:{index}") for index in range(TIMING_BASELINE_SAMPLES)]
+        if len(baseline_samples) != TIMING_BASELINE_SAMPLES or not all(item.successful and not item.noise_signals for item in baseline_samples):
+            self.summary["timing_validation"]["noise_suppressed"] += 1 if any(item.noise_signals for item in baseline_samples) else 0
+            return None
+        baseline_times = [item.elapsed_ms for item in baseline_samples]
+        baseline_mean = statistics.mean(baseline_times)
+        baseline_stdev = statistics.stdev(baseline_times) if len(baseline_times) > 1 else 0.0
+        baseline_upper_bound = baseline_mean + (2 * baseline_stdev)
+        threshold_ms = max(baseline_mean * TIMING_MULTIPLIER, baseline_upper_bound)
+        safe_control = self._request(surface.url, "timing_safe_control")
+        if not safe_control.successful or safe_control.noise_signals or safe_control.elapsed_ms > baseline_upper_bound:
+            return None
+        timing_results: list[dict[str, Any]] = []
+        grouped: dict[str, list[tuple[dict[str, Any], ProbeResponse]]] = {}
+        for delay_seconds in TIMING_VALUES_SECONDS:
+            per_database: list[ProbeResponse] = []
+            for database, payload in self._timing_payloads(delay_seconds):
+                url = self._replace_value(surface.url, surface.name, surface.original_value + payload)
+                result = self._request(url, f"timing_safe:{database}:{delay_seconds}")
+                per_database.append(result)
+                item = {"database": database, "requested_delay_seconds": delay_seconds, "elapsed_ms": result.elapsed_ms, "status_code": result.status_code, "error": bool(result.error), "noise_signals": list(result.noise_signals)}
+                timing_results.append(item)
+                if not result.error and not result.noise_signals and result.status_code is not None:
+                    grouped.setdefault(database, []).append((item, result))
+            if any(item.noise_signals for item in per_database):
+                self.summary["timing_validation"]["noise_suppressed"] += 1
+        correlations: dict[str, float] = {}
+        for database, pairs in grouped.items():
+            if len(pairs) != len(TIMING_VALUES_SECONDS):
+                continue
+            ordered = sorted(pairs, key=lambda value: value[0]["requested_delay_seconds"])
+            requested = [item[0]["requested_delay_seconds"] for item in ordered]
+            measured = [item[0]["elapsed_ms"] for item in ordered]
+            correlations[database] = self._pearson_correlation(requested, measured)
+        confirmed = []
+        for database, pairs in grouped.items():
+            ordered = sorted(pairs, key=lambda value: value[0]["requested_delay_seconds"])
+            measured = [item[0]["elapsed_ms"] for item in ordered]
+            if len(ordered) == len(TIMING_VALUES_SECONDS) and correlations.get(database, 0.0) >= 0.85 and all(item[0]["elapsed_ms"] > threshold_ms for item in ordered) and all(left < right for left, right in zip(measured, measured[1:])):
+                confirmed.append((database, ordered))
+        if not confirmed:
+            return None
+        database, pairs = max(confirmed, key=lambda pair: correlations.get(pair[0], 0.0))
+        ordered_pairs = sorted(pairs, key=lambda value: value[0]["requested_delay_seconds"])
+        self.summary["stages"]["timing_safe"] += 1
+        evidence = self._evidence(surface, "timing_safe", f"timing_values_{database}", baseline_samples[0], ordered_pairs[-1][1], safe_control, [item for _, item in ordered_pairs], details={"baseline_sample_count": len(baseline_samples), "baseline_mean_ms": round(baseline_mean, 2), "baseline_stdev_ms": round(baseline_stdev, 2), "baseline_mean_plus_two_sigma_ms": round(baseline_upper_bound, 2), "delay_threshold_ms": round(threshold_ms, 2), "safe_control_elapsed_ms": safe_control.elapsed_ms, "database_type": database, "timing_values_seconds": list(TIMING_VALUES_SECONDS), "timing_results": [item for item, _ in ordered_pairs], "correlation": round(correlations[database], 4), "max_delay_seconds": TIMING_MAX_DELAY_SECONDS, "heavy_delay_payloads_used": False, "network_jitter_accounted": True, "unsupported_database_types": list(TIMING_UNSUPPORTED_DATABASES)})
+        return self._persist_finding(
+            surface,
+            "SQLI-TIMING-001",
+            f"Bounded timing canaries at 1, 3, and 5 seconds correlated with requested delays for GET parameter `{surface.name}` and exceeded the ten-sample baseline threshold. No data was extracted.",
+            "INFERRED",
+            90,
+            evidence,
         )
-        threshold_ms = max(150.0, baseline.elapsed_ms * 2.0)
-        for index, payload in enumerate(timing_payloads):
-            url = self._replace_value(surface.url, surface.name, surface.original_value + payload)
-            results = [self._request(url, f"timing_safe:{index}:{repeat}") for repeat in range(MAX_REPRODUCTIONS)]
-            if not all(item.error is None for item in results):
-                continue
-            if min(item.elapsed_ms for item in results) < threshold_ms:
-                continue
-            self.summary["stages"]["timing_safe"] += 1
-            evidence = self._evidence(surface, "timing_safe", f"timing_canary_{index}", baseline, results[0], baseline, results)
-            return self._persist_finding(
-                surface,
-                "SQLI-TIMING-001",
-                f"A bounded timing canary produced a reproducible delay above the noise threshold for GET parameter `{surface.name}`. The delay was capped and no data was extracted.",
-                "INFERRED",
-                90,
-                evidence,
-            )
-        return None
+
+    @staticmethod
+    def _timing_payloads(delay_seconds: int) -> tuple[tuple[str, str], ...]:
+        """Return only bounded vendor-specific timing expressions; never accept arbitrary delay input."""
+        if delay_seconds not in TIMING_VALUES_SECONDS or delay_seconds > TIMING_MAX_DELAY_SECONDS:
+            raise ValueError("unsupported timing value")
+        return (
+            ("mysql", f"' AND IF(1=1,SLEEP({delay_seconds}),0)-- "),
+            ("postgresql", f"'; SELECT pg_sleep({delay_seconds})-- "),
+            ("mssql", f"'; WAITFOR DELAY '00:00:0{delay_seconds}'-- "),
+            ("oracle", f"' AND DBMS_LOCK.SLEEP({delay_seconds})-- "),
+        )
+
+    @staticmethod
+    def _pearson_correlation(first: list[float], second: list[float]) -> float:
+        if len(first) != len(second) or len(first) < 2:
+            return 0.0
+        first_mean, second_mean = statistics.mean(first), statistics.mean(second)
+        numerator = sum((left - first_mean) * (right - second_mean) for left, right in zip(first, second))
+        first_variance = sum((left - first_mean) ** 2 for left in first)
+        second_variance = sum((right - second_mean) ** 2 for right in second)
+        denominator = (first_variance * second_variance) ** 0.5
+        return numerator / denominator if denominator else 0.0
 
     def _stage4(self, surface: InputSurface, baseline: ProbeResponse) -> SecurityFinding | None:
         """Infer a column-count match using NULL-only union probes, never data-bearing expressions."""
