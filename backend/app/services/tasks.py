@@ -644,7 +644,12 @@ class TaskRunner:
         if scan.cancel_requested:
             raise RuntimeError("Scan cancellation requested")
         if task.task_type == "admission":
-            canonical_url, _ = AdmissionService.validate_and_resolve(scan.requested_url)
+            authorization = scan.assessment_authorization
+            canonical_url, _ = AdmissionService.validate_and_resolve(
+                scan.requested_url,
+                assessment_profile=scan.assessment_profile if scan.assessment_profile in {"safe", "normal", "aggressive"} else None,
+                explicit_allowlist=bool(authorization and authorization.allowed_domains),
+            )
             scan.requested_url = canonical_url
             scan.state = "COLLECTING"
             db.commit()
