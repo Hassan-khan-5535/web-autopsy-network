@@ -82,7 +82,7 @@ SQLI_RULES: dict[str, dict[str, Any]] = {
         "stage": "Stage 4: Union-Safe",
         "severity": "high",
         "confidence": 96,
-        "proof_required": "A NULL-only union probe matches a stable response without returning application data. Data-bearing union expressions are never sent.",
+        "proof_required": "Incremental NULL-only union probes produce exactly one HTTP 200 response with baseline page structure while other bounded counts produce SQL errors; database-specific null handling is checked and sensitive-response signals are absent.",
         "remediation": "Use parameterized queries and deny unexpected query structure; never rely on input filtering alone.",
         "cwe": ["CWE-89"],
         "owasp": ["OWASP-A03"],
@@ -175,6 +175,7 @@ class SQLiDetectionAgent:
             "extended_enabled": self.extended_enabled,
             "differential_validation": {"baseline_samples_required": BASELINE_SAMPLES, "pairs_required": DIFFERENTIAL_PAIRS, "length_threshold": DIFFERENTIAL_LENGTH_THRESHOLD, "noise_suppressed": 0},
             "timing_validation": {"baseline_samples_required": TIMING_BASELINE_SAMPLES, "timing_values_seconds": list(TIMING_VALUES_SECONDS), "max_delay_seconds": TIMING_MAX_DELAY_SECONDS, "delay_multiplier": TIMING_MULTIPLIER, "noise_suppressed": 0},
+            "union_validation": {"max_columns": MAX_UNION_COLUMNS, "null_only": True, "database_variants_tested": ["generic", "mysql", "oracle", "mssql"], "sensitive_response_suppressed": 0},
             "stages": {"error_based": 0, "differential": 0, "timing_safe": 0, "union_safe": 0},
             "surfaces": {"query_tested": 0, "get_forms_tested": 0, "post_forms_not_tested": 0, "headers_not_tested": 0, "cookies_not_tested": 0, "json_xml_not_tested": 0},
             "requests_issued": 0,
@@ -441,29 +442,90 @@ class SQLiDetectionAgent:
         return numerator / denominator if denominator else 0.0
 
     def _stage4(self, surface: InputSurface, baseline: ProbeResponse) -> SecurityFinding | None:
-        """Infer a column-count match using NULL-only union probes, never data-bearing expressions."""
-        matches: list[tuple[int, ProbeResponse]] = []
+        """Infer one column-count match using only NULL expressions and stable page structure."""
+        baseline_structure = self._structure_hash(baseline.body)
+        if not baseline.successful or self._contains_sensitive_data(baseline.body):
+            self.summary["union_validation"]["sensitive_response_suppressed"] += 1
+            return None
+        matches: list[tuple[int, list[tuple[dict[str, Any], ProbeResponse]]]] = []
         mismatches: list[ProbeResponse] = []
+        column_results: list[dict[str, Any]] = []
         for columns in range(1, MAX_UNION_COLUMNS + 1):
-            union = "' UNION SELECT " + ",".join("NULL" for _ in range(columns)) + "-- "
-            result = self._request(self._replace_value(surface.url, surface.name, surface.original_value + union), f"union_null_columns:{columns}")
-            if result.successful:
-                matches.append((columns, result))
+            variant_results: list[tuple[dict[str, Any], ProbeResponse]] = []
+            for database, union in self._union_payloads(columns):
+                result = self._request(self._replace_value(surface.url, surface.name, surface.original_value + union), f"union_null_columns:{database}:{columns}")
+                structure_match = result.successful and self._structure_hash(result.body) == baseline_structure
+                sensitive = self._contains_sensitive_data(result.body)
+                metadata = {"database_variant": database, "column_count": columns, "status_code": result.status_code, "body_hash": result.body_hash, "structure_match": structure_match, "sql_error": bool(result.marker_categories) or bool(result.status_code and result.status_code >= 500), "sensitive_data_signal": sensitive}
+                variant_results.append((metadata, result))
+                column_results.append(metadata)
+            valid_matches = [(metadata, result) for metadata, result in variant_results if metadata["structure_match"] and not metadata["sensitive_data_signal"]]
+            if valid_matches:
+                matches.append((columns, valid_matches))
             else:
-                mismatches.append(result)
+                mismatch = next((result for metadata, result in variant_results if metadata["sql_error"]), None)
+                if mismatch:
+                    mismatches.append(mismatch)
+            if any(metadata["sensitive_data_signal"] for metadata, _ in variant_results):
+                self.summary["union_validation"]["sensitive_response_suppressed"] += 1
         if len(matches) != 1 or not mismatches:
             return None
-        columns, match = matches[0]
+        columns, matching_variants = matches[0]
+        match_metadata, match = matching_variants[0]
         self.summary["stages"]["union_safe"] += 1
-        evidence = self._evidence(surface, "union_safe", f"null_columns_{columns}", baseline, match, mismatches[0], mismatches)
+        evidence = self._evidence(surface, "union_safe", f"null_columns_{columns}", baseline, match, mismatches[0], [result for _, result in matching_variants] + mismatches, details={"column_count": columns, "max_columns_tested": MAX_UNION_COLUMNS, "null_only": True, "baseline_structure_hash": baseline_structure, "matching_variant": match_metadata, "column_results": column_results, "mismatch_count": len(mismatches), "sensitive_data_checked": True, "sensitive_data_detected": False})
         return self._persist_finding(
             surface,
             "SQLI-UNION-001",
-            f"A NULL-only union probe with {columns} inferred column(s) returned successfully while other bounded NULL counts did not. No application data was selected or retained.",
+            f"A NULL-only union probe with {columns} inferred column(s) returned HTTP 200 with baseline page structure while other bounded NULL counts produced SQL errors. No application data was selected or retained.",
             "INFERRED",
             96,
             evidence,
         )
+
+    @staticmethod
+    def _union_payloads(columns: int) -> tuple[tuple[str, str], ...]:
+        """Return bounded NULL-only probes with safe database-specific terminators."""
+        if columns < 1 or columns > MAX_UNION_COLUMNS:
+            raise ValueError("unsupported union column count")
+        nulls = ",".join("NULL" for _ in range(columns))
+        return (
+            ("generic", f"' UNION SELECT {nulls}-- "),
+            ("mysql", f"' UNION SELECT {nulls}#"),
+            ("oracle", f"' UNION SELECT {nulls} FROM DUAL-- "),
+            ("mssql", f"' UNION SELECT {nulls}-- "),
+        )
+
+    @staticmethod
+    def _structure_hash(body: str) -> str:
+        normalized = re.sub(r"<!--.*?-->", "", body[:512 * 1024], flags=re.DOTALL)
+        normalized = re.sub(r"\s+", " ", normalized).strip().lower()
+        normalized = re.sub(r"\b\d+\b", "<number>", normalized)
+        return hashlib.sha256(normalized.encode("utf-8", "ignore")).hexdigest()[:16]
+
+    @staticmethod
+    def _contains_sensitive_data(body: str) -> bool:
+        if not body:
+            return False
+        sensitive_patterns = (
+            r"-----begin [^-]{0,40}private key-----",
+            r"\beyj[a-z0-9_-]{20,}\.[a-z0-9_-]{10,}\.[a-z0-9_-]{10,}\b",
+            r"\b(?:api[_-]?key|access[_-]?token|secret|password)\s*[:=]\s*[\"']?[a-z0-9_+/=-]{16,}",
+        )
+        if any(re.search(pattern, body, re.IGNORECASE) for pattern in sensitive_patterns):
+            return True
+        for token in re.findall(r"[A-Za-z0-9+/=_-]{24,}", body):
+            if SQLiDetectionAgent._shannon_entropy(token) >= 4.2:
+                return True
+        return False
+
+    @staticmethod
+    def _shannon_entropy(value: str) -> float:
+        if not value:
+            return 0.0
+        counts = {character: value.count(character) for character in set(value)}
+        length = len(value)
+        return -sum((count / length) * __import__("math").log2(count / length) for count in counts.values())
 
     def _baseline_gate(self, samples: list[ProbeResponse]) -> bool:
         if len(samples) != BASELINE_SAMPLES or not all(item.successful and not item.noise_signals for item in samples):

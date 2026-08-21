@@ -72,6 +72,26 @@ class _TimingFixtureHandler(BaseHTTPRequestHandler):
         return
 
 
+class _UnionFixtureHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:  # noqa: N802
+        value = parse_qs(urlsplit(self.path).query).get("id", [""])[0].lower()
+        if "union select" in value:
+            null_count = value.split("union select", 1)[1].count("null")
+            if null_count == 3:
+                body, status = "normal page structure 123", 200
+            else:
+                body, status = "SQLite error: column mismatch", 500
+        else:
+            body, status = "normal page structure 123", 200
+        self.send_response(status)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(body.encode())
+
+    def log_message(self, *_args: object) -> None:
+        return
+
+
 class _SQLiFixtureHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         value = parse_qs(urlsplit(self.path).query).get("id", [""])[0]
@@ -227,6 +247,47 @@ def test_sqli_stage3_uses_ten_baselines_and_correlated_bounded_delays(db: Sessio
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_sqli_stage4_infers_null_only_column_count_and_preserves_structure(db: Session, monkeypatch):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _UnionFixtureHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        scan, page = _fixture_scan(db, server.server_port, enabled=True, extended=True, request_budget=100)
+        monkeypatch.setattr("app.services.sqli.revalidate_egress", lambda url, **_kwargs: url)
+        agent = SQLiDetectionAgent(db, scan.id)
+        surface = agent._surfaces()[0]
+        baseline = agent._request(surface.url, "union_baseline")
+        finding = agent._stage4(surface, baseline)
+        assert finding is not None
+        assert finding.rule_id == "SQLI-UNION-001"
+        assert finding.page_id == page.id
+        gate = next(item for item in finding.evidence if item.get("type") == "validation_gate")
+        assert gate["column_count"] == 3
+        assert gate["null_only"] is True
+        assert gate["mismatch_count"] >= 1
+        assert gate["sensitive_data_checked"] is True
+        assert gate["sensitive_data_detected"] is False
+        assert gate["matching_variant"]["database_variant"] in {"generic", "mysql", "oracle", "mssql"}
+        assert all(item["column_count"] <= 3 for item in gate["column_results"])
+        assert all("payload" not in str(item).lower() for item in gate["column_results"])
+        assert agent._structure_hash("normal page structure 123") == agent._structure_hash("normal page structure 456")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_sqli_stage4_sensitive_data_guard_and_column_cap():
+    assert not SQLiDetectionAgent._contains_sensitive_data("normal page structure")
+    assert SQLiDetectionAgent._contains_sensitive_data("api_key=abcdefghijklmnopqrstuvwxyz123456")
+    try:
+        SQLiDetectionAgent._union_payloads(4)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("union payloads accepted a column count above the bounded cap")
 
 
 def test_sqli_stage3_rejects_unsupported_or_heavy_delay_values(db: Session):
