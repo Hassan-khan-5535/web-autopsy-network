@@ -61,7 +61,7 @@ SQLI_RULES: dict[str, dict[str, Any]] = {
         "stage": "Stage 2: Differential",
         "severity": "high",
         "confidence": 90,
-        "proof_required": "Repeated true/false boolean responses differ while the baseline remains stable; no data extraction is performed.",
+        "proof_required": "Five stable baseline GETs, three reproducible true/false pairs, true responses matching the baseline, false responses differing by body hash or more than 10% in length, and no rate-limit/cache noise; no data extraction is performed.",
         "remediation": "Use parameterized statements and verify that boolean input cannot alter query structure.",
         "cwe": ["CWE-89"],
         "owasp": ["OWASP-A03"],
@@ -101,8 +101,17 @@ STAGE1_PAYLOADS: tuple[tuple[str, str], ...] = (
     ("double_quote_break", '"'),
     ("parenthesis_mismatch", "')"),
 )
+BOOLEAN_PAYLOAD_PAIRS: tuple[tuple[str, str, str], ...] = (
+    ("numeric_and", " AND 1=1", " AND 1=2"),
+    ("string_and", "' AND '1'='1", "' AND '1'='2"),
+    ("or_logic", " OR 1=1", " OR 1=2"),
+    ("comment_bypass", "'-- ", "' AND '1'='2'-- "),
+)
 MAX_SURFACES = 3
 MAX_REPRODUCTIONS = 3
+BASELINE_SAMPLES = 5
+DIFFERENTIAL_PAIRS = 3
+DIFFERENTIAL_LENGTH_THRESHOLD = 0.10
 MAX_UNION_COLUMNS = 3
 
 
@@ -114,6 +123,8 @@ class ProbeResponse:
     body_hash: str
     marker_categories: tuple[str, ...]
     error: str | None = None
+    body_length: int = 0
+    noise_signals: tuple[str, ...] = ()
 
     @property
     def successful(self) -> bool:
@@ -155,6 +166,7 @@ class SQLiDetectionAgent:
             "enabled": self.enabled,
             "mode": "authorized_get_only" if self.enabled else "disabled_by_default",
             "extended_enabled": self.extended_enabled,
+            "differential_validation": {"baseline_samples_required": BASELINE_SAMPLES, "pairs_required": DIFFERENTIAL_PAIRS, "length_threshold": DIFFERENTIAL_LENGTH_THRESHOLD, "noise_suppressed": 0},
             "stages": {"error_based": 0, "differential": 0, "timing_safe": 0, "union_safe": 0},
             "surfaces": {"query_tested": 0, "get_forms_tested": 0, "post_forms_not_tested": 0, "headers_not_tested": 0, "cookies_not_tested": 0, "json_xml_not_tested": 0},
             "requests_issued": 0,
@@ -247,15 +259,18 @@ class SQLiDetectionAgent:
         return surfaces
 
     def _test_surface(self, surface: InputSurface) -> SecurityFinding | None:
-        baseline = self._request(surface.url)
-        if not baseline.successful:
-            self._record_coverage(surface, "baseline_not_eligible", "Baseline GET did not return a successful response; no SQLi canary was sent.", baseline)
+        baseline_samples = [self._request(surface.url, f"baseline:{index}") for index in range(BASELINE_SAMPLES)]
+        if not self._baseline_gate(baseline_samples):
+            if any(item.noise_signals for item in baseline_samples):
+                self.summary["differential_validation"]["noise_suppressed"] += 1
+            self._record_coverage(surface, "baseline_not_stable", f"Five baseline GETs were required, but the responses were unsuccessful, unstable, rate-limited, or cache-affected; no SQLi canary was sent.", baseline_samples[0] if baseline_samples else None)
             return None
+        baseline = baseline_samples[0]
 
-        stage1 = self._stage1(surface, baseline)
+        stage1 = self._stage1(surface, baseline_samples)
         if stage1:
             return stage1
-        stage2 = self._stage2(surface, baseline)
+        stage2 = self._stage2(surface, baseline_samples)
         if stage2:
             return stage2
         if self.extended_enabled:
@@ -268,7 +283,8 @@ class SQLiDetectionAgent:
         self._record_coverage(surface, "no_high_signal_difference", "Safe SQLi canaries did not produce the required reproducible SQL-specific error or boolean differential.", baseline)
         return None
 
-    def _stage1(self, surface: InputSurface, baseline: ProbeResponse) -> SecurityFinding | None:
+    def _stage1(self, surface: InputSurface, baseline_samples: list[ProbeResponse]) -> SecurityFinding | None:
+        baseline = baseline_samples[0]
         for payload_name, suffix in STAGE1_PAYLOADS:
             breaking_url = self._replace_value(surface.url, surface.name, surface.original_value + suffix)
             counterpart_url = self._replace_value(surface.url, surface.name, surface.original_value + "''")
@@ -291,28 +307,50 @@ class SQLiDetectionAgent:
             )
         return None
 
-    def _stage2(self, surface: InputSurface, baseline: ProbeResponse) -> SecurityFinding | None:
-        true_url = self._replace_value(surface.url, surface.name, surface.original_value + "' AND '1'='1")
-        false_url = self._replace_value(surface.url, surface.name, surface.original_value + "' AND '1'='2")
-        true_results = [self._request(true_url, f"boolean_true:{index}") for index in range(MAX_REPRODUCTIONS)]
-        false_results = [self._request(false_url, f"boolean_false:{index}") for index in range(MAX_REPRODUCTIONS)]
-        if not all(item.error is None for item in true_results + false_results):
-            return None
-        true_stable = len({self._signature(item) for item in true_results}) == 1
-        false_stable = len({self._signature(item) for item in false_results}) == 1
-        different = self._signature(true_results[0]) != self._signature(false_results[0])
-        if not (true_stable and false_stable and different):
-            return None
-        self.summary["stages"]["differential"] += 1
-        evidence = self._evidence(surface, "differential", "boolean_true_false", baseline, true_results[0], false_results[0], true_results + false_results)
-        return self._persist_finding(
-            surface,
-            "SQLI-DIFF-001",
-            f"Repeated true/false boolean canaries produced stable but different GET responses for parameter `{surface.name}`. No data-bearing expression was used or returned.",
-            "OBSERVED",
-            90,
-            evidence,
-        )
+    def _stage2(self, surface: InputSurface, baseline_samples: list[ProbeResponse]) -> SecurityFinding | None:
+        baseline = baseline_samples[0]
+        baseline_signatures = {self._signature(item) for item in baseline_samples}
+        for payload_name, true_suffix, false_suffix in BOOLEAN_PAYLOAD_PAIRS:
+            pairs: list[tuple[ProbeResponse, ProbeResponse]] = []
+            for index in range(DIFFERENTIAL_PAIRS):
+                true_result = self._request(self._replace_value(surface.url, surface.name, surface.original_value + true_suffix), f"boolean:{payload_name}:true:{index}")
+                false_result = self._request(self._replace_value(surface.url, surface.name, surface.original_value + false_suffix), f"boolean:{payload_name}:false:{index}")
+                pairs.append((true_result, false_result))
+            if not all(self._differential_pair_gate(true_result, false_result, baseline_signatures) for true_result, false_result in pairs):
+                if any(item.noise_signals for pair in pairs for item in pair):
+                    self.summary["differential_validation"]["noise_suppressed"] += 1
+                continue
+            self.summary["stages"]["differential"] += 1
+            true_results = [pair[0] for pair in pairs]
+            false_results = [pair[1] for pair in pairs]
+            first_true, first_false = true_results[0], false_results[0]
+            evidence = self._evidence(
+                surface,
+                "differential",
+                payload_name,
+                baseline,
+                first_true,
+                first_false,
+                true_results + false_results,
+                details={
+                    "baseline_samples": len(baseline_samples),
+                    "pair_count": len(pairs),
+                    "true_matches_baseline": True,
+                    "false_differential_pairs": len(pairs),
+                    "false_length_ratio": self._length_ratio(first_true, first_false),
+                    "false_hash_differs": first_true.body_hash != first_false.body_hash,
+                    "noise_signals": sorted({signal for pair in pairs for item in pair for signal in item.noise_signals}),
+                },
+            )
+            return self._persist_finding(
+                surface,
+                "SQLI-DIFF-001",
+                f"Five stable baselines and three reproducible true/false boolean pairs produced a baseline-matching true response and a materially different false response for GET parameter `{surface.name}`. No data-bearing expression was used or returned.",
+                "OBSERVED",
+                90,
+                evidence,
+            )
+        return None
 
     def _stage3(self, surface: InputSurface, baseline: ProbeResponse) -> SecurityFinding | None:
         """Run a strictly capped timing canary; never issue heavy or unbounded delays."""
@@ -366,7 +404,27 @@ class SQLiDetectionAgent:
             evidence,
         )
 
-    def _error_gate(self, baseline: ProbeResponse, breaking: ProbeResponse, counterpart: ProbeResponse) -> bool:
+    def _baseline_gate(self, samples: list[ProbeResponse]) -> bool:
+        if len(samples) != BASELINE_SAMPLES or not all(item.successful and not item.noise_signals for item in samples):
+            return False
+        return len({self._signature(item) for item in samples}) == 1
+
+    def _differential_pair_gate(self, true_result: ProbeResponse, false_result: ProbeResponse, baseline_signatures: set[tuple[int | None, str, tuple[str, ...]]]) -> bool:
+        if not true_result.successful or true_result.noise_signals or false_result.error or false_result.noise_signals:
+            return False
+        if self._signature(true_result) not in baseline_signatures:
+            return False
+        if self._signature(true_result) == self._signature(false_result):
+            return False
+        return false_result.body_hash != true_result.body_hash or self._length_ratio(true_result, false_result) > DIFFERENTIAL_LENGTH_THRESHOLD
+
+    @staticmethod
+    def _length_ratio(first: ProbeResponse, second: ProbeResponse) -> float:
+        denominator = max(first.body_length, 1)
+        return abs(second.body_length - first.body_length) / denominator
+
+    @staticmethod
+    def _error_gate(baseline: ProbeResponse, breaking: ProbeResponse, counterpart: ProbeResponse) -> bool:
         if not baseline.successful or not counterpart.successful:
             return False
         has_error = (breaking.status_code is not None and breaking.status_code >= 500) or bool(breaking.marker_categories)
@@ -403,7 +461,8 @@ class SQLiDetectionAgent:
                     body = body_bytes.decode(response.encoding or "utf-8", errors="replace")
                     elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
                     markers = self._markers(body)
-                    result = ProbeResponse(response.status_code, elapsed_ms, body, self._body_hash(body), markers)
+                    noise_signals = self._noise_signals(response.status_code, headers)
+                    result = ProbeResponse(response.status_code, elapsed_ms, body, self._body_hash(body), markers, body_length=len(body), noise_signals=noise_signals)
                     self.requests_used += 1
                     self.summary["requests_issued"] += 1
                     if variant != "baseline":
@@ -427,6 +486,8 @@ class SQLiDetectionAgent:
             "body_hash": result.body_hash,
             "sql_error_categories": list(result.marker_categories),
             "response_truncated": bool(truncated),
+            "body_length": result.body_length,
+            "noise_signals": list(result.noise_signals),
             "error": redact_sensitive_text(result.error) if result.error else None,
             "headers_observed": sorted({name.lower() for name, _ in headers})[:40],
             "payload_value_stored": False,
@@ -473,14 +534,27 @@ class SQLiDetectionAgent:
         self.db.flush()
         return finding
 
-    def _evidence(self, surface: InputSurface, stage: str, variant: str, baseline: ProbeResponse, first: ProbeResponse, counterpart: ProbeResponse, repetitions: list[ProbeResponse]) -> list[dict[str, Any]]:
+    def _evidence(self, surface: InputSurface, stage: str, variant: str, baseline: ProbeResponse, first: ProbeResponse, counterpart: ProbeResponse, repetitions: list[ProbeResponse], details: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         entries = [
             {"id": f"sqli:{stage}:baseline:{surface.page_id}", "type": "baseline", "source": self._redact_url(surface.url), "observation": f"Baseline GET succeeded with status {baseline.status_code}, body fingerprint {baseline.body_hash}.", "status_code": baseline.status_code, "elapsed_ms": baseline.elapsed_ms},
             {"id": f"sqli:{stage}:first:{surface.page_id}", "type": "validation_response", "source": self._redact_url(surface.url), "observation": f"{stage} canary `{variant}` returned status {first.status_code}, SQL error categories {', '.join(first.marker_categories) or 'none'}, body fingerprint {first.body_hash}.", "status_code": first.status_code, "elapsed_ms": first.elapsed_ms},
             {"id": f"sqli:{stage}:counterpart:{surface.page_id}", "type": "safe_counterpart", "source": self._redact_url(surface.url), "observation": f"Safe counterpart returned status {counterpart.status_code}, body fingerprint {counterpart.body_hash}.", "status_code": counterpart.status_code, "elapsed_ms": counterpart.elapsed_ms},
             {"id": f"sqli:{stage}:reproducibility:{surface.page_id}", "type": "reproducibility", "source": self._redact_url(surface.url), "observation": f"Repeated validation count {len(repetitions)}; stable signature requirement passed.", "repeat_count": len(repetitions), "stable": True},
         ]
+        if details:
+            entries.append({"id": f"sqli:{stage}:gate:{surface.page_id}", "type": "validation_gate", "source": self._redact_url(surface.url), **details})
         return entries
+
+    @staticmethod
+    def _noise_signals(status_code: int, headers: list[tuple[str, str]]) -> tuple[str, ...]:
+        names = {str(name).lower(): str(value).lower() for name, value in headers}
+        signals: set[str] = set()
+        if status_code == 429 or any(name.startswith("x-ratelimit") or name == "retry-after" for name in names):
+            signals.add("rate_limited")
+        cache_markers = ("x-cache", "cf-cache-status", "age", "x-cache-status", "akamai-cache-status")
+        if any(name in names and ("hit" in names[name] or name == "age") for name in cache_markers):
+            signals.add("cache_hit")
+        return tuple(sorted(signals))
 
     @staticmethod
     def _markers(body: str) -> tuple[str, ...]:
