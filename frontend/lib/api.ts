@@ -123,6 +123,8 @@ export type ScanOptions = {
   test_account_ref?: string;
   expires_at?: string;
   recon_mode?: "passive_only" | "active_safe";
+  sqli_validation_enabled?: boolean;
+  sqli_extended_validation_enabled?: boolean;
 };
 
 export type AssessmentAuthorization = {
@@ -606,6 +608,52 @@ export type VulnerabilityResponse = {
   };
 };
 
+export type SQLiFinding = {
+  id: string;
+  category: "sqli";
+  subject: string;
+  statement: string;
+  classification: "OBSERVED" | "INFERRED";
+  confidence: number;
+  confidence_band: string;
+  severity: string;
+  rule_id: string;
+  rule_version: string;
+  evidence: Array<Record<string, unknown>>;
+  limitations: string;
+  page_id: string | null;
+  created_at: string;
+};
+
+export type SQLiResponse = {
+  scan_id: string;
+  rule_version: string;
+  rules: Array<Record<string, unknown>>;
+  findings: SQLiFinding[];
+  summary: {
+    enabled: boolean;
+    mode: string;
+    stages: Record<string, number>;
+    surfaces: Record<string, number>;
+    requests_issued: number;
+    payloads_sent: number;
+    mutating_requests_issued: number;
+    data_extraction_attempted: boolean;
+    finding_count: number;
+    high_count: number;
+    limitations: string;
+  };
+  safe_validation: {
+    mode: string;
+    network_requests_issued: number;
+    payloads_sent: number;
+    forms_submitted: number;
+    mutating_requests_issued: number;
+    authentication_attempts: number;
+    data_extraction_attempted: boolean;
+  };
+};
+
 export type PerformanceEvidence = {
   id: string;
   type: string;
@@ -915,6 +963,15 @@ export async function getScanVulnerabilityAgent(id: string): Promise<Vulnerabili
   }
 
   return response.json() as Promise<VulnerabilityResponse>;
+}
+
+export async function getScanSQLiAgent(id: string): Promise<SQLiResponse> {
+  const response = await fetch(`${apiBaseUrl}/v1/scans/${id}/sqli-agent`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Failed to fetch SQLi Agent report for scan ${id}`);
+  return response.json() as Promise<SQLiResponse>;
 }
 
 export async function getScanPerformance(id: string): Promise<PerformanceResponse> {

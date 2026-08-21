@@ -79,6 +79,7 @@ from app.services.crawler import CrawlerService
 from app.services.network_intelligence import NetworkIntelligenceAgent
 from app.services.performance import PerformanceEngine
 from app.services.security import SecurityAnalysisService
+from app.services.sqli import SQLiDetectionAgent
 from app.services.structure import StructureAgent
 from app.services.technology import TechnologyDetectionService
 
@@ -111,6 +112,8 @@ class ScanCreate(BaseModel):
     test_account_ref: str | None = Field(default=None, max_length=255)
     expires_at: datetime | None = None
     recon_mode: Literal["passive_only", "active_safe"] = "passive_only"
+    sqli_validation_enabled: bool = False
+    sqli_extended_validation_enabled: bool = False
 
 
 class ScanCompareRequest(BaseModel):
@@ -290,6 +293,10 @@ def create_scan(
             raise AssessmentPolicyError("The target hostname must be included in allowed_domains.")
         if scan_req.assessment_profile == "aggressive" and not scan_req.allowed_domains:
             raise AssessmentPolicyError("Aggressive assessment requires explicit allowed-domain confirmation.")
+        if scan_req.sqli_validation_enabled and scan_req.recon_mode != "active_safe":
+            raise AssessmentPolicyError("SQLi validation requires active-safe Recon mode.")
+        if scan_req.sqli_extended_validation_enabled and not scan_req.sqli_validation_enabled:
+            raise AssessmentPolicyError("Extended SQLi validation requires SQLi validation to be enabled.")
         if not path_allowed(canonical_url, allowed_paths, excluded_paths):
             raise AssessmentPolicyError("The target URL is outside the allowed/excluded path scope.")
         policy = profile_policy(
@@ -363,6 +370,8 @@ def create_scan(
         "max_concurrency": policy["max_concurrency"],
         "rate_limit_per_host_ms": policy["rate_limit_per_host_ms"],
         "recon_mode": scan_req.recon_mode,
+        "sqli_validation_enabled": scan_req.sqli_validation_enabled,
+        "sqli_extended_validation_enabled": scan_req.sqli_extended_validation_enabled,
     }
     consent_payload = {
         **scope_json,
@@ -1114,6 +1123,14 @@ def get_scan_vulnerability_agent(scan_id: UUID, db: Session = Depends(get_db)):
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
     return VulnerabilityAgent(db, scan_id).report()
+
+
+@router.get("/{scan_id}/sqli-agent")
+def get_scan_sqli_agent(scan_id: UUID, db: Session = Depends(get_db)):
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return SQLiDetectionAgent(db, scan_id).report()
 
 
 @router.get("/{scan_id}/secrets")

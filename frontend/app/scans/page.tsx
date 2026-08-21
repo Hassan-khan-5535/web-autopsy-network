@@ -39,6 +39,8 @@ export default function NewScanPage() {
   const [url, setUrl] = useState("");
   const [profile, setProfile] = useState<Profile>("safe");
   const [reconMode, setReconMode] = useState<"passive_only" | "active_safe">("passive_only");
+  const [sqliValidationEnabled, setSqliValidationEnabled] = useState(false);
+  const [sqliExtendedValidationEnabled, setSqliExtendedValidationEnabled] = useState(false);
   const [maxDepth, setMaxDepth] = useState("2");
   const [maxPages, setMaxPages] = useState("30");
   const [maxConcurrency, setMaxConcurrency] = useState("2");
@@ -99,6 +101,8 @@ export default function NewScanPage() {
         max_pages: Number(maxPages),
         assessment_profile: profile,
         recon_mode: reconMode,
+        sqli_validation_enabled: sqliValidationEnabled,
+        sqli_extended_validation_enabled: sqliExtendedValidationEnabled,
         allowed_domains: commaSeparated(allowedDomains),
         allowed_ports: numericCommaSeparated(allowedPorts),
         allowed_paths: commaSeparated(allowedPaths),
@@ -147,11 +151,18 @@ export default function NewScanPage() {
 
           <div>
             <label htmlFor="recon-mode" className="block text-sm font-medium text-emerald-100/80 mb-2">Recon Agent mode</label>
-            <select id="recon-mode" value={reconMode} onChange={(e) => setReconMode(e.target.value as "passive_only" | "active_safe")} className={fieldClass}>
+            <select id="recon-mode" value={reconMode} onChange={(e) => { const nextMode = e.target.value as "passive_only" | "active_safe"; setReconMode(nextMode); if (nextMode !== "active_safe") { setSqliValidationEnabled(false); setSqliExtendedValidationEnabled(false); } }} className={fieldClass}>
               <option value="passive_only">Passive-only</option>
               <option value="active_safe">Active-safe</option>
             </select>
             <p className="mt-2 text-xs text-emerald-100/60">Passive-only uses stored crawl evidence plus public Certificate Transparency and DNS observations. Active-safe adds bounded, scope-checked GET requests for robots/sitemaps and a small path list; it never submits forms or mutates target state.</p>
+          </div>
+
+          <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-4">
+            <div className="flex items-start gap-3"><input id="sqli-validation" type="checkbox" checked={sqliValidationEnabled} onChange={(e) => { const enabled = e.target.checked; setSqliValidationEnabled(enabled); if (!enabled) setSqliExtendedValidationEnabled(false); }} disabled={reconMode !== "active_safe"} className="mt-1 h-4 w-4 rounded border-orange-500/30 bg-[#0d1a17] text-orange-500 focus:ring-orange-500" /><label htmlFor="sqli-validation" className="text-sm text-orange-100/80">Enable safe SQL injection validation for eligible GET parameters</label></div>
+            <p className="mt-2 text-xs text-orange-100/60">Requires Active-safe Recon. Sends only bounded syntax/boolean canaries to in-scope GET URLs; never submits forms, sends JSON/XML bodies, extracts data, or performs mutating requests. Headers, cookies, POST forms, and API bodies are reported as not tested.</p>
+            <div className="mt-3 flex items-start gap-3"><input id="sqli-extended-validation" type="checkbox" checked={sqliExtendedValidationEnabled} onChange={(e) => setSqliExtendedValidationEnabled(e.target.checked)} disabled={!sqliValidationEnabled || reconMode !== "active_safe"} className="mt-1 h-4 w-4 rounded border-orange-500/30 bg-[#0d1a17] text-orange-500 focus:ring-orange-500" /><label htmlFor="sqli-extended-validation" className="text-xs text-orange-100/70">Enable capped timing-safe and NULL-only union stages</label></div>
+            <p className="mt-2 text-[11px] text-orange-100/50">This optional extension never sends heavy/unbounded delays or data-bearing UNION expressions. It is disabled unless separately checked.</p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

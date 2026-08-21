@@ -35,6 +35,7 @@ from app.services.http_agent import HTTPAgent
 from app.services.recon import ReconAgent
 from app.services.queue import get_dispatcher
 from app.services.security import SecurityAnalysisService
+from app.services.sqli import SQLiDetectionAgent
 from app.services.structure import StructureAgent
 from app.services.technology import TechnologyDetectionService
 
@@ -52,7 +53,8 @@ TASK_DEFINITIONS = {
     "http_agent": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection"]},
     "configuration": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection", "http_agent"]},
     "api_agent": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection", "api_intelligence", "http_agent"]},
-    "vulnerability": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection", "security", "configuration", "api_agent", "http_agent"]},
+    "vulnerability": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection", "security", "configuration", "api_agent", "http_agent", "sqli"]},
+    "sqli": {"queue": "analysis", "max_retries": 1, "dependencies": ["collection", "http_agent"]},
     "secrets": {"queue": "analysis", "max_retries": 2, "dependencies": ["collection", "http_agent"]},
     "cve_intelligence": {"queue": "analysis", "max_retries": 2, "dependencies": ["technology"]},
     "evidence": {"queue": "analysis", "max_retries": 2, "dependencies": ["technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "configuration", "api_agent", "security", "vulnerability", "secrets", "cve_intelligence", "performance", "accessibility", "content"]},
@@ -73,10 +75,11 @@ EVENT_REQUIREMENTS: dict[str, list[str]] = {
     "configuration": ["event:http_agent:AGENT_OUTPUT_READY"],
     "security": ["event:http_agent:AGENT_OUTPUT_READY"],
     "secrets": ["event:http_agent:AGENT_OUTPUT_READY"],
+    "sqli": ["event:http_agent:AGENT_OUTPUT_READY"],
     "api_agent": ["event:api_intelligence:AGENT_OUTPUT_READY", "event:http_agent:AGENT_OUTPUT_READY", "event:recon:AGENT_OUTPUT_READY"],
-    "vulnerability": ["event:http_agent:AGENT_OUTPUT_READY", "event:security:AGENT_OUTPUT_READY", "event:configuration:AGENT_OUTPUT_READY", "event:api_agent:AGENT_OUTPUT_READY"],
+    "vulnerability": ["event:http_agent:AGENT_OUTPUT_READY", "event:security:AGENT_OUTPUT_READY", "event:configuration:AGENT_OUTPUT_READY", "event:api_agent:AGENT_OUTPUT_READY", "event:sqli:AGENT_OUTPUT_READY"],
     "cve_intelligence": ["event:technology:AGENT_OUTPUT_READY"],
-    "evidence": ["event:technology:AGENT_OUTPUT_READY", "event:structure:AGENT_OUTPUT_READY", "event:api_intelligence:AGENT_OUTPUT_READY", "event:network_intelligence:AGENT_OUTPUT_READY", "event:http_agent:AGENT_OUTPUT_READY", "event:configuration:AGENT_OUTPUT_READY", "event:api_agent:AGENT_OUTPUT_READY", "event:security:AGENT_OUTPUT_READY", "event:vulnerability:AGENT_OUTPUT_READY", "event:secrets:AGENT_OUTPUT_READY", "event:cve_intelligence:AGENT_OUTPUT_READY"],
+    "evidence": ["event:technology:AGENT_OUTPUT_READY", "event:structure:AGENT_OUTPUT_READY", "event:api_intelligence:AGENT_OUTPUT_READY", "event:network_intelligence:AGENT_OUTPUT_READY", "event:http_agent:AGENT_OUTPUT_READY", "event:configuration:AGENT_OUTPUT_READY", "event:api_agent:AGENT_OUTPUT_READY", "event:security:AGENT_OUTPUT_READY", "event:sqli:AGENT_OUTPUT_READY", "event:vulnerability:AGENT_OUTPUT_READY", "event:secrets:AGENT_OUTPUT_READY", "event:cve_intelligence:AGENT_OUTPUT_READY"],
     "correlation": ["event:evidence:AGENT_OUTPUT_READY"],
     "risk": ["event:evidence:AGENT_OUTPUT_READY", "event:correlation:AGENT_OUTPUT_READY"],
     "diagnosis": ["event:risk:AGENT_OUTPUT_READY"],
@@ -216,7 +219,7 @@ class TaskGraphCoordinator:
                 db.flush()
                 cls._event(db, scan_id, task, "TASK_QUEUED", {"task_type": "browser_analysis", "page_id": str(page.id)})
             page_tasks.append(page_key)
-        analysis_types = ["technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "configuration", "api_agent", "security", "vulnerability", "secrets", "cve_intelligence", "evidence", "correlation", "risk", "content"]
+        analysis_types = ["technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "configuration", "api_agent", "security", "sqli", "vulnerability", "secrets", "cve_intelligence", "evidence", "correlation", "risk", "content"]
         if scan.recon_mode in {"passive_only", "active_safe"}:
             analysis_types.append("recon")
         for task_type in analysis_types:
@@ -227,14 +230,16 @@ class TaskGraphCoordinator:
                 dependencies = ["collection", "api_intelligence", "http_agent"]
                 if scan.recon_mode in {"passive_only", "active_safe"}:
                     dependencies.append("recon")
+            if task_type == "sqli":
+                dependencies = ["collection", "http_agent"]
             if task_type == "vulnerability":
-                dependencies = ["collection", "security", "configuration", "api_agent", "http_agent"]
+                dependencies = ["collection", "security", "configuration", "api_agent", "http_agent", "sqli"]
             if task_type == "secrets":
                 dependencies = ["collection", "http_agent"]
             if task_type == "cve_intelligence":
                 dependencies = ["technology"]
             if task_type == "evidence":
-                dependencies = ["technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "configuration", "api_agent", "security", "vulnerability", "secrets", "cve_intelligence", "performance", "accessibility", "content"]
+                dependencies = ["technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "configuration", "api_agent", "security", "sqli", "vulnerability", "secrets", "cve_intelligence", "performance", "accessibility", "content"]
                 if scan.recon_mode in {"passive_only", "active_safe"}:
                     dependencies.append("recon")
             if task_type == "correlation":
@@ -244,7 +249,7 @@ class TaskGraphCoordinator:
             cls._upsert_task(db, scan_id, task_type, dependencies=dependencies)
         cls._upsert_task(db, scan_id, "performance", dependencies=page_tasks or ["collection"])
         cls._upsert_task(db, scan_id, "accessibility", dependencies=page_tasks or ["collection"])
-        analysis_keys = ["technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "configuration", "api_agent", "security", "vulnerability", "secrets", "cve_intelligence", "evidence", "correlation", "risk", "performance", "accessibility", "content"]
+        analysis_keys = ["technology", "structure", "api_intelligence", "network_intelligence", "http_agent", "configuration", "api_agent", "security", "sqli", "vulnerability", "secrets", "cve_intelligence", "evidence", "correlation", "risk", "performance", "accessibility", "content"]
         if scan.recon_mode in {"passive_only", "active_safe"}:
             analysis_keys.append("recon")
         cls._upsert_task(db, scan_id, "diagnosis", dependencies=analysis_keys)
@@ -678,6 +683,10 @@ class TaskRunner:
         if task.task_type == "api_agent":
             findings = APIAgent(db, scan.id).analyze()
             return {"findings": len(findings)}
+        if task.task_type == "sqli":
+            agent = SQLiDetectionAgent(db, scan.id)
+            findings = agent.analyze()
+            return agent.report()["summary"] | {"findings": len(findings)}
         if task.task_type == "vulnerability":
             findings = VulnerabilityAgent(db, scan.id).analyze()
             return {"findings": len(findings)}
