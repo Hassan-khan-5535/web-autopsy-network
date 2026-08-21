@@ -225,10 +225,10 @@ export default function ScanResultPage() {
   const isCompleted = scan.state === "COMPLETED";
 
   return (
-    <main className="min-h-screen bg-[#08110f] text-[#ecf4ee] px-6 py-12 sm:px-10">
+    <main className="min-h-screen px-4 py-5 text-[var(--text)] sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto space-y-10">
         {/* Header */}
-        <header className="flex items-start justify-between border-b border-emerald-100/10 pb-8">
+        <header className="glass-panel flex flex-col gap-5 rounded-3xl p-5 sm:flex-row sm:items-start sm:justify-between sm:p-7">
           <div>
             <div className="flex items-center gap-3 mb-3">
               <span
@@ -251,9 +251,7 @@ export default function ScanResultPage() {
               Bounded crawl: depth {scan.max_depth}, up to {scan.max_pages} pages.
             </p>
           </div>
-          <Link href="/scans" className="text-emerald-500 hover:text-emerald-400 text-sm font-medium">
-            New Scan &rarr;
-          </Link>
+          <div className="flex flex-wrap items-center gap-2"><Link href="/" className="rounded-lg border border-emerald-200/15 bg-white/[0.03] px-3 py-2 text-sm text-emerald-100/70 transition hover:border-emerald-200/35 hover:bg-white/[0.06]">Dashboard</Link><Link href="/scans" className="glass-button rounded-lg px-3 py-2 text-sm font-semibold">New scan <span aria-hidden="true">&rarr;</span></Link></div>
         </header>
 
         {assessmentAuthorization && (
@@ -279,7 +277,7 @@ export default function ScanResultPage() {
         <ScanProgress scanId={scan.id} state={scan.state} />
 
         {isCompleted && (
-          <nav aria-label="Report sections" className="rounded-2xl border border-emerald-900/30 bg-[#0b1714] p-4">
+          <nav aria-label="Report sections" className="glass-panel-subtle sticky top-4 z-20 rounded-2xl p-4">
             <div className="flex flex-wrap items-center gap-2">
               <span className="mr-2 text-xs font-mono uppercase tracking-wider text-emerald-100/45">Report sections</span>
               {[

@@ -1,144 +1,87 @@
 "use client";
 
-import { useState } from "react";
+import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowUpRight, Command, FileSearch, Network, ShieldCheck, Sparkles } from "lucide-react";
 import { HealthIndicator } from "@/components/health-indicator";
 import { PlatformPulse } from "@/components/platform-pulse";
+
+const principles = [
+  { label: "Observed", icon: FileSearch, color: "text-emerald-300", dot: "bg-emerald-300", copy: "Directly measured HTTP, DOM, DNS, browser, and network evidence." },
+  { label: "Inferred", icon: Network, color: "text-amber-200", dot: "bg-amber-300", copy: "Deterministic conclusions built from multiple persisted observations." },
+  { label: "AI interpreted", icon: Sparkles, color: "text-cyan-200", dot: "bg-cyan-300", copy: "Citation-grounded reasoning that never replaces evidence quality." },
+  { label: "Unknown", icon: ShieldCheck, color: "text-slate-300", dot: "bg-slate-300", copy: "Explicitly marked when a behavior cannot be observed externally." },
+];
 
 export default function Home() {
   const router = useRouter();
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleLaunchScan = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!url.trim()) return;
+  const handleLaunchScan = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const target = url.trim();
+    if (!target) return;
     setLoading(true);
-    router.push(`/scans?url=${encodeURIComponent(url.trim())}`);
+    router.push(`/scans?url=${encodeURIComponent(target)}`);
   };
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#08110f] text-[#ecf4ee] relative selection:bg-emerald-500/30">
-      {/* Dynamic Background Glows */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_22%_18%,rgba(91,176,121,0.18),transparent_35%),radial-gradient(circle_at_82%_82%,rgba(30,93,150,0.17),transparent_40%)]" />
+    <main className="min-h-screen overflow-hidden px-4 py-4 text-[var(--text)] sm:px-6 lg:px-8">
+      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden="true">
+        <div className="absolute -left-32 top-24 h-80 w-80 rounded-full bg-emerald-400/10 blur-3xl" />
+        <div className="absolute right-0 top-0 h-[28rem] w-[28rem] rounded-full bg-cyan-400/10 blur-3xl" />
+      </div>
 
-      <section className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col justify-between px-6 py-8 sm:px-10 lg:px-14">
-        {/* Navigation Header */}
-        <header className="flex items-center justify-between border-b border-emerald-100/10 pb-6">
-          <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-xl border border-emerald-300/30 bg-emerald-300/10 font-mono text-sm text-emerald-200 shadow-inner">
-              WAN
-            </span>
-            <div>
-              <p className="text-sm font-semibold tracking-wide">Web Autopsy Network</p>
-              <p className="text-xs text-emerald-100/55 font-mono">Forensic Web Intelligence Workstation</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link
-              href="/architecture/system"
-              className="text-xs font-mono text-emerald-300/80 hover:text-emerald-200 transition-colors"
-            >
-              System Architecture &rarr;
-            </Link>
-            <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-100">
-              Extension 15 · Continuous Security
-            </span>
-          </div>
+      <div className="relative z-10 mx-auto max-w-[1380px]">
+        <header className="glass-panel flex flex-col gap-4 rounded-2xl px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <Link href="/" className="group flex items-center gap-3" aria-label="Web Autopsy Network home">
+            <span className="grid h-11 w-11 place-items-center rounded-xl border border-emerald-200/25 bg-emerald-200/10 font-mono text-xs font-medium text-emerald-200 transition group-hover:border-emerald-200/60">WAN</span>
+            <span><strong className="block text-sm tracking-wide text-emerald-50">Web Autopsy Network</strong><span className="mono block text-[10px] uppercase tracking-[0.16em] text-emerald-100/45">Forensic web intelligence</span></span>
+          </Link>
+          <nav className="flex flex-wrap items-center gap-2 text-xs" aria-label="Primary navigation">
+            <Link href="/scans" className="rounded-lg px-3 py-2 text-emerald-100/65 transition hover:bg-white/5 hover:text-emerald-50">Scan history</Link>
+            <Link href="/architecture/system" className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-300/20 bg-cyan-300/5 px-3 py-2 text-cyan-100/80 transition hover:border-cyan-300/45 hover:bg-cyan-300/10">System architecture <ArrowUpRight className="h-3.5 w-3.5" /></Link>
+          </nav>
         </header>
 
-        {/* Hero Section */}
-        <div className="max-w-4xl py-16">
-          <div className="inline-flex items-center gap-2 mb-6 px-3 py-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 font-mono text-xs tracking-wider">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-            DISTRIBUTED DIGITAL FORENSICS PLATFORM
+        <section className="grid gap-8 pb-10 pt-14 lg:grid-cols-[minmax(0,1.15fr)_minmax(350px,0.85fr)] lg:items-end lg:pt-20">
+          <div>
+            <div className="eyebrow inline-flex items-center gap-2 rounded-full border border-emerald-200/20 bg-emerald-200/5 px-3 py-2"><span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_12px_rgba(114,240,197,0.9)]" /> Evidence-first assessment platform</div>
+            <h1 className="mt-7 max-w-4xl text-5xl font-semibold leading-[0.98] tracking-[-0.06em] text-balance sm:text-7xl lg:text-[clamp(4.5rem,7.5vw,7.5rem)]">See the web<br /><span className="bg-gradient-to-r from-emerald-200 via-teal-200 to-cyan-300 bg-clip-text text-transparent">under the surface.</span></h1>
+            <p className="mt-7 max-w-2xl text-base leading-7 text-emerald-50/65 sm:text-lg">Collect real, bounded evidence. Trace how a target behaves. Turn observations into an explainable security, performance, and architecture report.</p>
+
+            <form onSubmit={handleLaunchScan} className="glass-panel mt-9 flex max-w-3xl flex-col gap-2 rounded-2xl p-2 sm:flex-row" aria-label="Start an authorized assessment">
+              <label htmlFor="hero-target" className="sr-only">Target website URL</label>
+              <input id="hero-target" type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://target-website.com" required className="glass-input min-h-12 min-w-0 flex-1 rounded-xl px-4 font-mono text-sm placeholder:text-emerald-100/30" />
+              <button type="submit" disabled={loading} className="glass-button inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold">
+                <Command className="h-4 w-4" /> {loading ? "Opening workspace…" : "Start assessment"}
+              </button>
+            </form>
+            <p className="mt-3 flex items-start gap-2 text-xs leading-5 text-emerald-100/45"><ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300/70" /> Authorization, scope, rate limits, and non-destructive policy are recorded before collection begins.</p>
           </div>
 
-          <h1 className="text-5xl font-semibold tracking-[-0.05em] text-balance sm:text-7xl leading-tight">
-            Dissect any website.<br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-teal-200 to-cyan-400">
-              Understand how it works.
-            </span>
-          </h1>
-
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-emerald-50/70">
-            Collect observable HTTP evidence, execute sandboxed browser telemetry, analyze security/performance bottlenecks, and produce evidence-backed forensic autopsy reports.
-          </p>
-
-          {/* Interactive URL Admission Launcher */}
-          <form onSubmit={handleLaunchScan} className="mt-8 flex flex-col sm:flex-row items-center gap-3 max-w-2xl">
-            <div className="relative w-full">
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://target-website.com"
-                required
-                className="w-full h-13 px-4 rounded-xl bg-[#0d1c19] border border-emerald-500/30 text-emerald-100 placeholder:text-emerald-100/30 focus:outline-none focus:ring-2 focus:ring-emerald-400 text-sm font-mono"
-              />
+          <aside className="glass-panel-subtle relative overflow-hidden rounded-3xl p-6 sm:p-7">
+            <div className="absolute right-5 top-5 h-20 w-20 rounded-full bg-cyan-300/10 blur-2xl" aria-hidden="true" />
+            <p className="eyebrow">Assessment loop</p>
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-emerald-50">From URL to evidence graph.</h2>
+            <div className="mt-7 space-y-4">
+              {[["01", "Admit", "Validate authorization and egress scope."], ["02", "Collect", "Persist bounded HTTP and browser observations."], ["03", "Analyze", "Run deterministic agents with evidence gates."], ["04", "Explain", "Synthesize risk, diagnosis, and remediation."]].map(([number, title, copy]) => <div key={number} className="flex gap-4"><span className="mono grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-cyan-200/20 bg-cyan-200/5 text-[10px] text-cyan-200/80">{number}</span><div><p className="text-sm font-semibold text-emerald-100">{title}</p><p className="mt-0.5 text-xs leading-5 text-emerald-100/50">{copy}</p></div></div>)}
             </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full sm:w-auto h-13 px-8 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-medium text-sm transition-all shadow-lg shadow-emerald-500/20 whitespace-nowrap"
-            >
-              {loading ? "Initializing..." : "Dissect Target"}
-            </button>
-          </form>
-
-          <p className="mt-4 text-xs font-mono text-emerald-100/60">
-            Submit only a website you are authorized to assess. Every report is generated from a persisted real scan ID.
-          </p>
-        </div>
+            <Link href="/architecture/system" className="mt-7 inline-flex items-center gap-1 text-xs font-semibold text-cyan-200 transition hover:text-cyan-100">Explore the control plane <ArrowUpRight className="h-3.5 w-3.5" /></Link>
+          </aside>
+        </section>
 
         <PlatformPulse />
 
-        {/* 10-Second Concept Legend: 🟢 🟡 🔵 ⚫ */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 py-8 border-t border-emerald-100/10">
-          <div className="p-4 rounded-2xl bg-[#0c1815] border border-emerald-500/20 hover:border-emerald-500/40 transition-colors">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="h-3 w-3 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400" />
-              <h3 className="font-mono text-xs font-bold tracking-wider text-emerald-300">OBSERVED</h3>
-            </div>
-            <p className="text-xs text-emerald-100/60 leading-relaxed">
-              Directly measured HTTP headers, DOM structure, DNS records, and network requests.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-[#0c1815] border border-amber-500/20 hover:border-amber-500/40 transition-colors">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="h-3 w-3 rounded-full bg-amber-400 shadow-sm shadow-amber-400" />
-              <h3 className="font-mono text-xs font-bold tracking-wider text-amber-300">INFERRED</h3>
-            </div>
-            <p className="text-xs text-amber-100/60 leading-relaxed">
-              Technically derived conclusions derived deterministically from multiple observations.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-[#0c1815] border border-cyan-500/20 hover:border-cyan-500/40 transition-colors">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="h-3 w-3 rounded-full bg-cyan-400 shadow-sm shadow-cyan-400" />
-              <h3 className="font-mono text-xs font-bold tracking-wider text-cyan-300">AI INTERPRETATION</h3>
-            </div>
-            <p className="text-xs text-cyan-100/60 leading-relaxed">
-              LLM diagnostic reasoning strictly citation-grounded to validated evidence IDs.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-[#0c1815] border border-slate-500/20 hover:border-slate-500/40 transition-colors">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="h-3 w-3 rounded-full bg-slate-500" />
-              <h3 className="font-mono text-xs font-bold tracking-wider text-slate-400">UNKNOWN</h3>
-            </div>
-            <p className="text-xs text-slate-100/60 leading-relaxed">
-              Unobservable or restricted parameters that cannot be determined externally.
-            </p>
-          </div>
-        </div>
+        <section className="grid gap-3 py-10 sm:grid-cols-2 lg:grid-cols-4" aria-label="Evidence principles">
+          {principles.map(({ label, icon: Icon, color, dot, copy }) => <article key={label} className="glass-panel-subtle rounded-2xl p-5 transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200/25"><div className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${dot}`} /><Icon className={`h-4 w-4 ${color}`} /><h3 className={`mono text-[11px] font-medium uppercase tracking-[0.16em] ${color}`}>{label}</h3></div><p className="mt-3 text-sm leading-6 text-emerald-100/55">{copy}</p></article>)}
+        </section>
 
         <HealthIndicator />
-      </section>
+        <footer className="flex flex-col gap-2 border-t border-white/10 py-6 text-xs text-emerald-100/35 sm:flex-row sm:items-center sm:justify-between"><span>Web Autopsy Network · authorized research only</span><span className="mono">deterministic core · AI optional · no exploit automation</span></footer>
+      </div>
     </main>
   );
 }
