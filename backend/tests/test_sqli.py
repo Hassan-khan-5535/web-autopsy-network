@@ -92,6 +92,20 @@ class _UnionFixtureHandler(BaseHTTPRequestHandler):
         return
 
 
+class _NoSQLFixtureHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:  # noqa: N802
+        query = parse_qs(urlsplit(self.path).query)
+        operator_keys = [key for key in query if key.endswith("[$ne]") or key.endswith("[$gt]") or key.endswith("[$regex]")]
+        body = "normal result count=2 rows" if operator_keys else "normal result count=1 rows"
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(body.encode())
+
+    def log_message(self, *_args: object) -> None:
+        return
+
+
 class _SQLiFixtureHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         value = parse_qs(urlsplit(self.path).query).get("id", [""])[0]
@@ -277,6 +291,56 @@ def test_sqli_stage4_infers_null_only_column_count_and_preserves_structure(db: S
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_sqli_nosql_get_operator_is_reproducible_and_non_mutating(db: Session, monkeypatch):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _NoSQLFixtureHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        scan, page = _fixture_scan(db, server.server_port, enabled=True, extended=True, request_budget=100)
+        monkeypatch.setattr("app.services.sqli.revalidate_egress", lambda url, **_kwargs: url)
+        agent = SQLiDetectionAgent(db, scan.id)
+        surface = agent._surfaces()[0]
+        baseline = agent._request(surface.url, "nosql_baseline")
+        finding = agent._nosql_get_stage(surface, baseline)
+        assert finding is not None
+        assert finding.rule_id == "NOSQL-GET-001"
+        assert finding.page_id == page.id
+        gate = next(item for item in finding.evidence if item.get("type") == "validation_gate")
+        assert gate["operator_family"] in {"array_ne", "array_gt", "array_regex"}
+        assert gate["reproductions"] == 2
+        assert gate["baseline_structure_preserved"] is True
+        assert gate["json_body_probes"] == 0
+        assert gate["javascript_probes"] == 0
+        assert gate["mutating_requests_issued"] == 0
+        assert agent.report()["summary"]["stages"]["nosql"] == 1
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_sqli_records_second_order_as_passive_only(db: Session, monkeypatch):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _SQLiFixtureHandler)
+    try:
+        scan, page = _fixture_scan(db, server.server_port, enabled=True, extended=True, request_budget=100)
+        monkeypatch.setattr("app.services.sqli.revalidate_egress", lambda url, **_kwargs: url)
+        agent = SQLiDetectionAgent(db, scan.id)
+        agent.analyze()
+        report = agent.report()
+        validation = report["summary"]["second_order_validation"]
+        assert validation["mode"] == "passive_only"
+        assert validation["status"] in {"not_tested_safely", "inconclusive_passive_only"}
+        assert validation["primary_actions_submitted"] == 0
+        assert validation["secondary_actions_triggered"] == 0
+        assert validation["control_flows_run"] == 0
+        assert validation["finding_count"] == 0
+        assert report["summary"]["stages"]["second_order"] == 0
+        coverage = [item for item in page.scan.http_observations if item.observation_type == "sqli_validation" and item.value.get("variant") == "second_order_not_tested"]
+        assert coverage
+    finally:
+        server.server_close()
 
 
 def test_sqli_stage4_sensitive_data_guard_and_column_cap():

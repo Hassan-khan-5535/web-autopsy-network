@@ -87,6 +87,26 @@ SQLI_RULES: dict[str, dict[str, Any]] = {
         "cwe": ["CWE-89"],
         "owasp": ["OWASP-A03"],
     },
+    "NOSQL-GET-001": {
+        "title": "NoSQL operator differential candidate",
+        "stage": "NoSQL Injection: Safe GET Operator",
+        "severity": "high",
+        "confidence": 65,
+        "proof_required": "An in-scope GET query parameter with array-operator syntax produces a reproducible, non-sensitive response differential without submitting JSON, executing JavaScript, or modifying data.",
+        "remediation": "Use strict schema validation, reject unexpected operator keys, and bind query values through a safe data-access layer.",
+        "cwe": ["CWE-943"],
+        "owasp": ["OWASP-A03"],
+    },
+    "SQLI-SECOND-ORDER-001": {
+        "title": "Second-order SQL injection requires controlled workflow",
+        "stage": "Second-Order SQLi: Passive Coverage",
+        "severity": "high",
+        "confidence": 70,
+        "proof_required": "A uniquely traceable primary stored-value action, a separate safe secondary trigger, a SQL-specific error, and a non-injected control flow. This agent does not perform those state-changing actions.",
+        "remediation": "Parameterize stored-value queries at every use site and validate both write and later read workflows under controlled authorized testing.",
+        "cwe": ["CWE-89"],
+        "owasp": ["OWASP-A03"],
+    },
 }
 
 SQL_ERROR_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -120,6 +140,12 @@ TIMING_MAX_DELAY_SECONDS = 5
 TIMING_MULTIPLIER = 2.0
 TIMING_DATABASES: tuple[str, ...] = ("mysql", "postgresql", "mssql", "oracle")
 TIMING_UNSUPPORTED_DATABASES: tuple[str, ...] = ("sqlite",)
+NOSQL_OPERATOR_PROBES: tuple[tuple[str, str, str], ...] = (
+    ("array_ne", "[$ne]", "__web_autopsy_null__"),
+    ("array_gt", "[$gt]", ""),
+    ("array_regex", "[$regex]", "^.*$"),
+)
+NOSQL_REPRODUCTIONS = 2
 
 
 @dataclass(frozen=True)
@@ -176,7 +202,9 @@ class SQLiDetectionAgent:
             "differential_validation": {"baseline_samples_required": BASELINE_SAMPLES, "pairs_required": DIFFERENTIAL_PAIRS, "length_threshold": DIFFERENTIAL_LENGTH_THRESHOLD, "noise_suppressed": 0},
             "timing_validation": {"baseline_samples_required": TIMING_BASELINE_SAMPLES, "timing_values_seconds": list(TIMING_VALUES_SECONDS), "max_delay_seconds": TIMING_MAX_DELAY_SECONDS, "delay_multiplier": TIMING_MULTIPLIER, "noise_suppressed": 0},
             "union_validation": {"max_columns": MAX_UNION_COLUMNS, "null_only": True, "database_variants_tested": ["generic", "mysql", "oracle", "mssql"], "sensitive_response_suppressed": 0},
-            "stages": {"error_based": 0, "differential": 0, "timing_safe": 0, "union_safe": 0},
+            "nosql_validation": {"mode": "safe_get_operator_only", "json_body_probes": 0, "javascript_probes": 0, "array_operator_probes": 0, "sensitive_response_suppressed": 0},
+            "second_order_validation": {"mode": "passive_only", "status": "not_tested_safely", "primary_actions_submitted": 0, "secondary_actions_triggered": 0, "control_flows_run": 0, "sql_error_response_candidates": 0, "finding_count": 0},
+            "stages": {"error_based": 0, "differential": 0, "timing_safe": 0, "union_safe": 0, "nosql": 0, "second_order": 0},
             "surfaces": {"query_tested": 0, "get_forms_tested": 0, "post_forms_not_tested": 0, "headers_not_tested": 0, "cookies_not_tested": 0, "json_xml_not_tested": 0},
             "requests_issued": 0,
             "payloads_sent": 0,
@@ -195,6 +223,7 @@ class SQLiDetectionAgent:
 
         findings: list[SecurityFinding] = []
         surfaces = self._surfaces()
+        self._record_second_order_coverage(surfaces)
         for surface in surfaces[:MAX_SURFACES]:
             if surface.location == "form_post":
                 self.summary["surfaces"]["post_forms_not_tested"] += 1
@@ -289,7 +318,10 @@ class SQLiDetectionAgent:
             stage4 = self._stage4(surface, baseline)
             if stage4:
                 return stage4
-        self._record_coverage(surface, "no_high_signal_difference", "Safe SQLi canaries did not produce the required reproducible SQL-specific error or boolean differential.", baseline)
+            nosql = self._nosql_get_stage(surface, baseline)
+            if nosql:
+                return nosql
+        self._record_coverage(surface, "no_high_signal_difference", "Safe SQLi and NoSQL canaries did not produce the required reproducible evidence. Second-order validation remains passive because state-changing actions are prohibited.", baseline)
         return None
 
     def _stage1(self, surface: InputSurface, baseline_samples: list[ProbeResponse]) -> SecurityFinding | None:
@@ -360,6 +392,68 @@ class SQLiDetectionAgent:
                 evidence,
             )
         return None
+
+    def _nosql_get_stage(self, surface: InputSurface, baseline: ProbeResponse) -> SecurityFinding | None:
+        """Test only URL query operator syntax; JSON bodies and JavaScript are never sent."""
+        if surface.location != "query" or not baseline.successful or self._contains_sensitive_data(baseline.body):
+            return None
+        baseline_structure = self._structure_hash(baseline.body)
+        safe_control = self._request(surface.url, "nosql_safe_control")
+        if not safe_control.successful or safe_control.noise_signals or self._signature(safe_control) != self._signature(baseline):
+            return None
+        for probe_name, operator_suffix, operator_value in NOSQL_OPERATOR_PROBES:
+            results: list[ProbeResponse] = []
+            for index in range(NOSQL_REPRODUCTIONS):
+                url = self._replace_operator(surface.url, surface.name, operator_suffix, operator_value)
+                results.append(self._request(url, f"nosql:{probe_name}:{index}"))
+            if not all(item.successful and not item.noise_signals for item in results):
+                continue
+            if any(self._contains_sensitive_data(item.body) for item in results):
+                self.summary["nosql_validation"]["sensitive_response_suppressed"] += 1
+                continue
+            if not all(self._structure_hash(item.body) == baseline_structure for item in results):
+                continue
+            if len({self._signature(item) for item in results}) != 1:
+                continue
+            if not all(item.body_hash != baseline.body_hash or self._length_ratio(baseline, item) > DIFFERENTIAL_LENGTH_THRESHOLD for item in results):
+                continue
+            self.summary["nosql_validation"]["array_operator_probes"] += 1
+            self.summary["stages"]["nosql"] += 1
+            evidence = self._evidence(surface, "nosql", probe_name, baseline, results[0], safe_control, results, details={"operator_family": probe_name, "reproductions": len(results), "baseline_structure_preserved": True, "response_differential": True, "json_body_probes": 0, "javascript_probes": 0, "data_extraction_attempted": False, "mutating_requests_issued": 0})
+            return self._persist_finding(
+                surface,
+                "NOSQL-GET-001",
+                f"A safe GET query-operator probe produced a reproducible, structure-preserving response differential for parameter `{surface.name}`. No JSON body, JavaScript expression, or data extraction was used.",
+                "INFERRED",
+                65,
+                evidence,
+            )
+        return None
+
+    def _record_second_order_coverage(self, surfaces: list[InputSurface]) -> None:
+        """Record the required second-order workflow state without performing prohibited writes or triggers."""
+        response_rows = self.db.query(HTTPResponse).join(Page, HTTPResponse.page_id == Page.id).filter(Page.scan_id == self.scan_id).all()
+        sql_error_candidates = sum(1 for response in response_rows if self._markers(response.raw_body or response.rendered_body or ""))
+        self.summary["second_order_validation"]["sql_error_response_candidates"] = sql_error_candidates
+        self.summary["second_order_validation"]["status"] = "inconclusive_passive_only" if sql_error_candidates else "not_tested_safely"
+        if surfaces:
+            self._record_coverage(surfaces[0], "second_order_not_tested", "Second-order SQLi requires a uniquely traceable stored-value action and a later trigger; this non-destructive agent submits neither primary state-changing actions nor secondary workflows.")
+
+    @staticmethod
+    def _replace_operator(url: str, name: str, operator_suffix: str, value: str) -> str:
+        parsed = urlsplit(url)
+        pairs = parse_qsl(parsed.query, keep_blank_values=True)
+        replaced = False
+        output: list[tuple[str, str]] = []
+        for key, current in pairs:
+            if key == name and not replaced:
+                output.append((f"{key}{operator_suffix}", value))
+                replaced = True
+            else:
+                output.append((key, current))
+        if not replaced:
+            output.append((f"{name}{operator_suffix}", value))
+        return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(output), ""))
 
     def _stage3(self, surface: InputSurface, _prior_baseline_samples: list[ProbeResponse]) -> SecurityFinding | None:
         """Validate timing correlation with bounded 1/3/5-second canaries only."""
@@ -620,7 +714,8 @@ class SQLiDetectionAgent:
         page = self.db.query(Page).filter(Page.scan_id == self.scan_id, Page.canonical_url == url.split("?", 1)[0]).first()
         if page:
             page_id = page.id
-        dedupe_key = hashlib.sha256(f"{self.scan_id}|{redacted_url}|{variant}|{result.status_code}|{result.body_hash}|{result.elapsed_ms}".encode()).hexdigest()
+        probe_sequence = len(self.probe_observations)
+        dedupe_key = hashlib.sha256(f"{self.scan_id}|{probe_sequence}|{redacted_url}|{variant}|{result.status_code}|{result.body_hash}|{result.elapsed_ms}".encode()).hexdigest()
         observation = HTTPObservation(
             scan_id=self.scan_id,
             page_id=page_id,

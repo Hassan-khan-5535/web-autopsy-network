@@ -635,6 +635,10 @@ export type SQLiResponse = {
     mode: string;
     stages: Record<string, number>;
     surfaces: Record<string, number>;
+    timing_validation?: Record<string, unknown>;
+    union_validation?: Record<string, unknown>;
+    nosql_validation?: Record<string, unknown>;
+    second_order_validation?: Record<string, unknown>;
     requests_issued: number;
     payloads_sent: number;
     mutating_requests_issued: number;
