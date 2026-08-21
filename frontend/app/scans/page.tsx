@@ -89,7 +89,9 @@ export default function NewScanPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!acknowledged) {
+    const form = e.currentTarget as HTMLFormElement;
+    const consentChecked = form.querySelector<HTMLButtonElement>("#auth")?.getAttribute("aria-checked") === "true" || acknowledged;
+    if (!consentChecked) {
       setError("You must acknowledge authorization to scan this target.");
       return;
     }
@@ -100,7 +102,7 @@ export default function NewScanPage() {
     setError(null);
     setLoading(true);
     try {
-      const scan = await createScan(url, acknowledged, {
+      const scan = await createScan(url, consentChecked, {
         max_depth: Number(maxDepth),
         max_pages: Number(maxPages),
         assessment_profile: profile,
@@ -204,7 +206,7 @@ export default function NewScanPage() {
             {authType === "basic" && <div className="mt-4 grid gap-4 sm:grid-cols-2"><input aria-label="Basic username" type="text" placeholder="Username" value={basicUsername} onChange={(e) => setBasicUsername(e.target.value)} className={fieldClass} /><input aria-label="Basic password" type="password" placeholder="Password" value={basicPassword} onChange={(e) => setBasicPassword(e.target.value)} className={fieldClass} /></div>}
           </div>
 
-          <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/[0.05] p-5"><div className="flex items-start gap-3"><input id="auth" type="checkbox" checked={acknowledged} onChange={(e) => setAcknowledged(e.target.checked)} className="mt-1 h-4 w-4 rounded border-emerald-500/30 bg-[#0d1a17] text-emerald-500 focus:ring-emerald-500 focus:ring-offset-[#08110f]" /><label htmlFor="auth" className="text-sm text-emerald-100/70">I confirm that I am authorized to scan this target or that it is a publicly accessible website permissible to scan under standard terms. I understand the selected scope, rate limits, and non-destructive assessment policy will be recorded with this scan.</label></div></div>
+          <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/[0.05] p-5"><div className="flex items-start gap-3"><button id="auth" name="authorization_acknowledged" type="button" role="checkbox" aria-checked={acknowledged} aria-label="Acknowledge authorization" onClick={() => setAcknowledged((current) => !current)} className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border text-xs font-bold transition focus:outline-none focus:ring-2 focus:ring-emerald-400 ${acknowledged ? "border-emerald-300 bg-emerald-300 text-[#07110e]" : "border-emerald-500/40 bg-[#0d1a17] text-transparent"}`}>{acknowledged ? "✓" : "·"}</button><span id="auth-label" onClick={() => setAcknowledged(true)} className="cursor-pointer text-sm text-emerald-100/70">I confirm that I am authorized to scan this target or that it is a publicly accessible website permissible to scan under standard terms. I understand the selected scope, rate limits, and non-destructive assessment policy will be recorded with this scan.</span></div></div>
 
           {error && <div role="alert" className="rounded-xl border border-red-300/25 bg-red-300/[0.08] p-4 text-sm text-red-100">{error}</div>}
           <div className="flex flex-col-reverse items-stretch justify-between gap-3 border-t border-white/10 pt-6 sm:flex-row sm:items-center"><Link href="/" className="rounded-lg px-3 py-2 text-center text-sm text-emerald-100/55 transition hover:bg-white/5 hover:text-emerald-50">Cancel</Link><button type="submit" disabled={loading} className="glass-button inline-flex min-h-12 items-center justify-center rounded-xl px-6 text-sm font-semibold">{loading ? "Queueing assessment…" : "Queue assessment"}</button></div>
